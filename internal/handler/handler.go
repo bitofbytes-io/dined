@@ -38,7 +38,7 @@ func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Dines(w http.ResponseWriter, r *http.Request) {
-	visits, err := h.store.Visits(r.Context(), 200)
+	visits, err := h.store.Visits(r.Context(), 0)
 	if err != nil {
 		h.error(w, "all visits", err)
 		return
@@ -139,7 +139,7 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 		h.error(w, "search restaurants", err)
 		return
 	}
-	visits, err := h.store.Visits(r.Context(), 200)
+	visits, err := h.store.Visits(r.Context(), 0)
 	if err != nil {
 		h.error(w, "search visit history", err)
 		return
@@ -210,15 +210,16 @@ func (h *Handler) logData(r *http.Request) (ui.PageData, error) {
 	}
 	prefillPrice, _ := strconv.Atoi(r.URL.Query().Get("price_level"))
 	return ui.PageData{
-		Title:             "Log a Dine",
-		People:            people,
-		Tags:              tags,
-		Restaurants:       restaurants,
-		PrefillName:       r.URL.Query().Get("restaurant_name"),
-		PrefillAddress:    r.URL.Query().Get("address"),
-		PrefillPlaceID:    r.URL.Query().Get("google_place_id"),
-		PrefillCategory:   r.URL.Query().Get("category"),
-		PrefillPriceLevel: prefillPrice,
+		Title:               "Log a Dine",
+		People:              people,
+		Tags:                tags,
+		Restaurants:         restaurants,
+		PrefillName:         r.URL.Query().Get("restaurant_name"),
+		PrefillAddress:      r.URL.Query().Get("address"),
+		PrefillPlaceID:      r.URL.Query().Get("google_place_id"),
+		PrefillCategory:     r.URL.Query().Get("category"),
+		PrefillPriceLevel:   prefillPrice,
+		PrefillRestaurantID: r.URL.Query().Get("restaurant_id"),
 	}, nil
 }
 

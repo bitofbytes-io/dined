@@ -273,11 +273,14 @@ func (m *MemoryStore) findRestaurant(id *uuid.UUID) (model.Restaurant, bool) {
 func (m *MemoryStore) findRestaurantByInput(input model.VisitInput) (model.Restaurant, bool) {
 	placeID := strings.TrimSpace(input.GooglePlaceID)
 	name := strings.TrimSpace(input.RestaurantName)
+	address := strings.TrimSpace(input.Address)
 	for _, restaurant := range m.restaurants {
 		if placeID != "" && restaurant.GooglePlaceID != nil && *restaurant.GooglePlaceID == placeID {
 			return restaurant, true
 		}
-		if placeID == "" && strings.EqualFold(strings.TrimSpace(restaurant.Name), name) {
+		if placeID == "" && address != "" && restaurant.Address != nil &&
+			strings.EqualFold(strings.TrimSpace(restaurant.Name), name) &&
+			strings.EqualFold(strings.TrimSpace(*restaurant.Address), address) {
 			return restaurant, true
 		}
 	}

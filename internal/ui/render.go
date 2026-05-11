@@ -14,24 +14,25 @@ import (
 )
 
 type PageData struct {
-	Title             string
-	Authenticated     bool
-	Error             string
-	Visits            []model.Visit
-	People            []model.Person
-	Tags              []model.Tag
-	Restaurants       []model.Restaurant
-	SearchResults     []RestaurantResult
-	Restaurant        *model.Restaurant
-	Stats             model.Stats
-	Places            []places.Place
-	Query             string
-	NowLocal          string
-	PrefillName       string
-	PrefillAddress    string
-	PrefillPlaceID    string
-	PrefillCategory   string
-	PrefillPriceLevel int
+	Title               string
+	Authenticated       bool
+	Error               string
+	Visits              []model.Visit
+	People              []model.Person
+	Tags                []model.Tag
+	Restaurants         []model.Restaurant
+	SearchResults       []RestaurantResult
+	Restaurant          *model.Restaurant
+	Stats               model.Stats
+	Places              []places.Place
+	Query               string
+	NowLocal            string
+	PrefillName         string
+	PrefillAddress      string
+	PrefillPlaceID      string
+	PrefillCategory     string
+	PrefillPriceLevel   int
+	PrefillRestaurantID string
 }
 
 type RestaurantResult struct {
@@ -93,7 +94,9 @@ func funcs() template.FuncMap {
 			}
 			return value
 		},
-		"query":  url.QueryEscape,
+		"query": func(value string) template.URL {
+			return template.URL(strings.ReplaceAll(url.QueryEscape(value), "+", "%20"))
+		},
 		"price":  places.PriceLevelNumber,
 		"avatar": avatar,
 		"placeCategory": func(place places.Place) string {
@@ -287,6 +290,7 @@ const templates = `
     {{if .PrefillPlaceID}}<p class="place-source">Google place loaded: {{.PrefillName}}</p>{{end}}
     <div class="console-grid">
 	      <section class="form-section restaurant-console">
+	        <input type="hidden" name="restaurant_id" value="{{.PrefillRestaurantID}}">
 	        <div class="form-grid restaurant-grid">
 	          <label>Restaurant<input name="restaurant_name" list="restaurant-options" placeholder="Type 3+ characters or add a new restaurant" value="{{.PrefillName}}"><datalist id="restaurant-options">{{range .Restaurants}}<option value="{{.Name}}">{{if .Address}}{{.Address}}{{end}}</option>{{end}}</datalist></label>
 	          <label>Address<input name="address" placeholder="Optional" value="{{.PrefillAddress}}"></label>
@@ -317,7 +321,7 @@ const templates = `
 <main class="page-band ledger-page">
   <section class="wide-ticket ledger-panel">
     {{with .Restaurant}}
-    <div class="section-head"><div><h1>{{.Name}} {{if .IsChain}}<span class="badge">Chain</span>{{end}}</h1>{{if .Address}}<p>{{.Address}}</p>{{end}}</div>{{if $.Authenticated}}<a class="small-cta" href="/log">Log Another Dine</a>{{end}}</div>
+    <div class="section-head"><div><h1>{{.Name}} {{if .IsChain}}<span class="badge">Chain</span>{{end}}</h1>{{if .Address}}<p>{{.Address}}</p>{{end}}</div>{{if $.Authenticated}}<a class="small-cta" href="/log?restaurant_id={{.ID}}&restaurant_name={{query .Name}}{{if .Address}}&address={{query .Address}}{{end}}{{if .GooglePlaceID}}&google_place_id={{query .GooglePlaceID}}{{end}}{{if .Category}}&category={{query .Category}}{{end}}">Log Another Dine</a>{{end}}</div>
     <dl class="details"><dt>Category</dt><dd>{{if .Category}}{{.Category}}{{else}}-{{end}}</dd><dt>Phone</dt><dd>{{if .Phone}}{{.Phone}}{{else}}-{{end}}</dd><dt>Website</dt><dd>{{if .Website}}<a href="{{.Website}}">{{.Website}}</a>{{else}}-{{end}}</dd><dt>Google rating</dt><dd>{{if .GoogleRating}}{{.GoogleRating}}{{else}}-{{end}}</dd></dl>
     {{if $.Authenticated}}<form method="post" action="/restaurants/{{.ID}}/chain" class="inline-form"><input type="hidden" name="is_chain" value="{{if .IsChain}}false{{else}}true{{end}}"><button class="small-cta">{{if .IsChain}}Clear Chain Badge{{else}}Mark Chain{{end}}</button></form>{{end}}
     {{end}}

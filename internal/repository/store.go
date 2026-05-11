@@ -112,10 +112,13 @@ func (s *Store) Restaurant(ctx context.Context, id uuid.UUID) (*model.Restaurant
 }
 
 func (s *Store) Visits(ctx context.Context, limit int) ([]model.Visit, error) {
-	if limit <= 0 {
-		limit = 100
+	query := visitSelectSQL() + ` ORDER BY v.visited_at DESC`
+	args := []any{}
+	if limit > 0 {
+		query += ` LIMIT $1`
+		args = append(args, limit)
 	}
-	rows, err := s.pool.Query(ctx, visitSelectSQL()+` ORDER BY v.visited_at DESC LIMIT $1`, limit)
+	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("list visits: %w", err)
 	}
@@ -147,18 +150,20 @@ func (s *Store) CreateVisit(ctx context.Context, input model.VisitInput) (*uuid.
 	if restaurantID == nil {
 		var id uuid.UUID
 		name := strings.TrimSpace(input.RestaurantName)
+		address := strings.TrimSpace(input.Address)
 		placeID := nullableString(input.GooglePlaceID)
-		if placeID == nil {
+		if placeID == nil && address != "" {
 			err := tx.QueryRow(ctx, `
 					SELECT id
 					FROM restaurants
 					WHERE lower(name) = lower($1)
+					  AND lower(coalesce(address, '')) = lower($2)
 					ORDER BY created_at
-					LIMIT 1`, name).Scan(&id)
+					LIMIT 1`, name, address).Scan(&id)
 			if err == nil {
 				restaurantID = &id
 			} else if !errors.Is(err, pgx.ErrNoRows) {
-				return nil, fmt.Errorf("find restaurant by name: %w", err)
+				return nil, fmt.Errorf("find restaurant by name and address: %w", err)
 			}
 		}
 	}
