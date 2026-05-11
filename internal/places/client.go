@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 )
 
@@ -48,6 +49,10 @@ func NewClient(apiKey string) *Client {
 			Timeout: 8 * time.Second,
 		},
 	}
+}
+
+func (c *Client) Configured() bool {
+	return strings.TrimSpace(c.apiKey) != ""
 }
 
 func (c *Client) TextSearch(ctx context.Context, query string) ([]Place, error) {

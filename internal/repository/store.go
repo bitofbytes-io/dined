@@ -147,12 +147,30 @@ func (s *Store) CreateVisit(ctx context.Context, input model.VisitInput) (*uuid.
 	if restaurantID == nil {
 		var id uuid.UUID
 		name := strings.TrimSpace(input.RestaurantName)
+		placeID := nullableString(input.GooglePlaceID)
+		if placeID == nil {
+			err := tx.QueryRow(ctx, `
+					SELECT id
+					FROM restaurants
+					WHERE lower(name) = lower($1)
+					ORDER BY created_at
+					LIMIT 1`, name).Scan(&id)
+			if err == nil {
+				restaurantID = &id
+			} else if !errors.Is(err, pgx.ErrNoRows) {
+				return nil, fmt.Errorf("find restaurant by name: %w", err)
+			}
+		}
+	}
+	if restaurantID == nil {
+		var id uuid.UUID
+		name := strings.TrimSpace(input.RestaurantName)
 		address := nullableString(input.Address)
 		placeID := nullableString(input.GooglePlaceID)
 		category := nullableString(input.Category)
 		err := tx.QueryRow(ctx, `
-			INSERT INTO restaurants (name, address, google_place_id, category, is_chain)
-			VALUES ($1, $2, $3, $4, $5)
+				INSERT INTO restaurants (name, address, google_place_id, category, is_chain)
+				VALUES ($1, $2, $3, $4, $5)
 			ON CONFLICT (google_place_id) WHERE google_place_id IS NOT NULL DO UPDATE
 			SET name = EXCLUDED.name,
 			    address = COALESCE(EXCLUDED.address, restaurants.address),

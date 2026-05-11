@@ -19,8 +19,8 @@ func (in VisitInput) Validate() error {
 	if in.PickerID.String() == "00000000-0000-0000-0000-000000000000" {
 		return errors.New("picker is required")
 	}
-	if in.PriceLevel < 1 || in.PriceLevel > 5 {
-		return errors.New("price level must be between 1 and 5")
+	if in.PriceLevel < 1 || in.PriceLevel > 4 {
+		return errors.New("price level must be between 1 and 4")
 	}
 	validRatings := 0
 	for _, rating := range in.Ratings {

@@ -148,18 +148,21 @@ func (m *MemoryStore) CreateVisit(_ context.Context, input model.VisitInput) (*u
 
 	restaurant, ok := m.findRestaurant(input.RestaurantID)
 	if !ok {
-		now := time.Now()
-		restaurant = model.Restaurant{
-			ID:            uuid.New(),
-			Name:          strings.TrimSpace(input.RestaurantName),
-			Address:       strPtrOrNil(input.Address),
-			GooglePlaceID: strPtrOrNil(input.GooglePlaceID),
-			Category:      strPtrOrNil(input.Category),
-			IsChain:       input.IsChain,
-			CreatedAt:     now,
-			UpdatedAt:     now,
+		restaurant, ok = m.findRestaurantByInput(input)
+		if !ok {
+			now := time.Now()
+			restaurant = model.Restaurant{
+				ID:            uuid.New(),
+				Name:          strings.TrimSpace(input.RestaurantName),
+				Address:       strPtrOrNil(input.Address),
+				GooglePlaceID: strPtrOrNil(input.GooglePlaceID),
+				Category:      strPtrOrNil(input.Category),
+				IsChain:       input.IsChain,
+				CreatedAt:     now,
+				UpdatedAt:     now,
+			}
+			m.restaurants = append(m.restaurants, restaurant)
 		}
-		m.restaurants = append(m.restaurants, restaurant)
 	}
 
 	picker := m.personByID(input.PickerID)
@@ -261,6 +264,20 @@ func (m *MemoryStore) findRestaurant(id *uuid.UUID) (model.Restaurant, bool) {
 	}
 	for _, restaurant := range m.restaurants {
 		if restaurant.ID == *id {
+			return restaurant, true
+		}
+	}
+	return model.Restaurant{}, false
+}
+
+func (m *MemoryStore) findRestaurantByInput(input model.VisitInput) (model.Restaurant, bool) {
+	placeID := strings.TrimSpace(input.GooglePlaceID)
+	name := strings.TrimSpace(input.RestaurantName)
+	for _, restaurant := range m.restaurants {
+		if placeID != "" && restaurant.GooglePlaceID != nil && *restaurant.GooglePlaceID == placeID {
+			return restaurant, true
+		}
+		if placeID == "" && strings.EqualFold(strings.TrimSpace(restaurant.Name), name) {
 			return restaurant, true
 		}
 	}
