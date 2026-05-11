@@ -1,0 +1,4 @@
+bin/
+local.mk
+.env
+.DS_Store
