@@ -269,6 +269,17 @@ const templates = `
         if (status) status.textContent = "Location was not shared. Enter latitude and longitude instead.";
       }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 });
     });
+
+    document.addEventListener("submit", function (event) {
+      var form = event.target;
+      if (!form || form.id !== "nearby-form") return;
+      var lat = form.querySelector("input[name='lat']");
+      var lng = form.querySelector("input[name='lng']");
+      if (!lat || !lng || lat.value.trim() || lng.value.trim()) return;
+      event.preventDefault();
+      var useLocation = document.getElementById("use-location");
+      if (useLocation) useLocation.click();
+    });
   </script>
 </body>
 </html>
@@ -310,7 +321,7 @@ const templates = `
           <button>Search</button>
         </form>
         {{else}}
-        <p>The ledger is public. Log in to search Google Places or add new dines.</p>
+        <p>Log in to search Google Places or add new dines.</p>
         {{end}}
       </div>
 
@@ -356,12 +367,11 @@ const templates = `
         </div>
       </section>
       <section class="form-section visit-console">
-        <h2>Visit</h2>
         <div class="form-grid visit-form-grid">
           <label>Date and time<input type="datetime-local" name="visited_at" value="{{.NowLocal}}"></label>
           <label>Picked by<select name="picker_id" required>{{range .People}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select></label>
+          <label>Price Level<select name="price_level"><option value="1" {{if eq .PrefillPriceLevel 1}}selected{{end}}>$</option><option value="2" {{if or (eq .PrefillPriceLevel 0) (eq .PrefillPriceLevel 2)}}selected{{end}}>$$</option><option value="3" {{if eq .PrefillPriceLevel 3}}selected{{end}}>$$$</option><option value="4" {{if eq .PrefillPriceLevel 4}}selected{{end}}>$$$$</option></select></label>
         </div>
-	        <fieldset class="price-field"><legend>Price Level</legend><label><input type="radio" name="price_level" value="1" {{if eq .PrefillPriceLevel 1}}checked{{end}}> <span>$</span></label><label><input type="radio" name="price_level" value="2" {{if or (eq .PrefillPriceLevel 0) (eq .PrefillPriceLevel 2)}}checked{{end}}> <span>$$</span></label><label><input type="radio" name="price_level" value="3" {{if eq .PrefillPriceLevel 3}}checked{{end}}> <span>$$$</span></label><label><input type="radio" name="price_level" value="4" {{if eq .PrefillPriceLevel 4}}checked{{end}}> <span>$$$$</span></label></fieldset>
       </section>
     </div>
 	    <fieldset class="ratings-field score-console"><legend>Rate Your Experience</legend>{{range .People}}<label class="rating-card">{{if avatar .Name}}<img class="avatar-face" src="{{avatar .Name}}" alt="">{{else}}<span class="avatar-dot">{{slice .Name 0 1}}</span>{{end}}<span>{{.Name}}</span><input name="rating_{{.ID}}" type="number" min="0" max="10" step="0.5" placeholder="0-10"></label>{{end}}</fieldset>
