@@ -152,7 +152,20 @@ func (s *Store) CreateVisit(ctx context.Context, input model.VisitInput) (*uuid.
 		name := strings.TrimSpace(input.RestaurantName)
 		address := strings.TrimSpace(input.Address)
 		placeID := nullableString(input.GooglePlaceID)
-		if placeID == nil && address != "" {
+		category := nullableString(input.Category)
+		if placeID != nil {
+			err := tx.QueryRow(ctx, `
+					SELECT id
+					FROM restaurants
+					WHERE google_place_id = $1
+					LIMIT 1`, *placeID).Scan(&id)
+			if err == nil {
+				restaurantID = &id
+			} else if !errors.Is(err, pgx.ErrNoRows) {
+				return nil, fmt.Errorf("find restaurant by place id: %w", err)
+			}
+		}
+		if restaurantID == nil && address != "" {
 			err := tx.QueryRow(ctx, `
 					SELECT id
 					FROM restaurants
@@ -162,6 +175,15 @@ func (s *Store) CreateVisit(ctx context.Context, input model.VisitInput) (*uuid.
 					LIMIT 1`, name, address).Scan(&id)
 			if err == nil {
 				restaurantID = &id
+				_, err = tx.Exec(ctx, `
+					UPDATE restaurants
+					SET google_place_id = COALESCE(restaurants.google_place_id, $2),
+					    category = COALESCE(restaurants.category, $3),
+					    updated_at = NOW()
+					WHERE id = $1`, id, placeID, category)
+				if err != nil {
+					return nil, fmt.Errorf("update matched restaurant metadata: %w", err)
+				}
 			} else if !errors.Is(err, pgx.ErrNoRows) {
 				return nil, fmt.Errorf("find restaurant by name and address: %w", err)
 			}

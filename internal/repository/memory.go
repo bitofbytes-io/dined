@@ -274,14 +274,25 @@ func (m *MemoryStore) findRestaurantByInput(input model.VisitInput) (model.Resta
 	placeID := strings.TrimSpace(input.GooglePlaceID)
 	name := strings.TrimSpace(input.RestaurantName)
 	address := strings.TrimSpace(input.Address)
-	for _, restaurant := range m.restaurants {
-		if placeID != "" && restaurant.GooglePlaceID != nil && *restaurant.GooglePlaceID == placeID {
-			return restaurant, true
+	for i := range m.restaurants {
+		if placeID != "" && m.restaurants[i].GooglePlaceID != nil && *m.restaurants[i].GooglePlaceID == placeID {
+			return m.restaurants[i], true
 		}
-		if placeID == "" && address != "" && restaurant.Address != nil &&
-			strings.EqualFold(strings.TrimSpace(restaurant.Name), name) &&
-			strings.EqualFold(strings.TrimSpace(*restaurant.Address), address) {
-			return restaurant, true
+	}
+	for i := range m.restaurants {
+		if address != "" && m.restaurants[i].Address != nil &&
+			strings.EqualFold(strings.TrimSpace(m.restaurants[i].Name), name) &&
+			strings.EqualFold(strings.TrimSpace(*m.restaurants[i].Address), address) {
+			now := time.Now()
+			if placeID != "" && m.restaurants[i].GooglePlaceID == nil {
+				m.restaurants[i].GooglePlaceID = strPtr(placeID)
+				m.restaurants[i].UpdatedAt = now
+			}
+			if category := strings.TrimSpace(input.Category); category != "" && m.restaurants[i].Category == nil {
+				m.restaurants[i].Category = strPtr(category)
+				m.restaurants[i].UpdatedAt = now
+			}
+			return m.restaurants[i], true
 		}
 	}
 	return model.Restaurant{}, false

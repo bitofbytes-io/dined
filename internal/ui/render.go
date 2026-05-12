@@ -193,12 +193,13 @@ const templates = `
 {{define "bottom"}}
 	  </div>
 	  <script>
-	    function dinedRestaurantOption(value) {
+	    function dinedRestaurantOptions(value) {
 	      var options = document.querySelectorAll("#restaurant-options option");
+	      var matches = [];
 	      for (var i = 0; i < options.length; i += 1) {
-	        if (options[i].value === value) return options[i];
+	        if (options[i].value === value) matches.push(options[i]);
 	      }
-	      return null;
+	      return matches;
 	    }
 
 	    function dinedSyncRestaurantSelection(form) {
@@ -210,7 +211,23 @@ const templates = `
 	      var category = form.querySelector("select[name='category']");
 	      if (!name || !id) return;
 
-	      var option = dinedRestaurantOption(name.value);
+	      var options = dinedRestaurantOptions(name.value);
+	      if (!options.length) {
+	        id.value = "";
+	        return;
+	      }
+	      var option = null;
+	      var currentAddress = address ? address.value.trim() : "";
+	      if (currentAddress) {
+	        for (var i = 0; i < options.length; i += 1) {
+	          if ((options[i].dataset.address || "").trim() === currentAddress) {
+	            option = options[i];
+	            break;
+	          }
+	        }
+	      } else if (options.length === 1) {
+	        option = options[0];
+	      }
 	      if (!option) {
 	        id.value = "";
 	        return;
