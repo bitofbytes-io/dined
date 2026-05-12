@@ -3,7 +3,9 @@ package handler
 import (
 	"log/slog"
 	"net/http"
+	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/bitofbytes-io/dined/internal/config"
@@ -36,7 +38,7 @@ func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Dines(w http.ResponseWriter, r *http.Request) {
-	visits, err := h.store.Visits(r.Context(), 200)
+	visits, err := h.store.Visits(r.Context(), 0)
 	if err != nil {
 		h.error(w, "all visits", err)
 		return
@@ -137,21 +139,26 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 		h.error(w, "search restaurants", err)
 		return
 	}
+	results, err := h.searchResults(r, restaurants)
+	if err != nil {
+		h.error(w, "search visit history", err)
+		return
+	}
 	var found []places.Place
-	if q != "" {
+	if q != "" && h.places.Configured() {
 		found, err = h.places.TextSearch(r.Context(), q)
 		if err != nil {
 			slog.Warn("places search failed", "error", err)
 		}
 	}
-	h.render(w, "search", r, ui.PageData{Title: "Search", Query: q, Restaurants: restaurants, Places: found})
+	h.render(w, "search", r, ui.PageData{Title: "Search", Query: q, SearchResults: results, Places: found})
 }
 
 func (h *Handler) Nearby(w http.ResponseWriter, r *http.Request) {
 	var found []places.Place
 	lat, latErr := strconv.ParseFloat(r.URL.Query().Get("lat"), 64)
 	lng, lngErr := strconv.ParseFloat(r.URL.Query().Get("lng"), 64)
-	if latErr == nil && lngErr == nil {
+	if latErr == nil && lngErr == nil && h.places.Configured() {
 		places, err := h.places.Nearby(r.Context(), lat, lng)
 		if err != nil {
 			slog.Warn("nearby places failed", "error", err)
@@ -201,7 +208,19 @@ func (h *Handler) logData(r *http.Request) (ui.PageData, error) {
 	if err != nil {
 		return ui.PageData{}, err
 	}
-	return ui.PageData{Title: "Log a Dine", People: people, Tags: tags, Restaurants: restaurants}, nil
+	prefillPrice, _ := strconv.Atoi(r.URL.Query().Get("price_level"))
+	return ui.PageData{
+		Title:               "Log a Dine",
+		People:              people,
+		Tags:                tags,
+		Restaurants:         restaurants,
+		PrefillName:         r.URL.Query().Get("restaurant_name"),
+		PrefillAddress:      r.URL.Query().Get("address"),
+		PrefillPlaceID:      r.URL.Query().Get("google_place_id"),
+		PrefillCategory:     r.URL.Query().Get("category"),
+		PrefillPriceLevel:   prefillPrice,
+		PrefillRestaurantID: r.URL.Query().Get("restaurant_id"),
+	}, nil
 }
 
 func (h *Handler) visitInput(r *http.Request) (model.VisitInput, error) {
@@ -274,6 +293,47 @@ func (h *Handler) render(w http.ResponseWriter, name string, r *http.Request, da
 	if err := ui.Render(w, name, data); err != nil {
 		slog.Error("render page", "page", name, "error", err)
 	}
+}
+
+func (h *Handler) searchResults(r *http.Request, restaurants []model.Restaurant) ([]ui.RestaurantResult, error) {
+	results := make([]ui.RestaurantResult, 0, len(restaurants))
+	for _, restaurant := range restaurants {
+		visits, err := h.store.RestaurantVisits(r.Context(), restaurant.ID)
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, restaurantResult(restaurant, visits))
+	}
+	return results, nil
+}
+
+func restaurantResult(restaurant model.Restaurant, visits []model.Visit) ui.RestaurantResult {
+	result := ui.RestaurantResult{Restaurant: restaurant}
+	tagNames := map[string]model.Tag{}
+	var ratingSum float64
+	var ratingCount int
+	for _, visit := range visits {
+		result.VisitCount++
+		if result.LatestVisit == nil || visit.VisitedAt.After(result.LatestVisit.VisitedAt) {
+			visitCopy := visit
+			result.LatestVisit = &visitCopy
+		}
+		for _, rating := range visit.Ratings {
+			ratingSum += rating.Score
+			ratingCount++
+		}
+		for _, tag := range visit.Tags {
+			tagNames[strings.ToLower(tag.Name)] = tag
+		}
+	}
+	if ratingCount > 0 {
+		result.AverageRating = ratingSum / float64(ratingCount)
+	}
+	for _, tag := range tagNames {
+		result.Tags = append(result.Tags, tag)
+	}
+	sort.Slice(result.Tags, func(i, j int) bool { return result.Tags[i].Name < result.Tags[j].Name })
+	return result
 }
 
 func (h *Handler) error(w http.ResponseWriter, msg string, err error) {

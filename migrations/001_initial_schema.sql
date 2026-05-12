@@ -20,7 +20,7 @@ CREATE TABLE restaurants (
     website            TEXT,
     google_place_id    TEXT,
     google_rating      DOUBLE PRECISION,
-    google_price_level INTEGER CHECK (google_price_level IS NULL OR google_price_level BETWEEN 1 AND 5),
+    google_price_level INTEGER CHECK (google_price_level IS NULL OR google_price_level BETWEEN 1 AND 4),
     category           TEXT,
     is_chain           BOOLEAN NOT NULL DEFAULT false,
     metadata_json      JSONB,
@@ -38,7 +38,7 @@ CREATE TABLE dining_visits (
     restaurant_id       UUID NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
     visited_at          TIMESTAMPTZ NOT NULL,
     picked_by_person_id UUID NOT NULL REFERENCES persons(id),
-    price_level         INTEGER NOT NULL CHECK (price_level BETWEEN 1 AND 5),
+    price_level         INTEGER NOT NULL CHECK (price_level BETWEEN 1 AND 4),
     notes               TEXT,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
