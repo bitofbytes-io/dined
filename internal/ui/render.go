@@ -6,6 +6,8 @@ import (
 	"io"
 	"math"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -97,6 +99,7 @@ func funcs() template.FuncMap {
 		"query": func(value string) template.URL {
 			return template.URL(strings.ReplaceAll(url.QueryEscape(value), "+", "%20"))
 		},
+		"asset":  asset,
 		"price":  places.PriceLevelNumber,
 		"avatar": avatar,
 		"placeCategory": func(place places.Place) string {
@@ -137,6 +140,33 @@ func funcs() template.FuncMap {
 	}
 }
 
+func asset(assetPath string) template.URL {
+	const staticPrefix = "/static/"
+	if !strings.HasPrefix(assetPath, staticPrefix) {
+		return template.URL(assetPath)
+	}
+
+	rel := strings.TrimPrefix(assetPath, staticPrefix)
+	filePath := filepath.Join("static", filepath.FromSlash(rel))
+	staticRoot, err := filepath.Abs("static")
+	if err != nil {
+		return template.URL(assetPath)
+	}
+	candidate, err := filepath.Abs(filePath)
+	if err != nil {
+		return template.URL(assetPath)
+	}
+	if candidate != staticRoot && !strings.HasPrefix(candidate, staticRoot+string(os.PathSeparator)) {
+		return template.URL(assetPath)
+	}
+
+	info, err := os.Stat(candidate)
+	if err != nil {
+		return template.URL(assetPath)
+	}
+	return template.URL(fmt.Sprintf("%s?v=%d", assetPath, info.ModTime().Unix()))
+}
+
 func avatar(name string) string {
 	switch strings.ToLower(strings.TrimSpace(name)) {
 	case "daniel":
@@ -172,8 +202,8 @@ const templates = `
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
-  <link rel="stylesheet" href="/static/styles.css">
-  <script src="/static/htmx.min.js" defer></script>
+  <link rel="stylesheet" href="{{asset "/static/styles.css"}}">
+  <script src="{{asset "/static/htmx.min.js"}}" defer></script>
 </head>
 	<body hx-boost="true">
 	  <div class="app-shell">
