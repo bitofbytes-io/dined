@@ -193,6 +193,46 @@ const templates = `
 {{define "bottom"}}
 	  </div>
 	  <script>
+	    function dinedRestaurantOption(value) {
+	      var options = document.querySelectorAll("#restaurant-options option");
+	      for (var i = 0; i < options.length; i += 1) {
+	        if (options[i].value === value) return options[i];
+	      }
+	      return null;
+	    }
+
+	    function dinedSyncRestaurantSelection(form) {
+	      if (!form) return;
+	      var name = form.querySelector("input[name='restaurant_name']");
+	      var id = form.querySelector("input[name='restaurant_id']");
+	      var address = form.querySelector("input[name='address']");
+	      var place = form.querySelector("input[name='google_place_id']");
+	      var category = form.querySelector("select[name='category']");
+	      if (!name || !id) return;
+
+	      var option = dinedRestaurantOption(name.value);
+	      if (!option) {
+	        id.value = "";
+	        return;
+	      }
+	      var optionAddress = option.dataset.address || "";
+	      if (address && address.value && optionAddress && address.value !== optionAddress) {
+	        id.value = "";
+	        return;
+	      }
+
+	      id.value = option.dataset.restaurantId || "";
+	      if (address && !address.value) address.value = optionAddress;
+	      if (place && !place.value) place.value = option.dataset.googlePlaceId || "";
+	      if (category && !category.value) category.value = option.dataset.category || "";
+	    }
+
+	    document.addEventListener("input", function (event) {
+	      if (event.target.name === "restaurant_name" || event.target.name === "address") {
+	        dinedSyncRestaurantSelection(event.target.form);
+	      }
+	    });
+
 	    document.addEventListener("click", function (event) {
 	      if (event.target.id !== "use-location") return;
 	      var status = document.getElementById("location-status");
@@ -292,7 +332,7 @@ const templates = `
 	      <section class="form-section restaurant-console">
 	        <input type="hidden" name="restaurant_id" value="{{.PrefillRestaurantID}}">
 	        <div class="form-grid restaurant-grid">
-	          <label>Restaurant<input name="restaurant_name" list="restaurant-options" placeholder="Type 3+ characters or add a new restaurant" value="{{.PrefillName}}"><datalist id="restaurant-options">{{range .Restaurants}}<option value="{{.Name}}">{{if .Address}}{{.Address}}{{end}}</option>{{end}}</datalist></label>
+	          <label>Restaurant<input name="restaurant_name" list="restaurant-options" placeholder="Type 3+ characters or add a new restaurant" value="{{.PrefillName}}"><datalist id="restaurant-options">{{range .Restaurants}}<option value="{{.Name}}" data-restaurant-id="{{.ID}}" data-address="{{if .Address}}{{.Address}}{{end}}" data-google-place-id="{{if .GooglePlaceID}}{{.GooglePlaceID}}{{end}}" data-category="{{if .Category}}{{.Category}}{{end}}">{{if .Address}}{{.Address}}{{end}}</option>{{end}}</datalist></label>
 	          <label>Address<input name="address" placeholder="Optional" value="{{.PrefillAddress}}"></label>
           <label>Google Place ID<input name="google_place_id" placeholder="Optional" value="{{.PrefillPlaceID}}"></label>
           <label>Category<select name="category"><option></option><option {{if eq .PrefillCategory "American"}}selected{{end}}>American</option><option {{if eq .PrefillCategory "Mexican"}}selected{{end}}>Mexican</option><option {{if eq .PrefillCategory "Italian"}}selected{{end}}>Italian</option><option {{if eq .PrefillCategory "Pizza"}}selected{{end}}>Pizza</option><option {{if eq .PrefillCategory "Burgers"}}selected{{end}}>Burgers</option><option {{if eq .PrefillCategory "Breakfast"}}selected{{end}}>Breakfast</option><option {{if eq .PrefillCategory "Chinese"}}selected{{end}}>Chinese</option><option {{if eq .PrefillCategory "Japanese"}}selected{{end}}>Japanese</option><option {{if eq .PrefillCategory "Thai"}}selected{{end}}>Thai</option><option {{if eq .PrefillCategory "Indian"}}selected{{end}}>Indian</option><option {{if eq .PrefillCategory "BBQ"}}selected{{end}}>BBQ</option><option {{if eq .PrefillCategory "Seafood"}}selected{{end}}>Seafood</option><option {{if eq .PrefillCategory "Dessert"}}selected{{end}}>Dessert</option><option {{if eq .PrefillCategory "Coffee"}}selected{{end}}>Coffee</option><option {{if eq .PrefillCategory "Other"}}selected{{end}}>Other</option></select></label>
