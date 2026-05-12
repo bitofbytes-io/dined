@@ -299,18 +299,6 @@ const templates = `
 	      }
 	    });
 
-	    function dinedLocalDateTimeValue(date) {
-	      var local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
-	      return local.toISOString().slice(0, 16);
-	    }
-
-	    function dinedSetBrowserLocalNow(root) {
-	      var fields = (root || document).querySelectorAll("[data-default-local-now]");
-	      for (var i = 0; i < fields.length; i += 1) {
-	        fields[i].value = dinedLocalDateTimeValue(new Date());
-	      }
-	    }
-
 	    function dinedValidateHalfStepRating(input) {
 	      if (!input || input.value === "") {
 	        input.setCustomValidity("");
@@ -322,13 +310,11 @@ const templates = `
 	    }
 
 	    document.addEventListener("DOMContentLoaded", function () {
-	      dinedSetBrowserLocalNow(document);
 	      var ratings = document.querySelectorAll("[data-half-step-rating]");
 	      for (var i = 0; i < ratings.length; i += 1) {
 	        dinedValidateHalfStepRating(ratings[i]);
 	      }
 	    });
-	    dinedSetBrowserLocalNow(document);
 
 	    document.addEventListener("click", function (event) {
 	      if (event.target.id !== "use-location") return;
@@ -475,7 +461,7 @@ const templates = `
       </section>
       <section class="form-section visit-console">
         <div class="form-grid visit-form-grid">
-          <label>Date and time<input type="datetime-local" name="visited_at" value="{{.NowLocal}}" data-default-local-now></label>
+          <label>Date and time<input type="datetime-local" name="visited_at" value="{{.NowLocal}}"></label>
           <label>Picked by<select name="picker_id" required>{{range .People}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select></label>
           <label>Price Level<select name="price_level"><option value="1" {{if eq .PrefillPriceLevel 1}}selected{{end}}>$</option><option value="2" {{if or (eq .PrefillPriceLevel 0) (eq .PrefillPriceLevel 2)}}selected{{end}}>$$</option><option value="3" {{if eq .PrefillPriceLevel 3}}selected{{end}}>$$$</option><option value="4" {{if eq .PrefillPriceLevel 4}}selected{{end}}>$$$$</option></select></label>
         </div>
