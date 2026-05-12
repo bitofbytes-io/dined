@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/bitofbytes-io/dined/internal/apptime"
 )
 
 func TestAssetAppendsStaticFileVersion(t *testing.T) {
@@ -77,6 +79,20 @@ func TestRenderUsesVersionedStylesheetAndScript(t *testing.T) {
 		if !strings.Contains(rendered, fragment) {
 			t.Fatalf("rendered HTML missing %q:\n%s", fragment, rendered)
 		}
+	}
+}
+
+func TestRenderDefaultsNowLocalToEasternTime(t *testing.T) {
+	before := apptime.FormatDatetimeLocal(time.Now())
+	var out strings.Builder
+	if err := Render(&out, "log", PageData{}); err != nil {
+		t.Fatal(err)
+	}
+	after := apptime.FormatDatetimeLocal(time.Now())
+
+	rendered := out.String()
+	if !strings.Contains(rendered, `value="`+before+`"`) && !strings.Contains(rendered, `value="`+after+`"`) {
+		t.Fatalf("rendered HTML did not include Eastern datetime-local default %q or %q:\n%s", before, after, rendered)
 	}
 }
 

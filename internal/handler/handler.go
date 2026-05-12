@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
+	"github.com/bitofbytes-io/dined/internal/apptime"
 	"github.com/bitofbytes-io/dined/internal/config"
 	"github.com/bitofbytes-io/dined/internal/middleware"
 	"github.com/bitofbytes-io/dined/internal/model"
@@ -271,7 +271,7 @@ func (h *Handler) logData(r *http.Request) (ui.PageData, error) {
 }
 
 func (h *Handler) visitInput(r *http.Request) (model.VisitInput, error) {
-	visitedAt, err := time.ParseInLocation("2006-01-02T15:04", r.FormValue("visited_at"), time.Local)
+	visitedAt, err := apptime.ParseDatetimeLocal(r.FormValue("visited_at"))
 	if err != nil {
 		return model.VisitInput{}, err
 	}
