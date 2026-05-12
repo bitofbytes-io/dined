@@ -435,8 +435,10 @@ a:focus-visible, button:focus-visible {
   place-items: center;
   width: 13rem;
   text-decoration: none;
-  animation: arrowFloat 3.4s ease-in-out infinite;
   transition: filter .16s ease, transform .16s ease;
+}
+.image-cta {
+  animation: arrowFloat 3.4s ease-in-out infinite;
 }
 .public-badge-link {
   min-height: 6.2rem;
@@ -464,6 +466,8 @@ a:focus-visible, button:focus-visible {
 .image-cta:hover, .image-cta:focus-visible,
 .public-badge-link:hover, .public-badge-link:focus-visible {
   animation-play-state: paused;
+}
+.public-badge-link:hover, .public-badge-link:focus-visible {
   transform: rotate(-4deg) translateY(-4px);
 }
 .image-cta:hover img, .image-cta:focus-visible img {
@@ -881,7 +885,7 @@ fieldset {
   margin: 0;
   color: var(--ink);
   font-weight: 900;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .sign-panel {
@@ -1156,11 +1160,14 @@ fieldset {
 .record::after {
   content: "";
   position: absolute;
+  top: 50%;
+  left: 50%;
   width: .75rem;
   height: .75rem;
   background: var(--butter);
   border: 3px solid var(--night);
   border-radius: 50%;
+  transform: translate(-50%, -50%);
 }
 .record span, .record p {
   position: relative;
