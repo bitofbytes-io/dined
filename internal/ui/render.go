@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bitofbytes-io/dined/internal/apptime"
 	"github.com/bitofbytes-io/dined/internal/model"
 	"github.com/bitofbytes-io/dined/internal/places"
 )
@@ -53,7 +54,7 @@ type RestaurantResult struct {
 func Render(w io.Writer, name string, data PageData) error {
 	data.Title = title(data.Title)
 	if data.NowLocal == "" {
-		data.NowLocal = time.Now().Format("2006-01-02T15:04")
+		data.NowLocal = apptime.FormatDatetimeLocal(time.Now())
 	}
 	tpl, err := template.New("dined").Funcs(funcs()).Parse(templates)
 	if err != nil {
@@ -68,7 +69,7 @@ func funcs() template.FuncMap {
 			if t.IsZero() {
 				return ""
 			}
-			return t.Format("Jan 2, 2006")
+			return t.In(apptime.EasternLocation()).Format("Jan 2, 2006")
 		},
 		"avg": func(v model.Visit) string {
 			if len(v.Ratings) == 0 {
