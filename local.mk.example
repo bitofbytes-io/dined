@@ -6,5 +6,6 @@ API_TOKEN := dined
 GOOGLE_PLACES_API_KEY :=
 SECURE_COOKIES := false
 
-# Used only by make run-postgres/migrate targets.
-DATABASE_URL := postgres://dined:dined@localhost:5432/dined?sslmode=disable
+# Used by make run-postgres and migration targets.
+# Credentials must already be URL-encoded.
+DATABASE_URL :=

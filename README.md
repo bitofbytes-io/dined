@@ -36,6 +36,10 @@ make migrate
 make run-postgres
 ```
 
+Set `DATABASE_URL` in `local.mk` or the environment before running Postgres-backed targets.
+Credentials in `DATABASE_URL` must already be URL-encoded before passing it to
+`make`.
+
 Run tests:
 
 ```bash
