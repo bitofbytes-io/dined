@@ -94,6 +94,9 @@ func TestRenderDefaultsNowLocalToEasternTime(t *testing.T) {
 	if !strings.Contains(rendered, `value="`+before+`"`) && !strings.Contains(rendered, `value="`+after+`"`) {
 		t.Fatalf("rendered HTML did not include Eastern datetime-local default %q or %q:\n%s", before, after, rendered)
 	}
+	if strings.Contains(rendered, "data-default-local-now") {
+		t.Fatalf("rendered HTML still includes browser-local datetime override hook:\n%s", rendered)
+	}
 }
 
 func withWorkingDir(t *testing.T) {

@@ -294,6 +294,26 @@ const templates = `
 	      if (event.target.name === "restaurant_name" || event.target.name === "address") {
 	        dinedSyncRestaurantSelection(event.target.form);
 	      }
+	      if (event.target.matches("[data-half-step-rating]")) {
+	        dinedValidateHalfStepRating(event.target);
+	      }
+	    });
+
+	    function dinedValidateHalfStepRating(input) {
+	      if (!input || input.value === "") {
+	        input.setCustomValidity("");
+	        return;
+	      }
+	      var rating = Number(input.value);
+	      var isHalfStep = Number.isFinite(rating) && rating >= 0 && rating <= 10 && Number.isInteger(rating * 2);
+	      input.setCustomValidity(isHalfStep ? "" : "Use whole numbers or .5 increments from 0 to 10.");
+	    }
+
+	    document.addEventListener("DOMContentLoaded", function () {
+	      var ratings = document.querySelectorAll("[data-half-step-rating]");
+	      for (var i = 0; i < ratings.length; i += 1) {
+	        dinedValidateHalfStepRating(ratings[i]);
+	      }
 	    });
 
 	    document.addEventListener("click", function (event) {
@@ -447,7 +467,7 @@ const templates = `
         </div>
       </section>
     </div>
-	    <fieldset class="ratings-field score-console"><legend>Rate Your Experience</legend>{{range .People}}<label class="rating-card">{{if avatar .Name}}<img class="avatar-face" src="{{avatar .Name}}" alt="">{{else}}<span class="avatar-dot">{{slice .Name 0 1}}</span>{{end}}<span>{{.Name}}</span><input name="rating_{{.ID}}" type="number" min="0" max="10" step="0.5" placeholder="0-10"></label>{{end}}</fieldset>
+	    <fieldset class="ratings-field score-console"><legend>Rate Your Experience</legend>{{range .People}}<label class="rating-card">{{if avatar .Name}}<img class="avatar-face" src="{{avatar .Name}}" alt="">{{else}}<span class="avatar-dot">{{slice .Name 0 1}}</span>{{end}}<span>{{.Name}}</span><input name="rating_{{.ID}}" type="number" min="0" max="10" step="0.5" inputmode="decimal" placeholder="0-10" data-half-step-rating></label>{{end}}</fieldset>
     <fieldset class="tags-field chip-field"><legend>Tags</legend>{{range .Tags}}<label><input type="checkbox" name="tag_id" value="{{.ID}}"> <span>{{.Name}}</span></label>{{end}}<label class="new-tag">New tag<input name="new_tag" placeholder="Great fries"></label></fieldset>
     <label class="notes-field">Notes<textarea name="notes" rows="4" placeholder="What should we remember next time?"></textarea></label>
     <div class="form-actions console-actions"><label class="inline-check"><input type="checkbox" name="is_chain" value="true"> Mark new restaurant as chain</label><button class="primary-button">Save Dine</button></div>
