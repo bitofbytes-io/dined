@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"strings"
@@ -42,6 +43,9 @@ type searchResponse struct {
 	Places []Place `json:"places"`
 }
 
+const searchFieldMask = "places.id,places.displayName,places.formattedAddress,places.location,places.nationalPhoneNumber,places.websiteUri,places.rating,places.priceLevel,places.types"
+const detailsFieldMask = "id,displayName,formattedAddress,location,nationalPhoneNumber,websiteUri,rating,priceLevel,types"
+
 func NewClient(apiKey string) *Client {
 	return &Client{
 		apiKey: apiKey,
@@ -56,7 +60,29 @@ func (c *Client) Configured() bool {
 }
 
 func (c *Client) TextSearch(ctx context.Context, query string) ([]Place, error) {
-	body := map[string]any{
+	return c.postSearch(ctx, "https://places.googleapis.com/v1/places:searchText", textSearchBody(query))
+}
+
+func (c *Client) TextSearchNear(ctx context.Context, query string, lat, lng float64) ([]Place, error) {
+	return c.postSearch(ctx, "https://places.googleapis.com/v1/places:searchText", textSearchNearBody(query, lat, lng))
+}
+
+func textSearchNearBody(query string, lat, lng float64) map[string]any {
+	body := textSearchBody(query)
+	body["locationBias"] = map[string]any{
+		"circle": map[string]any{
+			"center": map[string]float64{
+				"latitude":  lat,
+				"longitude": lng,
+			},
+			"radius": 8047.0,
+		},
+	}
+	return body
+}
+
+func textSearchBody(query string) map[string]any {
+	return map[string]any{
 		"textQuery":        query,
 		"includedType":     "restaurant",
 		"maxResultCount":   10,
@@ -65,7 +91,6 @@ func (c *Client) TextSearch(ctx context.Context, query string) ([]Place, error) 
 		"regionCode":       "US",
 		"strictTypeFilter": false,
 	}
-	return c.postSearch(ctx, "https://places.googleapis.com/v1/places:searchText", body)
 }
 
 func (c *Client) Nearby(ctx context.Context, lat, lng float64) ([]Place, error) {
@@ -92,7 +117,7 @@ func (c *Client) Details(ctx context.Context, placeID string) (*Place, error) {
 	if err != nil {
 		return nil, err
 	}
-	c.addHeaders(req)
+	c.addHeaders(req, detailsFieldMask)
 	res, err := c.http.Do(req)
 	if err != nil {
 		return nil, err
@@ -119,7 +144,7 @@ func (c *Client) postSearch(ctx context.Context, endpoint string, body any) ([]P
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	c.addHeaders(req)
+	c.addHeaders(req, searchFieldMask)
 	res, err := c.http.Do(req)
 	if err != nil {
 		return nil, err
@@ -136,9 +161,9 @@ func (c *Client) postSearch(ctx context.Context, endpoint string, body any) ([]P
 	return parsed.Places, nil
 }
 
-func (c *Client) addHeaders(req *http.Request) {
+func (c *Client) addHeaders(req *http.Request, fieldMask string) {
 	req.Header.Set("X-Goog-Api-Key", c.apiKey)
-	req.Header.Set("X-Goog-FieldMask", "places.id,places.displayName,places.formattedAddress,places.location,places.nationalPhoneNumber,places.websiteUri,places.rating,places.priceLevel,places.types,id,displayName,formattedAddress,location,nationalPhoneNumber,websiteUri,rating,priceLevel,types")
+	req.Header.Set("X-Goog-FieldMask", fieldMask)
 }
 
 func PriceLevelNumber(priceLevel string) int {
@@ -154,4 +179,20 @@ func PriceLevelNumber(priceLevel string) int {
 	default:
 		return 0
 	}
+}
+
+func DistanceMiles(lat, lng float64, place Place) float64 {
+	const earthRadiusMiles = 3958.8
+	lat1 := degreesToRadians(lat)
+	lat2 := degreesToRadians(place.Location.Latitude)
+	dLat := degreesToRadians(place.Location.Latitude - lat)
+	dLng := degreesToRadians(place.Location.Longitude - lng)
+
+	a := math.Sin(dLat/2)*math.Sin(dLat/2) +
+		math.Cos(lat1)*math.Cos(lat2)*math.Sin(dLng/2)*math.Sin(dLng/2)
+	return earthRadiusMiles * 2 * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
+}
+
+func degreesToRadians(value float64) float64 {
+	return value * math.Pi / 180
 }

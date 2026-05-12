@@ -156,17 +156,64 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) Nearby(w http.ResponseWriter, r *http.Request) {
 	var found []places.Place
+	var locationStatus string
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	near := strings.TrimSpace(r.URL.Query().Get("near"))
 	lat, latErr := strconv.ParseFloat(r.URL.Query().Get("lat"), 64)
 	lng, lngErr := strconv.ParseFloat(r.URL.Query().Get("lng"), 64)
-	if latErr == nil && lngErr == nil && h.places.Configured() {
-		places, err := h.places.Nearby(r.Context(), lat, lng)
+	searched := (latErr == nil && lngErr == nil) || q != "" || near != ""
+	if h.places.Configured() && latErr == nil && lngErr == nil {
+		var foundPlaces []places.Place
+		var err error
+		if q == "" {
+			foundPlaces, err = h.places.Nearby(r.Context(), lat, lng)
+		} else {
+			foundPlaces, err = h.places.TextSearchNear(r.Context(), q, lat, lng)
+		}
 		if err != nil {
 			slog.Warn("nearby places failed", "error", err)
+			locationStatus = "Nearby search failed. Try again, or search by city/address."
+		} else {
+			found = foundPlaces
+		}
+	} else if h.places.Configured() && (q != "" || near != "") {
+		places, err := h.places.TextSearch(r.Context(), nearbyTextQuery(q, near))
+		if err != nil {
+			slog.Warn("nearby places search failed", "error", err)
+			locationStatus = "Area search failed. Try again with a city, address, or neighborhood."
 		} else {
 			found = places
 		}
+	} else if searched && !h.places.Configured() {
+		locationStatus = "Google Places is not configured for this environment, so nearby restaurant results cannot load."
 	}
-	h.render(w, "nearby", r, ui.PageData{Title: "Nearby", Places: found})
+	if searched && h.places.Configured() && locationStatus == "" && len(found) == 0 {
+		locationStatus = "No nearby restaurants found. Try a restaurant/cuisine search or a wider city/address search."
+	}
+	data := ui.PageData{
+		Title:          "Nearby",
+		Places:         found,
+		Query:          q,
+		LocationQuery:  near,
+		LocationStatus: locationStatus,
+	}
+	if latErr == nil && lngErr == nil {
+		data.HasLocation = true
+		data.OriginLatitude = lat
+		data.OriginLongitude = lng
+	}
+	h.render(w, "nearby", r, data)
+}
+
+func nearbyTextQuery(query, near string) string {
+	switch {
+	case query != "" && near != "":
+		return query + " near " + near
+	case near != "":
+		return "restaurants near " + near
+	default:
+		return query
+	}
 }
 
 func (h *Handler) LoginPage(w http.ResponseWriter, r *http.Request) {
