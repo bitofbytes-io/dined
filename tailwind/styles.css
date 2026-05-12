@@ -26,9 +26,7 @@ body {
   min-height: 100%;
   color: var(--ink);
   font-family: var(--serif);
-  background:
-    radial-gradient(circle at 18% 8%, rgba(255,255,255,.7), transparent 22rem),
-    linear-gradient(180deg, #fff7df 0, var(--cream) 45%, #f6dfb4 100%);
+  background: var(--cream);
 }
 a { color: inherit; }
 button, input, select, textarea { font: inherit; }
@@ -57,9 +55,7 @@ h1, h2, h3 { letter-spacing: 0; }
   gap: 1rem;
   min-height: 5rem;
   padding: .55rem clamp(.8rem, 3vw, 2rem);
-  background:
-    linear-gradient(90deg, rgba(9,68,69,.14), transparent 16rem),
-    linear-gradient(180deg, rgba(255,248,232,.96), rgba(255,239,201,.96));
+  background: rgba(255,239,201,.96);
   border-bottom: 4px solid var(--teal);
   box-shadow: 0 10px 24px rgba(70, 48, 26, .16);
   backdrop-filter: blur(14px);
@@ -142,9 +138,7 @@ button, .small-cta, .primary-button, .secondary-button {
   min-height: 2.8rem;
   padding: .75rem 1rem;
   color: #fff9e7;
-  background:
-    linear-gradient(180deg, rgba(255,255,255,.14), transparent 45%),
-    var(--teal);
+  background: var(--teal);
   border: 2px solid #f8ead0;
   border-radius: 7px;
   box-shadow: inset 0 -3px 0 rgba(0,0,0,.18), 0 6px 0 rgba(6,63,66,.35);
@@ -155,10 +149,12 @@ button, .small-cta, .primary-button, .secondary-button {
 }
 button:hover, .small-cta:hover, .primary-button:hover {
   color: #fff9e7;
-  background:
-    linear-gradient(180deg, rgba(255,255,255,.16), transparent 45%),
-    var(--red);
+  background: var(--red);
   box-shadow: inset 0 -3px 0 rgba(0,0,0,.2), 0 6px 0 rgba(116,27,24,.35);
+}
+button:disabled {
+  cursor: wait;
+  opacity: .7;
 }
 .section-head a.small-cta, a.small-cta, button.small-cta {
   color: #fff9e7;
@@ -168,17 +164,13 @@ button:hover, .small-cta:hover, .primary-button:hover {
 }
 .secondary-button {
   color: var(--teal-dark);
-  background:
-    linear-gradient(180deg, rgba(255,255,255,.72), transparent 55%),
-    #ffe8bd;
+  background: #ffe8bd;
   border-color: #be8f56;
   box-shadow: inset 0 -3px 0 rgba(173,128,83,.22), 0 6px 0 rgba(139,92,47,.22);
 }
 .secondary-button:hover {
   color: #fff8e7;
-  background:
-    linear-gradient(180deg, rgba(255,255,255,.15), transparent 45%),
-    var(--red);
+  background: var(--red);
 }
 .danger {
   min-height: 2.45rem;
@@ -384,19 +376,13 @@ input:focus, select:focus, textarea:focus {
 .page-band {
   min-height: calc(100vh - 5rem);
   padding: clamp(1rem, 4vw, 3rem);
-  background:
-    linear-gradient(180deg, rgba(239,181,170,.78), transparent 17rem),
-    linear-gradient(90deg, rgba(0,0,0,.08) 0 12px, transparent 12px 24px) 0 100% / 48px 48px repeat-x,
-    var(--cream);
+  background: var(--cream);
 }
 .wide-ticket, .login-card {
   max-width: 74rem;
   margin: 0 auto;
   padding: clamp(1rem, 3vw, 1.6rem);
-  background:
-    linear-gradient(90deg, rgba(255,255,255,.45), transparent 10rem),
-    repeating-linear-gradient(0deg, transparent 0 31px, rgba(188,141,89,.14) 32px 33px),
-    var(--paper);
+  background: var(--paper);
   border: 2px solid var(--line);
   border-radius: 8px;
   box-shadow: var(--shadow);
@@ -406,6 +392,7 @@ input:focus, select:focus, textarea:focus {
   border-style: solid;
 }
 .ledger-panel::before {
+  display: none;
   content: "";
   position: absolute;
   inset: .75rem auto .75rem 1.1rem;
@@ -432,10 +419,7 @@ input:focus, select:focus, textarea:focus {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: .55rem 1rem;
   padding: 1rem;
-  background:
-    linear-gradient(rgba(255,255,255,.52), rgba(255,255,255,.34)),
-    repeating-linear-gradient(0deg, transparent 0 26px, rgba(188,141,89,.16) 27px 28px),
-    #fffaf0;
+  background: #fffaf0;
   border: 2px dashed #c49a67;
   border-radius: 6px;
 }
@@ -543,10 +527,7 @@ input:focus, select:focus, textarea:focus {
 .console-pad {
   max-width: 82rem;
   padding-bottom: 1.25rem;
-  background:
-    linear-gradient(180deg, rgba(255,255,255,.38), rgba(255,255,255,.08)),
-    repeating-linear-gradient(0deg, transparent 0 31px, rgba(188,141,89,.13) 32px 33px),
-    var(--paper);
+  background: var(--paper);
 }
 .console-head {
   align-items: center;
@@ -584,6 +565,7 @@ input:focus, select:focus, textarea:focus {
   margin: 1rem 0;
 }
 .form-section h2, fieldset legend {
+  margin: 0;
   color: var(--red);
   font-family: var(--sans);
   font-size: .9rem;
@@ -810,9 +792,7 @@ fieldset {
   gap: .25rem;
   padding: .9rem 1rem;
   color: var(--ink);
-  background:
-    linear-gradient(90deg, rgba(11,111,112,.08), transparent 45%),
-    #fffaf0;
+  background: #fffaf0;
   border: 1px solid #d7bb8b;
   border-left: 6px solid var(--teal);
   border-radius: 6px;
@@ -885,8 +865,27 @@ fieldset {
   align-self: center;
   min-width: 8.5rem;
 }
-.nearby-controls button {
-  flex: 0 0 auto;
+.nearby-controls {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: .65rem;
+  margin: 1rem 0 1.4rem;
+}
+.nearby-search-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: .55rem;
+}
+.nearby-search-line input {
+  min-width: 0;
+}
+.nearby-search-line button {
+  min-width: clamp(10.5rem, 17vw, 14rem);
+  white-space: nowrap;
+}
+.nearby-fallback-line button {
+  min-width: clamp(10rem, 16vw, 13rem);
 }
 .pass-page {
   display: grid;
@@ -897,9 +896,7 @@ fieldset {
 }
 .kitchen-pass {
   margin-top: clamp(1.4rem, 7vh, 4rem);
-  background:
-    linear-gradient(135deg, rgba(11,111,112,.13), transparent 32%),
-    var(--paper);
+  background: var(--paper);
 }
 .kitchen-pass h1 {
   margin-bottom: 1rem;
@@ -1268,7 +1265,13 @@ fieldset {
     display: grid;
     grid-template-columns: 1fr;
   }
-  .search-row button, .form-actions .primary-button {
+  .nearby-search-line {
+    grid-template-columns: 1fr;
+  }
+  .nearby-search-line button {
+    min-width: 0;
+  }
+  .search-row button, .nearby-search-line button, .form-actions .primary-button {
     width: 100%;
   }
   .form-grid, .ratings-field, .tags-field, .details {

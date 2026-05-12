@@ -28,6 +28,11 @@ type PageData struct {
 	Stats               model.Stats
 	Places              []places.Place
 	Query               string
+	LocationQuery       string
+	LocationStatus      string
+	HasLocation         bool
+	OriginLatitude      float64
+	OriginLongitude     float64
 	NowLocal            string
 	PrefillName         string
 	PrefillAddress      string
@@ -99,8 +104,18 @@ func funcs() template.FuncMap {
 		"query": func(value string) template.URL {
 			return template.URL(strings.ReplaceAll(url.QueryEscape(value), "+", "%20"))
 		},
-		"asset":  asset,
-		"price":  places.PriceLevelNumber,
+		"asset": asset,
+		"price": places.PriceLevelNumber,
+		"distance": func(lat, lng float64, place places.Place) string {
+			miles := places.DistanceMiles(lat, lng, place)
+			if miles < 0.05 {
+				return "<0.1 mi"
+			}
+			if miles < 10 {
+				return fmt.Sprintf("%.1f mi", miles)
+			}
+			return fmt.Sprintf("%.0f mi", miles)
+		},
 		"avatar": avatar,
 		"placeCategory": func(place places.Place) string {
 			for _, typ := range place.Types {
@@ -282,30 +297,57 @@ const templates = `
 
 	    document.addEventListener("click", function (event) {
 	      if (event.target.id !== "use-location") return;
+	      var button = event.target;
+	      var form = document.getElementById("nearby-form");
 	      var status = document.getElementById("location-status");
-      if (!navigator.geolocation) {
-        if (status) status.textContent = "Browser location is not available. Enter coordinates instead.";
-        return;
-      }
-      if (status) status.textContent = "Finding restaurants near you...";
-      navigator.geolocation.getCurrentPosition(function (position) {
-        var lat = document.querySelector("input[name='lat']");
-        var lng = document.querySelector("input[name='lng']");
-        if (lat) lat.value = position.coords.latitude.toFixed(6);
-        if (lng) lng.value = position.coords.longitude.toFixed(6);
-        var form = document.getElementById("nearby-form");
-        if (form) form.submit();
-      }, function () {
-        if (status) status.textContent = "Location was not shared. Enter latitude and longitude instead.";
-      }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 });
-    });
+	      var blockedMessage = "Location is blocked before Dined can ask. Enable location for this browser/site in system or browser settings, then reload.";
+	      if (!navigator.geolocation) {
+	        if (status) status.textContent = "Browser location is not available. Search by city, address, or neighborhood instead.";
+	        return;
+	      }
+
+	      function requestBrowserLocation() {
+	        if (status) status.textContent = "Finding restaurants near you...";
+	        button.disabled = true;
+	        navigator.geolocation.getCurrentPosition(function (position) {
+	          var lat = form ? form.querySelector("input[name='lat']") : null;
+	          var lng = form ? form.querySelector("input[name='lng']") : null;
+	          if (lat) lat.value = position.coords.latitude.toFixed(6);
+	          if (lng) lng.value = position.coords.longitude.toFixed(6);
+	          if (form) form.submit();
+	        }, function (error) {
+	          button.disabled = false;
+	          if (!status) return;
+	          if (error && error.code === error.PERMISSION_DENIED) {
+	            status.textContent = blockedMessage;
+	          } else if (error && error.code === error.TIMEOUT) {
+	            status.textContent = "Location timed out. Try again, or search by city/address.";
+	          } else {
+	            status.textContent = "Location was not shared. Search by city, address, or neighborhood instead.";
+	          }
+	        }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 });
+	      }
+
+	      if (navigator.permissions && navigator.permissions.query) {
+	        navigator.permissions.query({ name: "geolocation" }).then(function (permission) {
+	          if (permission.state === "denied") {
+	            if (status) status.textContent = blockedMessage;
+	            return;
+	          }
+	          requestBrowserLocation();
+	        }).catch(requestBrowserLocation);
+	      } else {
+	        requestBrowserLocation();
+	      }
+	    });
 
     document.addEventListener("submit", function (event) {
       var form = event.target;
       if (!form || form.id !== "nearby-form") return;
       var lat = form.querySelector("input[name='lat']");
       var lng = form.querySelector("input[name='lng']");
-      if (!lat || !lng || lat.value.trim() || lng.value.trim()) return;
+      var near = form.querySelector("input[name='near']");
+      if (!lat || !lng || (lat.value.trim() && lng.value.trim()) || (near && near.value.trim())) return;
       event.preventDefault();
       var useLocation = document.getElementById("use-location");
       if (useLocation) useLocation.click();
@@ -470,7 +512,7 @@ const templates = `
     <h1>Have we eaten here before?</h1>
     <form class="search-row" method="get" action="/search"><input name="q" type="search" value="{{.Query}}" placeholder="Restaurant name"><button>Search</button></form>
     {{if .SearchResults}}<h2>Known Places</h2><div class="restaurant-list history-list">{{range .SearchResults}}<a class="restaurant-row history-row" href="/restaurants/{{.Restaurant.ID}}"><div><strong>{{.Restaurant.Name}}</strong>{{if .Restaurant.IsChain}}<em>Chain</em>{{end}}</div><span>{{if .Restaurant.Address}}{{.Restaurant.Address}}{{end}}</span>{{with .LatestVisit}}<span>Last visit {{date .VisitedAt}} · Picked by {{.Picker.Name}} · {{dollars .PriceLevel}}</span>{{end}}<div class="row-stats"><span>{{.VisitCount}} {{if eq .VisitCount 1}}visit{{else}}visits{{end}}</span><span>Avg {{score .AverageRating}}</span></div>{{if .Tags}}<div class="tags">{{range .Tags}}<span>{{.Name}}</span>{{end}}</div>{{end}}</a>{{end}}</div>{{else if .Query}}<p class="empty">No saved dines match that search yet.</p>{{end}}
-    {{if .Places}}<h2>Google Places</h2><div class="restaurant-list places-list">{{range .Places}}<article class="restaurant-row place-row"><div><strong>{{.DisplayName.Text}}</strong>{{if .Rating}}<em>{{score .Rating}} Google</em>{{end}}</div><span>{{.Address}}</span><span>{{if .PriceLevel}}{{.PriceLevel}}{{else}}Price not listed{{end}}</span>{{if $.Authenticated}}<a class="small-cta" href="/log?restaurant_name={{query .DisplayName.Text}}&address={{query .Address}}&google_place_id={{query .ID}}&category={{query (placeCategory .)}}&price_level={{price .PriceLevel}}">Log this dine</a>{{end}}</article>{{end}}</div>{{else if .Query}}<p class="empty">Google Places results will appear here when a Places API key is configured.</p>{{end}}
+    {{if .Places}}<h2>Google Places</h2><div class="restaurant-list places-list">{{range .Places}}<article class="restaurant-row place-row"><div><strong>{{.DisplayName.Text}}</strong>{{if .Rating}}<em>{{score .Rating}} Google</em>{{end}}</div><span>{{.Address}}</span><span>{{if price .PriceLevel}}{{dollars (price .PriceLevel)}}{{else}}Price not listed{{end}}</span>{{if $.Authenticated}}<a class="small-cta" href="/log?restaurant_name={{query .DisplayName.Text}}&address={{query .Address}}&google_place_id={{query .ID}}&category={{query (placeCategory .)}}&price_level={{price .PriceLevel}}">Log this dine</a>{{end}}</article>{{end}}</div>{{else if .Query}}<p class="empty">Google Places results will appear here when a Places API key is configured.</p>{{end}}
   </section>
 </main>
 {{template "bottom" .}}
@@ -482,9 +524,9 @@ const templates = `
   <section class="wide-ticket sign-panel nearby-panel">
     <p class="eyebrow">Roadside Finder</p>
     <h1>Nearby</h1>
-    <form class="search-row nearby-controls" id="nearby-form" method="get" action="/nearby"><input name="lat" placeholder="Latitude"><input name="lng" placeholder="Longitude"><button>Find Restaurants</button><button class="secondary-button" id="use-location" type="button">Use Current Location</button></form>
-    <p class="empty" id="location-status">Use your browser location or enter coordinates to search nearby restaurants.</p>
-    {{if .Places}}<div class="restaurant-list places-list">{{range .Places}}<article class="restaurant-row place-row"><div><strong>{{.DisplayName.Text}}</strong>{{if .Rating}}<em>{{score .Rating}} Google</em>{{end}}</div><span>{{.Address}}</span><span>{{if .PriceLevel}}{{.PriceLevel}}{{else}}Price not listed{{end}}</span>{{if $.Authenticated}}<a class="small-cta" href="/log?restaurant_name={{query .DisplayName.Text}}&address={{query .Address}}&google_place_id={{query .ID}}&category={{query (placeCategory .)}}&price_level={{price .PriceLevel}}">Log this dine</a>{{end}}</article>{{end}}</div>{{end}}
+    <form class="nearby-controls" id="nearby-form" method="get" action="/nearby"><input type="hidden" name="lat"><input type="hidden" name="lng"><div class="nearby-search-line"><input name="q" type="search" value="{{.Query}}" placeholder="Restaurant or cuisine" aria-label="Restaurant or cuisine"><button class="primary-button" id="use-location" type="button">Search Near Me</button></div><div class="nearby-search-line nearby-fallback-line"><input name="near" type="search" value="{{.LocationQuery}}" placeholder="City, address, or neighborhood" aria-label="City, address, or neighborhood"><button class="secondary-button">Search This Area</button></div></form>
+    <p class="empty" id="location-status">{{if .LocationStatus}}{{.LocationStatus}}{{else}}Share your browser location, or search near a city, address, or neighborhood.{{end}}</p>
+    {{if .Places}}<div class="restaurant-list places-list">{{range .Places}}<article class="restaurant-row place-row"><div><strong>{{.DisplayName.Text}}</strong>{{if .Rating}}<em>{{score .Rating}} Google</em>{{end}}</div><span>{{.Address}}</span><span>{{if $.HasLocation}}{{distance $.OriginLatitude $.OriginLongitude .}} · {{end}}{{if price .PriceLevel}}{{dollars (price .PriceLevel)}}{{else}}Price not listed{{end}}</span>{{if $.Authenticated}}<a class="small-cta" href="/log?restaurant_name={{query .DisplayName.Text}}&address={{query .Address}}&google_place_id={{query .ID}}&category={{query (placeCategory .)}}&price_level={{price .PriceLevel}}">Log this dine</a>{{end}}</article>{{end}}</div>{{end}}
   </section>
 </main>
 {{template "bottom" .}}
