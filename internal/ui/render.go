@@ -214,10 +214,11 @@ const templates = `
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#0d6f6f">
   <title>{{.Title}}</title>
-  <link rel="manifest" href="/site.webmanifest">
-  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
-  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="manifest" href="/site.webmanifest?v=20260513">
+  <link rel="icon" href="/favicon.ico?v=20260513" sizes="any">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=20260513">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=20260513">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png?v=20260513">
   <link rel="stylesheet" href="{{asset "/static/styles.css"}}">
   <script src="{{asset "/static/htmx.min.js"}}" defer></script>
 </head>
