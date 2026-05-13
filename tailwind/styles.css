@@ -466,7 +466,7 @@ a:focus-visible, button:focus-visible {
 .booth-recent {
   position: absolute;
   left: 50%;
-  top: 14rem;
+  top: 18.75rem;
   z-index: 1;
   width: min(62rem, 88%);
   transform: translateX(-50%);
