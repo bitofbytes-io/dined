@@ -489,6 +489,21 @@ a:focus-visible, button:focus-visible {
   font-weight: 900;
   text-transform: uppercase;
 }
+.next-up {
+  display: inline-block;
+  margin: .35rem 0 0;
+  padding: .2rem .46rem;
+  color: var(--night);
+  background: var(--butter);
+  border: 2px solid var(--night);
+  border-radius: var(--radius);
+  font-family: var(--condensed);
+  font-size: .82rem;
+  font-weight: 900;
+  line-height: 1;
+  text-transform: uppercase;
+  box-shadow: 3px 3px 0 rgba(6, 21, 22, .28);
+}
 .booth-recent .section-head a {
   color: var(--milk);
   font-family: var(--condensed);

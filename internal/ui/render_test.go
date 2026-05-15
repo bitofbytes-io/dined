@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/bitofbytes-io/dined/internal/apptime"
+	"github.com/bitofbytes-io/dined/internal/model"
+	"github.com/google/uuid"
 )
 
 func TestAssetAppendsStaticFileVersion(t *testing.T) {
@@ -96,6 +98,47 @@ func TestRenderDefaultsNowLocalToEasternTime(t *testing.T) {
 	}
 	if strings.Contains(rendered, "data-default-local-now") {
 		t.Fatalf("rendered HTML still includes browser-local datetime override hook:\n%s", rendered)
+	}
+}
+
+func TestRenderHomeShowsNextUp(t *testing.T) {
+	var out strings.Builder
+	if err := Render(&out, "home", PageData{PickerTurn: model.PickerTurn{NextPicker: model.Person{Name: "Jen"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "Next Up: Jen") {
+		t.Fatalf("rendered home missing next up copy:\n%s", out.String())
+	}
+}
+
+func TestRenderTrophyShowsNextUpAward(t *testing.T) {
+	var out strings.Builder
+	if err := Render(&out, "trophy", PageData{PickerTurn: model.PickerTurn{NextPicker: model.Person{Name: "Jen"}}}); err != nil {
+		t.Fatal(err)
+	}
+	rendered := out.String()
+	if !strings.Contains(rendered, "<h2>Next Up</h2>") || !strings.Contains(rendered, "<p>Jen</p>") {
+		t.Fatalf("rendered trophy missing next up award:\n%s", rendered)
+	}
+}
+
+func TestRenderLogPreselectsNextPicker(t *testing.T) {
+	jenID := uuid.New()
+	var out strings.Builder
+	err := Render(&out, "log", PageData{
+		People: []model.Person{
+			{ID: uuid.New(), Name: "Daniel"},
+			{ID: jenID, Name: "Jen"},
+		},
+		PrefillPickerID: jenID.String(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := out.String()
+	want := `value="` + jenID.String() + `" selected>Jen</option>`
+	if !strings.Contains(got, want) {
+		t.Fatalf("rendered log missing selected picker %q:\n%s", want, got)
 	}
 }
 

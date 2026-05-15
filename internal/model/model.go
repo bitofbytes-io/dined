@@ -76,3 +76,8 @@ type Stats struct {
 	BestPicker             string
 	BiggestSplitRestaurant string
 }
+
+type PickerTurn struct {
+	LastPicker Person
+	NextPicker Person
+}

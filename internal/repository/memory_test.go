@@ -29,6 +29,97 @@ func TestMemoryStoreVisitsZeroReturnsAllVisits(t *testing.T) {
 	}
 }
 
+func TestMemoryStoreVisitsNewestFirstUsesCreatedAtTieBreaker(t *testing.T) {
+	store := NewMemoryStore()
+	restaurant := store.restaurants[0]
+	picker := store.people[0]
+	visitedAt := time.Date(2026, 5, 15, 18, 0, 0, 0, time.UTC)
+	olderCreated := demoVisit(restaurant, picker, visitedAt, 2, "older", nil, nil)
+	olderCreated.CreatedAt = visitedAt.Add(time.Minute)
+	newerCreated := demoVisit(restaurant, picker, visitedAt, 2, "newer", nil, nil)
+	newerCreated.CreatedAt = visitedAt.Add(2 * time.Minute)
+	store.visits = []model.Visit{olderCreated, newerCreated}
+
+	visits, err := store.Visits(context.Background(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if visits[0].ID != newerCreated.ID {
+		t.Fatalf("expected newest created visit first, got %s", visits[0].ID)
+	}
+}
+
+func TestMemoryStorePickerTurnNoVisitsStartsWithDaniel(t *testing.T) {
+	store := NewMemoryStore()
+	store.visits = nil
+
+	turn, err := store.PickerTurn(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if turn.LastPicker.Name != "" {
+		t.Fatalf("expected no last picker, got %q", turn.LastPicker.Name)
+	}
+	if turn.NextPicker.Name != "Daniel" {
+		t.Fatalf("expected Daniel next, got %q", turn.NextPicker.Name)
+	}
+}
+
+func TestMemoryStorePickerTurnAdvancesRoundRobin(t *testing.T) {
+	store := NewMemoryStore()
+	store.visits = []model.Visit{
+		demoVisit(store.restaurants[0], store.people[0], time.Date(2026, 5, 15, 18, 0, 0, 0, time.UTC), 2, "", nil, nil),
+	}
+
+	turn, err := store.PickerTurn(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if turn.LastPicker.Name != "Daniel" {
+		t.Fatalf("expected Daniel last, got %q", turn.LastPicker.Name)
+	}
+	if turn.NextPicker.Name != "Jen" {
+		t.Fatalf("expected Jen next, got %q", turn.NextPicker.Name)
+	}
+}
+
+func TestMemoryStorePickerTurnWrapsAfterAiden(t *testing.T) {
+	store := NewMemoryStore()
+	store.visits = []model.Visit{
+		demoVisit(store.restaurants[0], store.people[3], time.Date(2026, 5, 15, 18, 0, 0, 0, time.UTC), 2, "", nil, nil),
+	}
+
+	turn, err := store.PickerTurn(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if turn.LastPicker.Name != "Aiden" {
+		t.Fatalf("expected Aiden last, got %q", turn.LastPicker.Name)
+	}
+	if turn.NextPicker.Name != "Daniel" {
+		t.Fatalf("expected Daniel next, got %q", turn.NextPicker.Name)
+	}
+}
+
+func TestMemoryStorePickerTurnUsesNewestVisitTime(t *testing.T) {
+	store := NewMemoryStore()
+	store.visits = []model.Visit{
+		demoVisit(store.restaurants[0], store.people[3], time.Date(2026, 5, 1, 18, 0, 0, 0, time.UTC), 2, "", nil, nil),
+		demoVisit(store.restaurants[0], store.people[1], time.Date(2026, 5, 15, 18, 0, 0, 0, time.UTC), 2, "", nil, nil),
+	}
+
+	turn, err := store.PickerTurn(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if turn.LastPicker.Name != "Jen" {
+		t.Fatalf("expected Jen last, got %q", turn.LastPicker.Name)
+	}
+	if turn.NextPicker.Name != "Caleb" {
+		t.Fatalf("expected Caleb next, got %q", turn.NextPicker.Name)
+	}
+}
+
 func TestMemoryStoreCreateVisitDoesNotReuseNameOnlyMatch(t *testing.T) {
 	store := NewMemoryStore()
 	people, err := store.People(context.Background())

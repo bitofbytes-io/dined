@@ -119,7 +119,7 @@ func (m *MemoryStore) Visits(_ context.Context, limit int) ([]model.Visit, error
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	visits := append([]model.Visit(nil), m.visits...)
-	sort.Slice(visits, func(i, j int) bool { return visits[i].VisitedAt.After(visits[j].VisitedAt) })
+	sortVisitsNewestFirst(visits)
 	if limit > 0 && len(visits) > limit {
 		visits = visits[:limit]
 	}
@@ -135,7 +135,7 @@ func (m *MemoryStore) RestaurantVisits(_ context.Context, restaurantID uuid.UUID
 			visits = append(visits, visit)
 		}
 	}
-	sort.Slice(visits, func(i, j int) bool { return visits[i].VisitedAt.After(visits[j].VisitedAt) })
+	sortVisitsNewestFirst(visits)
 	return visits, nil
 }
 
@@ -256,6 +256,38 @@ func (m *MemoryStore) Stats(context.Context) (model.Stats, error) {
 	stats.HighestRatedRestaurant = topAverage(ratingByRestaurant)
 	stats.BestPicker = topAverage(ratingByPicker)
 	return stats, nil
+}
+
+func (m *MemoryStore) PickerTurn(context.Context) (model.PickerTurn, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if len(m.people) == 0 {
+		return model.PickerTurn{}, nil
+	}
+	if len(m.visits) == 0 {
+		return model.PickerTurn{NextPicker: m.people[0]}, nil
+	}
+
+	visits := append([]model.Visit(nil), m.visits...)
+	sortVisitsNewestFirst(visits)
+	last := visits[0].Picker
+	next := m.people[0]
+	for i, person := range m.people {
+		if person.ID == last.ID {
+			next = m.people[(i+1)%len(m.people)]
+			break
+		}
+	}
+	return model.PickerTurn{LastPicker: last, NextPicker: next}, nil
+}
+
+func sortVisitsNewestFirst(visits []model.Visit) {
+	sort.Slice(visits, func(i, j int) bool {
+		if visits[i].VisitedAt.Equal(visits[j].VisitedAt) {
+			return visits[i].CreatedAt.After(visits[j].CreatedAt)
+		}
+		return visits[i].VisitedAt.After(visits[j].VisitedAt)
+	})
 }
 
 func (m *MemoryStore) findRestaurant(id *uuid.UUID) (model.Restaurant, bool) {
