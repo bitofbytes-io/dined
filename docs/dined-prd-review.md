@@ -31,7 +31,7 @@ Dined has a clear wedge: private restaurant memory, not discovery or public revi
 Start with a family-first private PWA:
 
 1. One API token grants user access and creates an authenticated session.
-2. The four people are Daniel, Jennifer, Caleb, and Aiden.
+2. The four people are Daniel, Jen, Caleb, and Aiden.
 3. Google Places is the only external restaurant source for v1.
 4. Public readonly view should be supported, similar to Dejaview, and should expose every visit.
 5. The default experience should make nearby list-first logging fast.

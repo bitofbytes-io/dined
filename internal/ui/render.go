@@ -187,7 +187,7 @@ func avatar(name string) string {
 	switch strings.ToLower(strings.TrimSpace(name)) {
 	case "daniel":
 		return "/static/assets/dined-avatar-daniel.png"
-	case "jennifer":
+	case "jen":
 		return "/static/assets/dined-avatar-jennifer.png"
 	case "caleb":
 		return "/static/assets/dined-avatar-caleb.png"

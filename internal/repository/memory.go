@@ -23,7 +23,7 @@ func NewMemoryStore() *MemoryStore {
 	now := time.Now()
 	people := []model.Person{
 		{ID: uuid.New(), Name: "Daniel", AvatarColor: "#0d6f6f"},
-		{ID: uuid.New(), Name: "Jennifer", AvatarColor: "#c7332f"},
+		{ID: uuid.New(), Name: "Jen", AvatarColor: "#c7332f"},
 		{ID: uuid.New(), Name: "Caleb", AvatarColor: "#e5a72f"},
 		{ID: uuid.New(), Name: "Aiden", AvatarColor: "#2f8f6d"},
 	}

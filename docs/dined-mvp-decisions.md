@@ -5,7 +5,7 @@ Updated from Daniel's answers on May 10, 2026.
 ## Product Shape
 
 - Audience: one family only.
-- People: Daniel, Jennifer, Caleb, Aiden.
+- People: Daniel, Jen, Caleb, Aiden.
 - Account model: one writable user/admin.
 - Auth model: API token is used for user access and should generate a session.
 - Write access: an authenticated session can create visits and edit existing selections.
@@ -75,7 +75,7 @@ Google can populate the starting category, but the category should remain editab
 
 ## Clarified Open Item
 
-The earlier "Everyone", "Kids", and "Random" picker idea meant non-person picker labels for cases where no single person chose the restaurant. For this family-only version, keep picker as one of Daniel, Jennifer, Caleb, or Aiden unless a real need appears later.
+The earlier "Everyone", "Kids", and "Random" picker idea meant non-person picker labels for cases where no single person chose the restaurant. For this family-only version, keep picker as one of Daniel, Jen, Caleb, or Aiden unless a real need appears later.
 
 ## Google Places Cost Note
 
