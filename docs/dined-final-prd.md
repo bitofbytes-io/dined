@@ -12,7 +12,7 @@ The core question Dined answers is:
 
 > Have we eaten here before, who picked it, and did we like it?
 
-Dined is not a Yelp replacement and is not a public review platform. It is a personal dining ledger for Daniel, Jennifer, Caleb, and Aiden, with fast logging, quick recall, public readonly browsing, and playful family stats.
+Dined is not a Yelp replacement and is not a public review platform. It is a personal dining ledger for Daniel, Jen, Caleb, and Aiden, with fast logging, quick recall, public readonly browsing, and playful family stats.
 
 ## 2. Goals
 
@@ -43,7 +43,7 @@ Dined is not a Yelp replacement and is not a public review platform. It is a per
 The first version is for one family:
 
 - Daniel
-- Jennifer
+- Jen
 - Caleb
 - Aiden
 
@@ -144,7 +144,7 @@ Fields:
 Rules:
 
 - A visit requires restaurant, date, picker, and at least one rating.
-- Picker must be one of Daniel, Jennifer, Caleb, or Aiden.
+- Picker must be one of Daniel, Jen, Caleb, or Aiden.
 - Price level is structured as 1-5 dollar signs.
 - Wait time is not structured in v1; use tags such as `Long Wait`.
 
@@ -160,7 +160,7 @@ Fields:
 Seed people:
 
 - Daniel
-- Jennifer
+- Jen
 - Caleb
 - Aiden
 
@@ -362,7 +362,7 @@ Fields:
 - Picker
 - Price level, 1-5 dollar signs
 - Optional rating for Daniel
-- Optional rating for Jennifer
+- Optional rating for Jen
 - Optional rating for Caleb
 - Optional rating for Aiden
 - Tags
@@ -535,7 +535,7 @@ Reference:
 
 - API token session login
 - Public readonly visit history
-- Seed people: Daniel, Jennifer, Caleb, Aiden
+- Seed people: Daniel, Jen, Caleb, Aiden
 - Google Places restaurant search
 - Nearby restaurant list
 - Save restaurant metadata

@@ -96,7 +96,7 @@ CREATE TRIGGER update_visit_participant_ratings_updated_at
 
 INSERT INTO persons (name, avatar_color, sort_order) VALUES
     ('Daniel', '#0d6f6f', 1),
-    ('Jennifer', '#c7332f', 2),
+    ('Jen', '#c7332f', 2),
     ('Caleb', '#e5a72f', 3),
     ('Aiden', '#2f8f6d', 4);
 
