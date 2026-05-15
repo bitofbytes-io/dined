@@ -27,6 +27,7 @@ type PageData struct {
 	SearchResults       []RestaurantResult
 	Restaurant          *model.Restaurant
 	Stats               model.Stats
+	PickerTurn          model.PickerTurn
 	Places              []places.Place
 	Query               string
 	LocationQuery       string
@@ -40,6 +41,7 @@ type PageData struct {
 	PrefillPlaceID      string
 	PrefillCategory     string
 	PrefillPriceLevel   int
+	PrefillPickerID     string
 	PrefillRestaurantID string
 }
 
@@ -423,7 +425,7 @@ const templates = `
     </div>
 
     <div class="booth-recent">
-      <div class="section-head"><h2>Recent Dines</h2><a href="/dines">View all</a></div>
+      <div class="section-head"><div><h2>Recent Dines</h2>{{if .PickerTurn.NextPicker.Name}}<p class="next-up">Next Up: {{.PickerTurn.NextPicker.Name}}</p>{{end}}</div><a href="/dines">View all</a></div>
       {{template "visit-list" .}}
     </div>
   </section>
@@ -463,7 +465,7 @@ const templates = `
       <section class="form-section visit-console">
         <div class="form-grid visit-form-grid">
           <label>Date and time<input type="datetime-local" name="visited_at" value="{{.NowLocal}}"></label>
-          <label>Picked by<select name="picker_id" required>{{range .People}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select></label>
+          <label>Picked by<select name="picker_id" required>{{range .People}}<option value="{{.ID}}" {{if eq $.PrefillPickerID .ID.String}}selected{{end}}>{{.Name}}</option>{{end}}</select></label>
           <label>Price Level<select name="price_level"><option value="1" {{if eq .PrefillPriceLevel 1}}selected{{end}}>$</option><option value="2" {{if or (eq .PrefillPriceLevel 0) (eq .PrefillPriceLevel 2)}}selected{{end}}>$$</option><option value="3" {{if eq .PrefillPriceLevel 3}}selected{{end}}>$$$</option><option value="4" {{if eq .PrefillPriceLevel 4}}selected{{end}}>$$$$</option></select></label>
         </div>
       </section>
@@ -503,6 +505,7 @@ const templates = `
     <div class="record-grid" aria-label="Dined family records">
       <div class="record"><span>{{.Stats.TotalDines}}</span><p>Total Dines</p></div>
       <div class="record"><span>{{printf "%.1f" .Stats.AverageRating}}</span><p>Family Average</p></div>
+      <div class="award"><h2>Next Up</h2><p>{{default .PickerTurn.NextPicker.Name "Waiting on more dines"}}</p></div>
       <div class="award"><h2>Safe Bet</h2><p>{{default .Stats.HighestRatedRestaurant "Waiting on more dines"}}</p></div>
       <div class="award"><h2>The Regular</h2><p>{{default .Stats.MostVisitedRestaurant "Waiting on more dines"}}</p></div>
       <div class="award"><h2>Best Picker</h2><p>{{default .Stats.BestPicker "Waiting on more dines"}}</p></div>

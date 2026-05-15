@@ -28,6 +28,7 @@ type DinerStore interface {
 	DeleteVisit(context.Context, uuid.UUID) error
 	ToggleChain(context.Context, uuid.UUID, bool) error
 	Stats(context.Context) (model.Stats, error)
+	PickerTurn(context.Context) (model.PickerTurn, error)
 }
 
 func New(pool *pgxpool.Pool) *Store {
@@ -112,7 +113,7 @@ func (s *Store) Restaurant(ctx context.Context, id uuid.UUID) (*model.Restaurant
 }
 
 func (s *Store) Visits(ctx context.Context, limit int) ([]model.Visit, error) {
-	query := visitSelectSQL() + ` ORDER BY v.visited_at DESC`
+	query := visitSelectSQL() + ` ORDER BY v.visited_at DESC, v.created_at DESC`
 	args := []any{}
 	if limit > 0 {
 		query += ` LIMIT $1`
@@ -127,7 +128,7 @@ func (s *Store) Visits(ctx context.Context, limit int) ([]model.Visit, error) {
 }
 
 func (s *Store) RestaurantVisits(ctx context.Context, restaurantID uuid.UUID) ([]model.Visit, error) {
-	rows, err := s.pool.Query(ctx, visitSelectSQL()+` WHERE v.restaurant_id = $1 ORDER BY v.visited_at DESC`, restaurantID)
+	rows, err := s.pool.Query(ctx, visitSelectSQL()+` WHERE v.restaurant_id = $1 ORDER BY v.visited_at DESC, v.created_at DESC`, restaurantID)
 	if err != nil {
 		return nil, fmt.Errorf("list restaurant visits: %w", err)
 	}
@@ -303,6 +304,39 @@ func (s *Store) Stats(ctx context.Context) (model.Stats, error) {
 		ORDER BY (MAX(vr.rating) - MIN(vr.rating)) DESC, r.name
 		LIMIT 1`).Scan(&stats.BiggestSplitRestaurant)
 	return stats, nil
+}
+
+func (s *Store) PickerTurn(ctx context.Context) (model.PickerTurn, error) {
+	people, err := s.People(ctx)
+	if err != nil {
+		return model.PickerTurn{}, err
+	}
+	if len(people) == 0 {
+		return model.PickerTurn{}, nil
+	}
+
+	var last model.Person
+	err = s.pool.QueryRow(ctx, `
+		SELECT p.id, p.name, p.avatar_color
+		FROM dining_visits v
+		JOIN persons p ON p.id = v.picked_by_person_id
+		ORDER BY v.visited_at DESC, v.created_at DESC
+		LIMIT 1`).Scan(&last.ID, &last.Name, &last.AvatarColor)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return model.PickerTurn{NextPicker: people[0]}, nil
+		}
+		return model.PickerTurn{}, fmt.Errorf("latest picker: %w", err)
+	}
+
+	next := people[0]
+	for i, person := range people {
+		if person.ID == last.ID {
+			next = people[(i+1)%len(people)]
+			break
+		}
+	}
+	return model.PickerTurn{LastPicker: last, NextPicker: next}, nil
 }
 
 func (s *Store) scanVisits(ctx context.Context, rows pgx.Rows) ([]model.Visit, error) {

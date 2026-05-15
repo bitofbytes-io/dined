@@ -34,7 +34,12 @@ func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
 		h.error(w, "home visits", err)
 		return
 	}
-	h.render(w, "home", r, ui.PageData{Visits: visits})
+	pickerTurn, err := h.store.PickerTurn(r.Context())
+	if err != nil {
+		h.error(w, "picker turn", err)
+		return
+	}
+	h.render(w, "home", r, ui.PageData{Visits: visits, PickerTurn: pickerTurn})
 }
 
 func (h *Handler) Dines(w http.ResponseWriter, r *http.Request) {
@@ -75,7 +80,12 @@ func (h *Handler) Trophy(w http.ResponseWriter, r *http.Request) {
 		h.error(w, "stats", err)
 		return
 	}
-	h.render(w, "trophy", r, ui.PageData{Title: "Trophy Case", Stats: stats})
+	pickerTurn, err := h.store.PickerTurn(r.Context())
+	if err != nil {
+		h.error(w, "picker turn", err)
+		return
+	}
+	h.render(w, "trophy", r, ui.PageData{Title: "Trophy Case", Stats: stats, PickerTurn: pickerTurn})
 }
 
 func (h *Handler) LogPage(w http.ResponseWriter, r *http.Request) {
@@ -256,6 +266,10 @@ func (h *Handler) logData(r *http.Request) (ui.PageData, error) {
 		return ui.PageData{}, err
 	}
 	prefillPrice, _ := strconv.Atoi(r.URL.Query().Get("price_level"))
+	pickerTurn, err := h.store.PickerTurn(r.Context())
+	if err != nil {
+		return ui.PageData{}, err
+	}
 	return ui.PageData{
 		Title:               "Log a Dine",
 		People:              people,
@@ -266,6 +280,7 @@ func (h *Handler) logData(r *http.Request) (ui.PageData, error) {
 		PrefillPlaceID:      r.URL.Query().Get("google_place_id"),
 		PrefillCategory:     r.URL.Query().Get("category"),
 		PrefillPriceLevel:   prefillPrice,
+		PrefillPickerID:     pickerTurn.NextPicker.ID.String(),
 		PrefillRestaurantID: r.URL.Query().Get("restaurant_id"),
 	}, nil
 }
