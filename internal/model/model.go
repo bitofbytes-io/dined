@@ -16,6 +16,7 @@ type Restaurant struct {
 	ID               uuid.UUID
 	Name             string
 	Address          *string
+	City             *string
 	Latitude         *float64
 	Longitude        *float64
 	Phone            *string
@@ -56,6 +57,7 @@ type VisitInput struct {
 	RestaurantID   *uuid.UUID
 	RestaurantName string
 	Address        string
+	City           string
 	GooglePlaceID  string
 	Category       string
 	IsChain        bool
@@ -74,10 +76,21 @@ type Stats struct {
 	MostVisitedRestaurant  string
 	HighestRatedRestaurant string
 	BestPicker             string
+	BestPickerAverage      float64
 	BiggestSplitRestaurant string
+	NewPlaces              int
+	CitiesExplored         int
+	TopRestaurants         []RestaurantRatingStat
 }
 
 type PickerTurn struct {
 	LastPicker Person
 	NextPicker Person
+}
+
+type RestaurantRatingStat struct {
+	Name          string
+	AverageRating float64
+	RatingCount   int
+	VisitCount    int
 }

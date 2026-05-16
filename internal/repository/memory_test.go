@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
@@ -178,6 +179,7 @@ func TestMemoryStoreCreateVisitReusesNameAddressWithPlaceID(t *testing.T) {
 	withPlace.VisitedAt = input.VisitedAt.Add(time.Hour)
 	withPlace.GooglePlaceID = "manual-cafe-place"
 	withPlace.Category = "Coffee"
+	withPlace.City = "Apex"
 
 	secondID, err := store.CreateVisit(context.Background(), withPlace)
 	if err != nil {
@@ -191,6 +193,76 @@ func TestMemoryStoreCreateVisitReusesNameAddressWithPlaceID(t *testing.T) {
 	}
 	if second.Restaurant.GooglePlaceID == nil || *second.Restaurant.GooglePlaceID != "manual-cafe-place" {
 		t.Fatalf("expected Google Place ID to be attached, got %#v", second.Restaurant.GooglePlaceID)
+	}
+	if second.Restaurant.City == nil || *second.Restaurant.City != "Apex" {
+		t.Fatalf("expected city to be attached, got %#v", second.Restaurant.City)
+	}
+}
+
+func TestMemoryStoreStatsIncludesTrophyMetrics(t *testing.T) {
+	store := NewMemoryStore()
+
+	stats, err := store.Stats(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats.NewPlaces != 3 {
+		t.Fatalf("NewPlaces = %d, want 3", stats.NewPlaces)
+	}
+	if stats.CitiesExplored != 3 {
+		t.Fatalf("CitiesExplored = %d, want 3", stats.CitiesExplored)
+	}
+	if stats.BestPicker != "Jen" {
+		t.Fatalf("BestPicker = %q, want Jen", stats.BestPicker)
+	}
+	if math.Abs(stats.BestPickerAverage-8.375) > 0.001 {
+		t.Fatalf("BestPickerAverage = %f, want 8.375", stats.BestPickerAverage)
+	}
+	if len(stats.TopRestaurants) != 3 {
+		t.Fatalf("expected 3 top restaurants, got %d", len(stats.TopRestaurants))
+	}
+	if stats.TopRestaurants[0].Name != "El Patio Verde" {
+		t.Fatalf("top restaurant = %q, want El Patio Verde", stats.TopRestaurants[0].Name)
+	}
+	if math.Abs(stats.TopRestaurants[0].AverageRating-8.375) > 0.001 {
+		t.Fatalf("top average = %f, want 8.375", stats.TopRestaurants[0].AverageRating)
+	}
+	if stats.TopRestaurants[0].RatingCount != 4 || stats.TopRestaurants[0].VisitCount != 1 {
+		t.Fatalf("top counts = %d ratings/%d visits, want 4/1", stats.TopRestaurants[0].RatingCount, stats.TopRestaurants[0].VisitCount)
+	}
+}
+
+func TestMemoryStoreTopRestaurantsRequireTwoRatingsAndSortDeterministically(t *testing.T) {
+	store := NewMemoryStore()
+	people := store.people
+	now := time.Now()
+	abacus := model.Restaurant{ID: uuid.New(), Name: "Abacus", City: strPtr("Apex")}
+	alpha := model.Restaurant{ID: uuid.New(), Name: "Alpha", City: strPtr("Apex")}
+	bravo := model.Restaurant{ID: uuid.New(), Name: "Bravo", City: strPtr("Cary")}
+	solo := model.Restaurant{ID: uuid.New(), Name: "Solo", City: strPtr("Raleigh")}
+	store.restaurants = []model.Restaurant{abacus, alpha, bravo, solo}
+	store.visits = []model.Visit{
+		demoVisit(alpha, people[0], now, 2, "", []model.Rating{{Person: people[0], Score: 9}, {Person: people[1], Score: 8}}, nil),
+		demoVisit(bravo, people[1], now, 2, "", []model.Rating{{Person: people[0], Score: 8.5}, {Person: people[1], Score: 8.5}, {Person: people[2], Score: 8.5}}, nil),
+		demoVisit(abacus, people[2], now, 2, "", []model.Rating{{Person: people[0], Score: 8.5}, {Person: people[1], Score: 8.5}}, nil),
+		demoVisit(solo, people[3], now, 2, "", []model.Rating{{Person: people[0], Score: 10}}, nil),
+	}
+
+	stats, err := store.Stats(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"Bravo", "Abacus", "Alpha"}
+	if len(stats.TopRestaurants) != len(want) {
+		t.Fatalf("got %d top restaurants, want %d: %#v", len(stats.TopRestaurants), len(want), stats.TopRestaurants)
+	}
+	for i, name := range want {
+		if stats.TopRestaurants[i].Name != name {
+			t.Fatalf("top restaurant %d = %q, want %q", i, stats.TopRestaurants[i].Name, name)
+		}
+	}
+	if stats.CitiesExplored != 3 {
+		t.Fatalf("CitiesExplored = %d, want 3", stats.CitiesExplored)
 	}
 }
 

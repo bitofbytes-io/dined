@@ -111,14 +111,59 @@ func TestRenderHomeShowsNextUp(t *testing.T) {
 	}
 }
 
-func TestRenderTrophyShowsNextUpAward(t *testing.T) {
+func TestRenderTrophyShowsRedesignedRecordsAndTopRestaurants(t *testing.T) {
 	var out strings.Builder
-	if err := Render(&out, "trophy", PageData{PickerTurn: model.PickerTurn{NextPicker: model.Person{Name: "Jen"}}}); err != nil {
+	data := PageData{
+		Stats: model.Stats{
+			TotalDines:        12,
+			AverageRating:     8.4,
+			BestPicker:        "Jen",
+			BestPickerAverage: 8.8,
+			NewPlaces:         7,
+			CitiesExplored:    3,
+			TopRestaurants: []model.RestaurantRatingStat{
+				{Name: "El Patio Verde", AverageRating: 8.6, RatingCount: 4, VisitCount: 1},
+			},
+		},
+		PickerTurn: model.PickerTurn{NextPicker: model.Person{Name: "Caleb"}},
+	}
+	if err := Render(&out, "trophy", data); err != nil {
 		t.Fatal(err)
 	}
 	rendered := out.String()
-	if !strings.Contains(rendered, "<h2>Next Up</h2>") || !strings.Contains(rendered, "<p>Jen</p>") {
-		t.Fatalf("rendered trophy missing next up award:\n%s", rendered)
+	for _, fragment := range []string{
+		"Total Dines",
+		"Family Average",
+		"Best Picker",
+		"Next Up",
+		"New Places",
+		"Cities Explored",
+		"All-Time Top Restaurants",
+		"El Patio Verde",
+		"8.6 avg",
+	} {
+		if !strings.Contains(rendered, fragment) {
+			t.Fatalf("rendered trophy missing %q:\n%s", fragment, rendered)
+		}
+	}
+	if got := strings.Count(rendered, `class="record"`); got != 6 {
+		t.Fatalf("rendered %d trophy records, want 6:\n%s", got, rendered)
+	}
+	for _, oldAward := range []string{"Safe Bet", "The Regular", "Table Divided"} {
+		if strings.Contains(rendered, oldAward) {
+			t.Fatalf("rendered retired duplicate award %q:\n%s", oldAward, rendered)
+		}
+	}
+}
+
+func TestRenderTrophyTopRestaurantsEmptyState(t *testing.T) {
+	var out strings.Builder
+	if err := Render(&out, "trophy", PageData{}); err != nil {
+		t.Fatal(err)
+	}
+	rendered := out.String()
+	if !strings.Contains(rendered, "All-Time Top Restaurants") || !strings.Contains(rendered, "Waiting on more dines") {
+		t.Fatalf("rendered trophy missing top restaurant empty state:\n%s", rendered)
 	}
 }
 
@@ -139,6 +184,24 @@ func TestRenderLogPreselectsNextPicker(t *testing.T) {
 	want := `value="` + jenID.String() + `" selected>Jen</option>`
 	if !strings.Contains(got, want) {
 		t.Fatalf("rendered log missing selected picker %q:\n%s", want, got)
+	}
+}
+
+func TestRenderLogPreservesPrefillCity(t *testing.T) {
+	var out strings.Builder
+	err := Render(&out, "log", PageData{PrefillCity: "Apex"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := out.String()
+	if !strings.Contains(got, `name="city" value="Apex"`) {
+		t.Fatalf("rendered log missing city hidden input:\n%s", got)
+	}
+	if strings.Contains(got, `if (city) city.value = "";`) {
+		t.Fatalf("rendered log clears hidden city on unmatched datalist input:\n%s", got)
+	}
+	if !strings.Contains(got, `if (city) city.value = option.dataset.city || "";`) {
+		t.Fatalf("rendered log does not overwrite city on matched datalist input:\n%s", got)
 	}
 }
 

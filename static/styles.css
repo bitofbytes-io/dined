@@ -1139,19 +1139,9 @@ fieldset {
   right: 3rem;
   z-index: 1;
   display: grid;
-  grid-template-columns: repeat(4, minmax(7rem, 1fr));
+  grid-template-columns: repeat(3, minmax(8.5rem, 1fr));
   gap: 1rem;
-  width: min(48rem, 66%);
-}
-.record, .award {
-  min-height: 7rem;
-  display: grid;
-  place-items: center;
-  padding: .9rem;
-  text-align: center;
-  border: 4px solid var(--night);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-hard);
+  width: min(43rem, 62%);
 }
 .record {
   position: relative;
@@ -1159,11 +1149,17 @@ fieldset {
   min-height: 10.4rem;
   justify-self: center;
   aspect-ratio: 1;
+  display: grid;
+  place-items: center;
   align-content: center;
-  gap: .12rem;
+  gap: .1rem;
+  padding: .92rem;
   color: var(--milk);
   background: var(--blacktop);
+  border: 4px solid var(--night);
   border-radius: 50%;
+  box-shadow: var(--shadow-hard);
+  text-align: center;
   overflow: hidden;
 }
 .record::before {
@@ -1187,17 +1183,24 @@ fieldset {
   border-radius: 50%;
   transform: translate(-50%, -50%);
 }
-.record span, .record p {
+.record span, .record p, .record small {
   position: relative;
   z-index: 1;
 }
-.record span {
+.record-value {
+  display: block;
+  max-width: 6rem;
   color: var(--milk);
   font-family: var(--condensed);
-  font-size: 3.15rem;
+  font-size: 2.65rem;
   font-weight: 900;
-  line-height: 1;
+  line-height: .9;
+  overflow-wrap: anywhere;
   text-shadow: 2px 2px 0 var(--night);
+}
+.record-name {
+  font-size: 1.35rem;
+  line-height: .92;
 }
 .record p {
   margin: 0;
@@ -1207,30 +1210,13 @@ fieldset {
   font-weight: 900;
   text-transform: uppercase;
 }
-.award {
-  align-content: center;
-  min-height: 5.9rem;
-  color: var(--ink);
-  background: var(--milk);
-}
-.award:nth-child(odd) {
-  transform: rotate(.7deg);
-}
-.award:nth-child(even) {
-  transform: rotate(-.7deg);
-}
-.award h2 {
-  margin-bottom: .35rem;
-  color: var(--red-dark);
+.record small {
+  color: var(--mint);
   font-family: var(--condensed);
-  font-size: .92rem;
-  text-transform: uppercase;
-}
-.award p {
-  margin-bottom: 0;
-  color: var(--aqua-dark);
+  font-size: .7rem;
   font-weight: 900;
-  line-height: 1.1;
+  line-height: 1;
+  text-transform: uppercase;
 }
 .track-list {
   position: absolute;
@@ -1252,24 +1238,44 @@ fieldset {
   font-size: .98rem;
   text-transform: uppercase;
 }
-.track-list p {
+.top-restaurant-list {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  gap: .18rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.top-restaurant-list li {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr) auto;
   align-items: baseline;
   gap: 1rem;
-  margin: .18rem 0;
+  min-height: 1.55rem;
   border-bottom: 2px dotted rgba(255, 247, 223, .35);
   color: var(--mint);
   font-family: var(--condensed);
   font-weight: 900;
   text-transform: uppercase;
 }
-.track-list span {
-  justify-self: end;
+.track-rank {
+  color: var(--milk);
+  text-align: center;
+}
+.track-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.track-score {
   text-align: right;
   color: var(--milk);
   font-family: var(--body);
   text-transform: none;
+}
+.track-empty {
+  margin: 0;
+  color: var(--milk);
+  font-family: var(--body);
+  font-weight: 900;
 }
 
 @media (max-width: 1200px) {
@@ -1573,15 +1579,15 @@ fieldset {
   .trophy-title h1 {
     font-size: 2.8rem;
   }
-  .record, .award {
+  .record {
     min-height: 6.8rem;
     padding: .75rem;
   }
-  .record span {
+  .record-value {
     font-size: 2.25rem;
   }
-  .award h2 {
-    font-size: .82rem;
+  .record-name {
+    font-size: 1.1rem;
   }
 }
 
@@ -1594,6 +1600,15 @@ fieldset {
   }
   .record-grid {
     grid-template-columns: 1fr;
+  }
+  .top-restaurant-list li {
+    grid-template-columns: 1.4rem minmax(0, 1fr);
+    gap: .55rem;
+  }
+  .track-score {
+    grid-column: 2;
+    justify-self: start;
+    text-align: left;
   }
 }
 

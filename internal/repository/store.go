@@ -73,7 +73,7 @@ func (s *Store) Tags(ctx context.Context) ([]model.Tag, error) {
 
 func (s *Store) Restaurants(ctx context.Context, q string) ([]model.Restaurant, error) {
 	query := `
-		SELECT id, name, address, latitude, longitude, phone, website, google_place_id,
+		SELECT id, name, address, city, latitude, longitude, phone, website, google_place_id,
 		       google_rating, google_price_level, category, is_chain, created_at, updated_at
 		FROM restaurants
 		WHERE $1 = '' OR name ILIKE '%' || $1 || '%' OR coalesce(address, '') ILIKE '%' || $1 || '%'
@@ -98,7 +98,7 @@ func (s *Store) Restaurants(ctx context.Context, q string) ([]model.Restaurant, 
 
 func (s *Store) Restaurant(ctx context.Context, id uuid.UUID) (*model.Restaurant, error) {
 	row := s.pool.QueryRow(ctx, `
-		SELECT id, name, address, latitude, longitude, phone, website, google_place_id,
+		SELECT id, name, address, city, latitude, longitude, phone, website, google_place_id,
 		       google_rating, google_price_level, category, is_chain, created_at, updated_at
 		FROM restaurants
 		WHERE id = $1`, id)
@@ -152,6 +152,8 @@ func (s *Store) CreateVisit(ctx context.Context, input model.VisitInput) (*uuid.
 		var id uuid.UUID
 		name := strings.TrimSpace(input.RestaurantName)
 		address := strings.TrimSpace(input.Address)
+		addressValue := nullableString(input.Address)
+		city := nullableString(input.City)
 		placeID := nullableString(input.GooglePlaceID)
 		category := nullableString(input.Category)
 		if placeID != nil {
@@ -162,6 +164,16 @@ func (s *Store) CreateVisit(ctx context.Context, input model.VisitInput) (*uuid.
 					LIMIT 1`, *placeID).Scan(&id)
 			if err == nil {
 				restaurantID = &id
+				_, err = tx.Exec(ctx, `
+					UPDATE restaurants
+					SET address = COALESCE(restaurants.address, $2),
+					    city = COALESCE(restaurants.city, $3),
+					    category = COALESCE(restaurants.category, $4),
+					    updated_at = NOW()
+					WHERE id = $1`, id, addressValue, city, category)
+				if err != nil {
+					return nil, fmt.Errorf("update matched restaurant metadata: %w", err)
+				}
 			} else if !errors.Is(err, pgx.ErrNoRows) {
 				return nil, fmt.Errorf("find restaurant by place id: %w", err)
 			}
@@ -180,8 +192,9 @@ func (s *Store) CreateVisit(ctx context.Context, input model.VisitInput) (*uuid.
 					UPDATE restaurants
 					SET google_place_id = COALESCE(restaurants.google_place_id, $2),
 					    category = COALESCE(restaurants.category, $3),
+					    city = COALESCE(restaurants.city, $4),
 					    updated_at = NOW()
-					WHERE id = $1`, id, placeID, category)
+					WHERE id = $1`, id, placeID, category, city)
 				if err != nil {
 					return nil, fmt.Errorf("update matched restaurant metadata: %w", err)
 				}
@@ -194,17 +207,19 @@ func (s *Store) CreateVisit(ctx context.Context, input model.VisitInput) (*uuid.
 		var id uuid.UUID
 		name := strings.TrimSpace(input.RestaurantName)
 		address := nullableString(input.Address)
+		city := nullableString(input.City)
 		placeID := nullableString(input.GooglePlaceID)
 		category := nullableString(input.Category)
 		err := tx.QueryRow(ctx, `
-				INSERT INTO restaurants (name, address, google_place_id, category, is_chain)
-				VALUES ($1, $2, $3, $4, $5)
+				INSERT INTO restaurants (name, address, city, google_place_id, category, is_chain)
+				VALUES ($1, $2, $3, $4, $5, $6)
 			ON CONFLICT (google_place_id) WHERE google_place_id IS NOT NULL DO UPDATE
 			SET name = EXCLUDED.name,
 			    address = COALESCE(EXCLUDED.address, restaurants.address),
+			    city = COALESCE(restaurants.city, EXCLUDED.city),
 			    category = COALESCE(EXCLUDED.category, restaurants.category),
 			    updated_at = NOW()
-			RETURNING id`, name, address, placeID, category, input.IsChain).Scan(&id)
+			RETURNING id`, name, address, city, placeID, category, input.IsChain).Scan(&id)
 		if err != nil {
 			return nil, fmt.Errorf("create restaurant: %w", err)
 		}
@@ -274,36 +289,94 @@ func (s *Store) ToggleChain(ctx context.Context, id uuid.UUID, isChain bool) err
 
 func (s *Store) Stats(ctx context.Context) (model.Stats, error) {
 	var stats model.Stats
-	_ = s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM dining_visits`).Scan(&stats.TotalDines)
-	_ = s.pool.QueryRow(ctx, `SELECT COALESCE(AVG(rating), 0) FROM visit_participant_ratings`).Scan(&stats.AverageRating)
-	_ = s.pool.QueryRow(ctx, `
+	if err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM dining_visits`).Scan(&stats.TotalDines); err != nil {
+		return stats, fmt.Errorf("count dines: %w", err)
+	}
+	if err := s.pool.QueryRow(ctx, `SELECT COALESCE(AVG(rating), 0) FROM visit_participant_ratings`).Scan(&stats.AverageRating); err != nil {
+		return stats, fmt.Errorf("average rating: %w", err)
+	}
+	if err := s.pool.QueryRow(ctx, `
+		SELECT COUNT(DISTINCT restaurant_id)
+		FROM dining_visits`).Scan(&stats.NewPlaces); err != nil {
+		return stats, fmt.Errorf("count new places: %w", err)
+	}
+	if err := s.pool.QueryRow(ctx, `
+		SELECT COUNT(DISTINCT lower(btrim(r.city)))
+		FROM restaurants r
+		JOIN dining_visits v ON v.restaurant_id = r.id
+		WHERE r.city IS NOT NULL AND btrim(r.city) <> ''`).Scan(&stats.CitiesExplored); err != nil {
+		return stats, fmt.Errorf("count cities explored: %w", err)
+	}
+	err := s.pool.QueryRow(ctx, `
 		SELECT r.name FROM restaurants r
 		JOIN dining_visits v ON v.restaurant_id = r.id
 		GROUP BY r.id, r.name
 		ORDER BY COUNT(*) DESC, r.name
 		LIMIT 1`).Scan(&stats.MostVisitedRestaurant)
-	_ = s.pool.QueryRow(ctx, `
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return stats, fmt.Errorf("most visited restaurant: %w", err)
+	}
+	err = s.pool.QueryRow(ctx, `
 		SELECT r.name FROM restaurants r
 		JOIN dining_visits v ON v.restaurant_id = r.id
 		JOIN visit_participant_ratings vr ON vr.visit_id = v.id
 		GROUP BY r.id, r.name
 		ORDER BY AVG(vr.rating) DESC, r.name
 		LIMIT 1`).Scan(&stats.HighestRatedRestaurant)
-	_ = s.pool.QueryRow(ctx, `
-		SELECT p.name FROM persons p
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return stats, fmt.Errorf("highest rated restaurant: %w", err)
+	}
+	err = s.pool.QueryRow(ctx, `
+		SELECT p.name, AVG(vr.rating) FROM persons p
 		JOIN dining_visits v ON v.picked_by_person_id = p.id
 		JOIN visit_participant_ratings vr ON vr.visit_id = v.id
 		GROUP BY p.id, p.name
 		ORDER BY AVG(vr.rating) DESC, p.name
-		LIMIT 1`).Scan(&stats.BestPicker)
-	_ = s.pool.QueryRow(ctx, `
+		LIMIT 1`).Scan(&stats.BestPicker, &stats.BestPickerAverage)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return stats, fmt.Errorf("best picker: %w", err)
+	}
+	err = s.pool.QueryRow(ctx, `
 		SELECT r.name FROM restaurants r
 		JOIN dining_visits v ON v.restaurant_id = r.id
 		JOIN visit_participant_ratings vr ON vr.visit_id = v.id
 		GROUP BY v.id, r.name
 		ORDER BY (MAX(vr.rating) - MIN(vr.rating)) DESC, r.name
 		LIMIT 1`).Scan(&stats.BiggestSplitRestaurant)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return stats, fmt.Errorf("biggest split restaurant: %w", err)
+	}
+	stats.TopRestaurants, err = s.topRestaurants(ctx)
+	if err != nil {
+		return stats, err
+	}
 	return stats, nil
+}
+
+func (s *Store) topRestaurants(ctx context.Context) ([]model.RestaurantRatingStat, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT r.name, AVG(vr.rating), COUNT(vr.rating), COUNT(DISTINCT v.id)
+		FROM restaurants r
+		JOIN dining_visits v ON v.restaurant_id = r.id
+		JOIN visit_participant_ratings vr ON vr.visit_id = v.id
+		GROUP BY r.id, r.name
+		HAVING COUNT(vr.rating) >= 2
+		ORDER BY AVG(vr.rating) DESC, COUNT(vr.rating) DESC, r.name
+		LIMIT 5`)
+	if err != nil {
+		return nil, fmt.Errorf("top restaurants: %w", err)
+	}
+	defer rows.Close()
+
+	var restaurants []model.RestaurantRatingStat
+	for rows.Next() {
+		var restaurant model.RestaurantRatingStat
+		if err := rows.Scan(&restaurant.Name, &restaurant.AverageRating, &restaurant.RatingCount, &restaurant.VisitCount); err != nil {
+			return nil, fmt.Errorf("scan top restaurant: %w", err)
+		}
+		restaurants = append(restaurants, restaurant)
+	}
+	return restaurants, rows.Err()
 }
 
 func (s *Store) PickerTurn(ctx context.Context) (model.PickerTurn, error) {
@@ -356,6 +429,7 @@ func (s *Store) scanVisits(ctx context.Context, rows pgx.Rows) ([]model.Visit, e
 			&visit.Restaurant.ID,
 			&visit.Restaurant.Name,
 			&visit.Restaurant.Address,
+			&visit.Restaurant.City,
 			&visit.Restaurant.Latitude,
 			&visit.Restaurant.Longitude,
 			&visit.Restaurant.Phone,
@@ -440,6 +514,7 @@ func scanRestaurant(row restaurantScanner) (model.Restaurant, error) {
 		&restaurant.ID,
 		&restaurant.Name,
 		&restaurant.Address,
+		&restaurant.City,
 		&restaurant.Latitude,
 		&restaurant.Longitude,
 		&restaurant.Phone,
@@ -462,7 +537,7 @@ func visitSelectSQL() string {
 	return `
 		SELECT v.id, v.visited_at, v.price_level, v.notes, v.created_at, v.updated_at,
 		       p.id, p.name, p.avatar_color,
-		       r.id, r.name, r.address, r.latitude, r.longitude, r.phone, r.website,
+		       r.id, r.name, r.address, r.city, r.latitude, r.longitude, r.phone, r.website,
 		       r.google_place_id, r.google_rating, r.google_price_level, r.category,
 		       r.is_chain, r.created_at, r.updated_at
 		FROM dining_visits v
