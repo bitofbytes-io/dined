@@ -38,6 +38,7 @@ type PageData struct {
 	NowLocal            string
 	PrefillName         string
 	PrefillAddress      string
+	PrefillCity         string
 	PrefillPlaceID      string
 	PrefillCategory     string
 	PrefillPriceLevel   int
@@ -155,6 +156,10 @@ func funcs() template.FuncMap {
 			}
 			return ""
 		},
+		"placeCity": places.City,
+		"add1": func(value int) int {
+			return value + 1
+		},
 	}
 }
 
@@ -256,6 +261,7 @@ const templates = `
 	      var name = form.querySelector("input[name='restaurant_name']");
 	      var id = form.querySelector("input[name='restaurant_id']");
 	      var address = form.querySelector("input[name='address']");
+	      var city = form.querySelector("input[name='city']");
 	      var place = form.querySelector("input[name='google_place_id']");
 	      var category = form.querySelector("select[name='category']");
 	      if (!name || !id) return;
@@ -263,6 +269,7 @@ const templates = `
 	      var options = dinedRestaurantOptions(name.value);
 	      if (!options.length) {
 	        id.value = "";
+	        if (city) city.value = "";
 	        return;
 	      }
 	      var option = null;
@@ -279,16 +286,19 @@ const templates = `
 	      }
 	      if (!option) {
 	        id.value = "";
+	        if (city) city.value = "";
 	        return;
 	      }
 	      var optionAddress = option.dataset.address || "";
 	      if (address && address.value && optionAddress && address.value !== optionAddress) {
 	        id.value = "";
+	        if (city) city.value = "";
 	        return;
 	      }
 
 	      id.value = option.dataset.restaurantId || "";
 	      if (address && !address.value) address.value = optionAddress;
+	      if (city && !city.value) city.value = option.dataset.city || "";
 	      if (place && !place.value) place.value = option.dataset.googlePlaceId || "";
 	      if (category && !category.value) category.value = option.dataset.category || "";
 	    }
@@ -455,8 +465,9 @@ const templates = `
     <div class="console-grid">
 	      <section class="form-section restaurant-console">
 	        <input type="hidden" name="restaurant_id" value="{{.PrefillRestaurantID}}">
+	        <input type="hidden" name="city" value="{{.PrefillCity}}">
 	        <div class="form-grid restaurant-grid">
-	          <label>Restaurant<input name="restaurant_name" list="restaurant-options" placeholder="Search or add restaurant" value="{{.PrefillName}}"><datalist id="restaurant-options">{{range .Restaurants}}<option value="{{.Name}}" data-restaurant-id="{{.ID}}" data-address="{{if .Address}}{{.Address}}{{end}}" data-google-place-id="{{if .GooglePlaceID}}{{.GooglePlaceID}}{{end}}" data-category="{{if .Category}}{{.Category}}{{end}}">{{if .Address}}{{.Address}}{{end}}</option>{{end}}</datalist></label>
+	          <label>Restaurant<input name="restaurant_name" list="restaurant-options" placeholder="Search or add restaurant" value="{{.PrefillName}}"><datalist id="restaurant-options">{{range .Restaurants}}<option value="{{.Name}}" data-restaurant-id="{{.ID}}" data-address="{{if .Address}}{{.Address}}{{end}}" data-city="{{if .City}}{{.City}}{{end}}" data-google-place-id="{{if .GooglePlaceID}}{{.GooglePlaceID}}{{end}}" data-category="{{if .Category}}{{.Category}}{{end}}">{{if .Address}}{{.Address}}{{end}}</option>{{end}}</datalist></label>
 	          <label>Address<input name="address" placeholder="Optional" value="{{.PrefillAddress}}"></label>
           <label>Google Place ID<input name="google_place_id" placeholder="Optional" value="{{.PrefillPlaceID}}"></label>
           <label>Category<select name="category"><option></option><option {{if eq .PrefillCategory "American"}}selected{{end}}>American</option><option {{if eq .PrefillCategory "Mexican"}}selected{{end}}>Mexican</option><option {{if eq .PrefillCategory "Italian"}}selected{{end}}>Italian</option><option {{if eq .PrefillCategory "Pizza"}}selected{{end}}>Pizza</option><option {{if eq .PrefillCategory "Burgers"}}selected{{end}}>Burgers</option><option {{if eq .PrefillCategory "Breakfast"}}selected{{end}}>Breakfast</option><option {{if eq .PrefillCategory "Chinese"}}selected{{end}}>Chinese</option><option {{if eq .PrefillCategory "Japanese"}}selected{{end}}>Japanese</option><option {{if eq .PrefillCategory "Thai"}}selected{{end}}>Thai</option><option {{if eq .PrefillCategory "Indian"}}selected{{end}}>Indian</option><option {{if eq .PrefillCategory "BBQ"}}selected{{end}}>BBQ</option><option {{if eq .PrefillCategory "Seafood"}}selected{{end}}>Seafood</option><option {{if eq .PrefillCategory "Dessert"}}selected{{end}}>Dessert</option><option {{if eq .PrefillCategory "Coffee"}}selected{{end}}>Coffee</option><option {{if eq .PrefillCategory "Other"}}selected{{end}}>Other</option></select></label>
@@ -484,7 +495,7 @@ const templates = `
 <main class="page-band ledger-page">
   <section class="wide-ticket ledger-panel">
     {{with .Restaurant}}
-    <div class="section-head"><div><h1>{{.Name}} {{if .IsChain}}<span class="badge">Chain</span>{{end}}</h1>{{if .Address}}<p>{{.Address}}</p>{{end}}</div>{{if $.Authenticated}}<a class="small-cta" href="/log?restaurant_id={{.ID}}&restaurant_name={{query .Name}}{{if .Address}}&address={{query .Address}}{{end}}{{if .GooglePlaceID}}&google_place_id={{query .GooglePlaceID}}{{end}}{{if .Category}}&category={{query .Category}}{{end}}">Log Another Dine</a>{{end}}</div>
+    <div class="section-head"><div><h1>{{.Name}} {{if .IsChain}}<span class="badge">Chain</span>{{end}}</h1>{{if .Address}}<p>{{.Address}}</p>{{end}}</div>{{if $.Authenticated}}<a class="small-cta" href="/log?restaurant_id={{.ID}}&restaurant_name={{query .Name}}{{if .Address}}&address={{query .Address}}{{end}}{{if .City}}&city={{query .City}}{{end}}{{if .GooglePlaceID}}&google_place_id={{query .GooglePlaceID}}{{end}}{{if .Category}}&category={{query .Category}}{{end}}">Log Another Dine</a>{{end}}</div>
     <dl class="details"><dt>Category</dt><dd>{{if .Category}}{{.Category}}{{else}}-{{end}}</dd><dt>Phone</dt><dd>{{if .Phone}}{{.Phone}}{{else}}-{{end}}</dd><dt>Website</dt><dd>{{if .Website}}<a href="{{.Website}}">{{.Website}}</a>{{else}}-{{end}}</dd><dt>Google rating</dt><dd>{{if .GoogleRating}}{{.GoogleRating}}{{else}}-{{end}}</dd></dl>
     {{if $.Authenticated}}<form method="post" action="/restaurants/{{.ID}}/chain" class="inline-form"><input type="hidden" name="is_chain" value="{{if .IsChain}}false{{else}}true{{end}}"><button class="small-cta">{{if .IsChain}}Clear Chain Badge{{else}}Mark Chain{{end}}</button></form>{{end}}
     {{end}}
@@ -503,20 +514,16 @@ const templates = `
       <h1>Trophy Case</h1>
     </div>
     <div class="record-grid" aria-label="Dined family records">
-      <div class="record"><span>{{.Stats.TotalDines}}</span><p>Total Dines</p></div>
-      <div class="record"><span>{{printf "%.1f" .Stats.AverageRating}}</span><p>Family Average</p></div>
-      <div class="award"><h2>Next Up</h2><p>{{default .PickerTurn.NextPicker.Name "Waiting on more dines"}}</p></div>
-      <div class="award"><h2>Safe Bet</h2><p>{{default .Stats.HighestRatedRestaurant "Waiting on more dines"}}</p></div>
-      <div class="award"><h2>The Regular</h2><p>{{default .Stats.MostVisitedRestaurant "Waiting on more dines"}}</p></div>
-      <div class="award"><h2>Best Picker</h2><p>{{default .Stats.BestPicker "Waiting on more dines"}}</p></div>
-      <div class="award"><h2>Table Divided</h2><p>{{default .Stats.BiggestSplitRestaurant "Waiting on more dines"}}</p></div>
+      <div class="record"><span class="record-value">{{.Stats.TotalDines}}</span><p>Total Dines</p></div>
+      <div class="record"><span class="record-value">{{score .Stats.AverageRating}}</span><p>Family Average</p></div>
+      <div class="record"><span class="record-value record-name">{{default .Stats.BestPicker "Waiting"}}</span><p>Best Picker</p>{{if .Stats.BestPicker}}<small>{{score .Stats.BestPickerAverage}} average</small>{{else}}<small>More dines needed</small>{{end}}</div>
+      <div class="record"><span class="record-value record-name">{{default .PickerTurn.NextPicker.Name "Waiting"}}</span><p>Next Up</p><small>Picker turn</small></div>
+      <div class="record"><span class="record-value">{{.Stats.NewPlaces}}</span><p>New Places</p></div>
+      <div class="record"><span class="record-value">{{.Stats.CitiesExplored}}</span><p>Cities Explored</p></div>
     </div>
     <div class="track-list">
-      <h2>Track List</h2>
-      <p>Best Picker <span>{{default .Stats.BestPicker "Waiting on more dines"}}</span></p>
-      <p>Safe Bet <span>{{default .Stats.HighestRatedRestaurant "Waiting on more dines"}}</span></p>
-      <p>The Regular <span>{{default .Stats.MostVisitedRestaurant "Waiting on more dines"}}</span></p>
-      <p>Table Divided <span>{{default .Stats.BiggestSplitRestaurant "Waiting on more dines"}}</span></p>
+      <h2>All-Time Top Restaurants</h2>
+      {{if .Stats.TopRestaurants}}<ol class="top-restaurant-list">{{range $index, $restaurant := .Stats.TopRestaurants}}<li><span class="track-rank">{{add1 $index}}</span><span class="track-name">{{$restaurant.Name}}</span><span class="track-score">{{score $restaurant.AverageRating}} avg</span></li>{{end}}</ol>{{else}}<p class="track-empty">Waiting on more dines</p>{{end}}
     </div>
   </section>
 </main>
@@ -537,7 +544,7 @@ const templates = `
     <h1>Have we eaten here before?</h1>
     <form class="search-row" method="get" action="/search"><input name="q" type="search" value="{{.Query}}" placeholder="Restaurant name"><button>Search</button></form>
     {{if .SearchResults}}<h2>Saved Spots</h2><div class="restaurant-list history-list">{{range .SearchResults}}<a class="restaurant-row history-row" href="/restaurants/{{.Restaurant.ID}}"><div><strong>{{.Restaurant.Name}}</strong>{{if .Restaurant.IsChain}}<em>Chain</em>{{end}}</div><span>{{if .Restaurant.Address}}{{.Restaurant.Address}}{{end}}</span>{{with .LatestVisit}}<span>Last visit {{date .VisitedAt}} · Picked by {{.Picker.Name}} · {{dollars .PriceLevel}}</span>{{end}}<div class="row-stats"><span>{{.VisitCount}} {{if eq .VisitCount 1}}visit{{else}}visits{{end}}</span><span>Avg {{score .AverageRating}}</span></div>{{if .Tags}}<div class="tags">{{range .Tags}}<span>{{.Name}}</span>{{end}}</div>{{end}}</a>{{end}}</div>{{else if .Query}}<p class="empty">No saved dines match that search yet.</p>{{end}}
-    {{if .Places}}<h2>Around Town</h2><div class="restaurant-list places-list">{{range .Places}}<article class="restaurant-row place-row"><div><strong>{{.DisplayName.Text}}</strong>{{if .Rating}}<em>{{score .Rating}} Google</em>{{end}}</div><span>{{.Address}}</span><span>{{if price .PriceLevel}}{{dollars (price .PriceLevel)}}{{else}}Price not listed{{end}}</span>{{if $.Authenticated}}<a class="small-cta" href="/log?restaurant_name={{query .DisplayName.Text}}&address={{query .Address}}&google_place_id={{query .ID}}&category={{query (placeCategory .)}}&price_level={{price .PriceLevel}}">Log this dine</a>{{end}}</article>{{end}}</div>{{else if .Query}}<p class="empty">Google Places results will appear here when a Places API key is configured.</p>{{end}}
+    {{if .Places}}<h2>Around Town</h2><div class="restaurant-list places-list">{{range .Places}}<article class="restaurant-row place-row"><div><strong>{{.DisplayName.Text}}</strong>{{if .Rating}}<em>{{score .Rating}} Google</em>{{end}}</div><span>{{.Address}}</span><span>{{if price .PriceLevel}}{{dollars (price .PriceLevel)}}{{else}}Price not listed{{end}}</span>{{if $.Authenticated}}<a class="small-cta" href="/log?restaurant_name={{query .DisplayName.Text}}&address={{query .Address}}&city={{query (placeCity .)}}&google_place_id={{query .ID}}&category={{query (placeCategory .)}}&price_level={{price .PriceLevel}}">Log this dine</a>{{end}}</article>{{end}}</div>{{else if .Query}}<p class="empty">Google Places results will appear here when a Places API key is configured.</p>{{end}}
   </section>
 </main>
 {{template "bottom" .}}
@@ -551,7 +558,7 @@ const templates = `
     <h1>Nearby</h1>
     <form class="nearby-controls" id="nearby-form" method="get" action="/nearby"><input type="hidden" name="lat"><input type="hidden" name="lng"><div class="nearby-search-line"><input name="q" type="search" value="{{.Query}}" placeholder="Restaurant or cuisine" aria-label="Restaurant or cuisine"><button class="primary-button" id="use-location" type="button">Search Near Me</button></div><div class="nearby-search-line nearby-fallback-line"><input name="near" type="search" value="{{.LocationQuery}}" placeholder="City, address, or neighborhood" aria-label="City, address, or neighborhood"><button class="secondary-button">Search This Area</button></div></form>
     <p class="empty" id="location-status">{{if .LocationStatus}}{{.LocationStatus}}{{else}}Share your browser location, or search near a city, address, or neighborhood.{{end}}</p>
-    {{if .Places}}<div class="restaurant-list places-list">{{range .Places}}<article class="restaurant-row place-row"><div><strong>{{.DisplayName.Text}}</strong>{{if .Rating}}<em>{{score .Rating}} Google</em>{{end}}</div><span>{{.Address}}</span><span>{{if $.HasLocation}}{{distance $.OriginLatitude $.OriginLongitude .}} · {{end}}{{if price .PriceLevel}}{{dollars (price .PriceLevel)}}{{else}}Price not listed{{end}}</span>{{if $.Authenticated}}<a class="small-cta" href="/log?restaurant_name={{query .DisplayName.Text}}&address={{query .Address}}&google_place_id={{query .ID}}&category={{query (placeCategory .)}}&price_level={{price .PriceLevel}}">Log this dine</a>{{end}}</article>{{end}}</div>{{end}}
+    {{if .Places}}<div class="restaurant-list places-list">{{range .Places}}<article class="restaurant-row place-row"><div><strong>{{.DisplayName.Text}}</strong>{{if .Rating}}<em>{{score .Rating}} Google</em>{{end}}</div><span>{{.Address}}</span><span>{{if $.HasLocation}}{{distance $.OriginLatitude $.OriginLongitude .}} · {{end}}{{if price .PriceLevel}}{{dollars (price .PriceLevel)}}{{else}}Price not listed{{end}}</span>{{if $.Authenticated}}<a class="small-cta" href="/log?restaurant_name={{query .DisplayName.Text}}&address={{query .Address}}&city={{query (placeCity .)}}&google_place_id={{query .ID}}&category={{query (placeCategory .)}}&price_level={{price .PriceLevel}}">Log this dine</a>{{end}}</article>{{end}}</div>{{end}}
   </section>
 </main>
 {{template "bottom" .}}

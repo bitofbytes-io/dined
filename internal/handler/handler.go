@@ -277,6 +277,7 @@ func (h *Handler) logData(r *http.Request) (ui.PageData, error) {
 		Restaurants:         restaurants,
 		PrefillName:         r.URL.Query().Get("restaurant_name"),
 		PrefillAddress:      r.URL.Query().Get("address"),
+		PrefillCity:         r.URL.Query().Get("city"),
 		PrefillPlaceID:      r.URL.Query().Get("google_place_id"),
 		PrefillCategory:     r.URL.Query().Get("category"),
 		PrefillPriceLevel:   prefillPrice,
@@ -298,6 +299,7 @@ func (h *Handler) visitInput(r *http.Request) (model.VisitInput, error) {
 	input := model.VisitInput{
 		RestaurantName: r.FormValue("restaurant_name"),
 		Address:        r.FormValue("address"),
+		City:           r.FormValue("city"),
 		GooglePlaceID:  r.FormValue("google_place_id"),
 		Category:       r.FormValue("category"),
 		IsChain:        r.FormValue("is_chain") == "true",

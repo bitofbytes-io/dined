@@ -38,6 +38,37 @@ func TestPriceLevelNumber(t *testing.T) {
 	}
 }
 
+func TestCityUsesLocalityAddressComponent(t *testing.T) {
+	place := Place{AddressComponents: []AddressComponent{
+		{LongText: "Wake County", ShortText: "Wake", Types: []string{"administrative_area_level_2"}},
+		{LongText: "Apex", ShortText: "Apex", Types: []string{"locality", "political"}},
+	}}
+
+	if got := City(place); got != "Apex" {
+		t.Fatalf("got %q, want Apex", got)
+	}
+}
+
+func TestCityFallsBackToLocalityShortText(t *testing.T) {
+	place := Place{AddressComponents: []AddressComponent{
+		{ShortText: "Cary", Types: []string{"locality", "political"}},
+	}}
+
+	if got := City(place); got != "Cary" {
+		t.Fatalf("got %q, want Cary", got)
+	}
+}
+
+func TestCityRequiresLocality(t *testing.T) {
+	place := Place{AddressComponents: []AddressComponent{
+		{LongText: "North Carolina", ShortText: "NC", Types: []string{"administrative_area_level_1", "political"}},
+	}}
+
+	if got := City(place); got != "" {
+		t.Fatalf("got %q, want empty city", got)
+	}
+}
+
 func TestDistanceMiles(t *testing.T) {
 	place := Place{Location: Location{Latitude: 35.7327, Longitude: -78.8503}}
 	if got := DistanceMiles(35.7327, -78.8503, place); got != 0 {

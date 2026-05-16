@@ -19,15 +19,16 @@ type Client struct {
 }
 
 type Place struct {
-	ID          string   `json:"id"`
-	DisplayName Name     `json:"displayName"`
-	Address     string   `json:"formattedAddress"`
-	Location    Location `json:"location"`
-	Phone       string   `json:"nationalPhoneNumber"`
-	Website     string   `json:"websiteUri"`
-	Rating      float64  `json:"rating"`
-	PriceLevel  string   `json:"priceLevel"`
-	Types       []string `json:"types"`
+	ID                string             `json:"id"`
+	DisplayName       Name               `json:"displayName"`
+	Address           string             `json:"formattedAddress"`
+	AddressComponents []AddressComponent `json:"addressComponents"`
+	Location          Location           `json:"location"`
+	Phone             string             `json:"nationalPhoneNumber"`
+	Website           string             `json:"websiteUri"`
+	Rating            float64            `json:"rating"`
+	PriceLevel        string             `json:"priceLevel"`
+	Types             []string           `json:"types"`
 }
 
 type Name struct {
@@ -39,12 +40,18 @@ type Location struct {
 	Longitude float64 `json:"longitude"`
 }
 
+type AddressComponent struct {
+	LongText  string   `json:"longText"`
+	ShortText string   `json:"shortText"`
+	Types     []string `json:"types"`
+}
+
 type searchResponse struct {
 	Places []Place `json:"places"`
 }
 
-const searchFieldMask = "places.id,places.displayName,places.formattedAddress,places.location,places.nationalPhoneNumber,places.websiteUri,places.rating,places.priceLevel,places.types"
-const detailsFieldMask = "id,displayName,formattedAddress,location,nationalPhoneNumber,websiteUri,rating,priceLevel,types"
+const searchFieldMask = "places.id,places.displayName,places.formattedAddress,places.addressComponents,places.location,places.nationalPhoneNumber,places.websiteUri,places.rating,places.priceLevel,places.types"
+const detailsFieldMask = "id,displayName,formattedAddress,addressComponents,location,nationalPhoneNumber,websiteUri,rating,priceLevel,types"
 
 func NewClient(apiKey string) *Client {
 	return &Client{
@@ -179,6 +186,30 @@ func PriceLevelNumber(priceLevel string) int {
 	default:
 		return 0
 	}
+}
+
+func City(place Place) string {
+	for _, component := range place.AddressComponents {
+		if !hasAddressComponentType(component, "locality") {
+			continue
+		}
+		if city := strings.TrimSpace(component.LongText); city != "" {
+			return city
+		}
+		if city := strings.TrimSpace(component.ShortText); city != "" {
+			return city
+		}
+	}
+	return ""
+}
+
+func hasAddressComponentType(component AddressComponent, typ string) bool {
+	for _, value := range component.Types {
+		if value == typ {
+			return true
+		}
+	}
+	return false
 }
 
 func DistanceMiles(lat, lng float64, place Place) float64 {
