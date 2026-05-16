@@ -216,7 +216,7 @@ func (s *Store) CreateVisit(ctx context.Context, input model.VisitInput) (*uuid.
 			ON CONFLICT (google_place_id) WHERE google_place_id IS NOT NULL DO UPDATE
 			SET name = EXCLUDED.name,
 			    address = COALESCE(EXCLUDED.address, restaurants.address),
-			    city = COALESCE(EXCLUDED.city, restaurants.city),
+			    city = COALESCE(restaurants.city, EXCLUDED.city),
 			    category = COALESCE(EXCLUDED.category, restaurants.category),
 			    updated_at = NOW()
 			RETURNING id`, name, address, city, placeID, category, input.IsChain).Scan(&id)

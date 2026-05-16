@@ -197,6 +197,12 @@ func TestRenderLogPreservesPrefillCity(t *testing.T) {
 	if !strings.Contains(got, `name="city" value="Apex"`) {
 		t.Fatalf("rendered log missing city hidden input:\n%s", got)
 	}
+	if strings.Contains(got, `if (city) city.value = "";`) {
+		t.Fatalf("rendered log clears hidden city on unmatched datalist input:\n%s", got)
+	}
+	if !strings.Contains(got, `if (city) city.value = option.dataset.city || "";`) {
+		t.Fatalf("rendered log does not overwrite city on matched datalist input:\n%s", got)
+	}
 }
 
 func withWorkingDir(t *testing.T) {

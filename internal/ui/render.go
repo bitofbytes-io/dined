@@ -269,7 +269,6 @@ const templates = `
 	      var options = dinedRestaurantOptions(name.value);
 	      if (!options.length) {
 	        id.value = "";
-	        if (city) city.value = "";
 	        return;
 	      }
 	      var option = null;
@@ -286,19 +285,17 @@ const templates = `
 	      }
 	      if (!option) {
 	        id.value = "";
-	        if (city) city.value = "";
 	        return;
 	      }
 	      var optionAddress = option.dataset.address || "";
 	      if (address && address.value && optionAddress && address.value !== optionAddress) {
 	        id.value = "";
-	        if (city) city.value = "";
 	        return;
 	      }
 
 	      id.value = option.dataset.restaurantId || "";
 	      if (address && !address.value) address.value = optionAddress;
-	      if (city && !city.value) city.value = option.dataset.city || "";
+	      if (city) city.value = option.dataset.city || "";
 	      if (place && !place.value) place.value = option.dataset.googlePlaceId || "";
 	      if (category && !category.value) category.value = option.dataset.category || "";
 	    }
