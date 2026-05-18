@@ -374,6 +374,7 @@ func (m *MemoryStore) Stats(context.Context) (model.Stats, error) {
 	visitsByRestaurant := map[string]int{}
 	ratingByRestaurant := map[string][]float64{}
 	ratingsByRestaurantID := map[uuid.UUID]*restaurantRatingAggregate{}
+	ratingsByCuisineRestaurantID := map[string]map[uuid.UUID]*restaurantRatingAggregate{}
 	ratingByPicker := map[string][]float64{}
 	var biggestSplit float64
 	for _, visit := range m.visits {
@@ -392,11 +393,30 @@ func (m *MemoryStore) Stats(context.Context) (model.Stats, error) {
 			ratingsByRestaurantID[visit.Restaurant.ID] = restaurantAggregate
 		}
 		restaurantAggregate.visitCount++
+		cuisine := strings.TrimSpace(valueOrEmpty(visit.Restaurant.Category))
+		var cuisineAggregate *restaurantRatingAggregate
+		if cuisine != "" {
+			cuisineKey := strings.ToLower(cuisine)
+			cuisineRestaurants := ratingsByCuisineRestaurantID[cuisineKey]
+			if cuisineRestaurants == nil {
+				cuisineRestaurants = map[uuid.UUID]*restaurantRatingAggregate{}
+				ratingsByCuisineRestaurantID[cuisineKey] = cuisineRestaurants
+			}
+			cuisineAggregate = cuisineRestaurants[visit.Restaurant.ID]
+			if cuisineAggregate == nil {
+				cuisineAggregate = &restaurantRatingAggregate{name: visit.Restaurant.Name, cuisine: cuisine}
+				cuisineRestaurants[visit.Restaurant.ID] = cuisineAggregate
+			}
+			cuisineAggregate.visitCount++
+		}
 		for _, rating := range visit.Ratings {
 			sum += rating.Score
 			count++
 			ratingByRestaurant[visit.Restaurant.Name] = append(ratingByRestaurant[visit.Restaurant.Name], rating.Score)
 			restaurantAggregate.ratings = append(restaurantAggregate.ratings, rating.Score)
+			if cuisineAggregate != nil {
+				cuisineAggregate.ratings = append(cuisineAggregate.ratings, rating.Score)
+			}
 			ratingByPicker[visit.Picker.Name] = append(ratingByPicker[visit.Picker.Name], rating.Score)
 		}
 		if split := visitSplit(visit); split > biggestSplit {
@@ -413,6 +433,7 @@ func (m *MemoryStore) Stats(context.Context) (model.Stats, error) {
 	stats.NewPlaces = len(visitedRestaurants)
 	stats.CitiesExplored = len(cities)
 	stats.TopRestaurants = topRestaurantStats(ratingsByRestaurantID)
+	stats.TopRestaurantsByCuisine = topRestaurantStatsByCuisine(ratingsByCuisineRestaurantID)
 	return stats, nil
 }
 
@@ -674,6 +695,7 @@ func topAverageWithScore(values map[string][]float64) (string, float64) {
 }
 
 type restaurantRatingAggregate struct {
+	cuisine    string
 	name       string
 	visitCount int
 	ratings    []float64
@@ -704,6 +726,35 @@ func topRestaurantStats(values map[uuid.UUID]*restaurantRatingAggregate) []model
 	if len(restaurants) > 5 {
 		restaurants = restaurants[:5]
 	}
+	return restaurants
+}
+
+func topRestaurantStatsByCuisine(values map[string]map[uuid.UUID]*restaurantRatingAggregate) []model.CuisineRestaurantStat {
+	var restaurants []model.CuisineRestaurantStat
+	for _, cuisineRestaurants := range values {
+		candidates := topRestaurantStats(cuisineRestaurants)
+		if len(candidates) == 0 {
+			continue
+		}
+		winner := candidates[0]
+		cuisine := ""
+		for _, value := range cuisineRestaurants {
+			if value.name == winner.Name {
+				cuisine = value.cuisine
+				break
+			}
+		}
+		restaurants = append(restaurants, model.CuisineRestaurantStat{
+			Cuisine:       cuisine,
+			Name:          winner.Name,
+			AverageRating: winner.AverageRating,
+			RatingCount:   winner.RatingCount,
+			VisitCount:    winner.VisitCount,
+		})
+	}
+	sort.Slice(restaurants, func(i, j int) bool {
+		return restaurants[i].Cuisine < restaurants[j].Cuisine
+	})
 	return restaurants
 }
 

@@ -769,6 +769,8 @@ const templates = `
     <div class="track-list">
       <h2>All-Time Top Restaurants</h2>
       {{if .Stats.TopRestaurants}}<ol class="top-restaurant-list">{{range $index, $restaurant := .Stats.TopRestaurants}}<li><span class="track-rank">{{add1 $index}}</span><span class="track-name">{{$restaurant.Name}}</span><span class="track-score">{{score $restaurant.AverageRating}} avg</span></li>{{end}}</ol>{{else}}<p class="track-empty">Waiting on more dines</p>{{end}}
+      <h2 class="track-section-title">Best By Cuisine</h2>
+      {{if .Stats.TopRestaurantsByCuisine}}<ol class="top-restaurant-list cuisine-restaurant-list">{{range $restaurant := .Stats.TopRestaurantsByCuisine}}<li><span class="track-cuisine">{{$restaurant.Cuisine}}</span><span class="track-name">{{$restaurant.Name}}</span><span class="track-score">{{score $restaurant.AverageRating}} avg</span></li>{{end}}</ol>{{else}}<p class="track-empty">Waiting on cuisine data</p>{{end}}
     </div>
   </section>
 </main>

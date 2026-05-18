@@ -93,16 +93,17 @@ type RestaurantInput struct {
 }
 
 type Stats struct {
-	TotalDines             int
-	AverageRating          float64
-	MostVisitedRestaurant  string
-	HighestRatedRestaurant string
-	BestPicker             string
-	BestPickerAverage      float64
-	BiggestSplitRestaurant string
-	NewPlaces              int
-	CitiesExplored         int
-	TopRestaurants         []RestaurantRatingStat
+	TotalDines              int
+	AverageRating           float64
+	MostVisitedRestaurant   string
+	HighestRatedRestaurant  string
+	BestPicker              string
+	BestPickerAverage       float64
+	BiggestSplitRestaurant  string
+	NewPlaces               int
+	CitiesExplored          int
+	TopRestaurants          []RestaurantRatingStat
+	TopRestaurantsByCuisine []CuisineRestaurantStat
 }
 
 type PickerTurn struct {
@@ -111,6 +112,14 @@ type PickerTurn struct {
 }
 
 type RestaurantRatingStat struct {
+	Name          string
+	AverageRating float64
+	RatingCount   int
+	VisitCount    int
+}
+
+type CuisineRestaurantStat struct {
+	Cuisine       string
 	Name          string
 	AverageRating float64
 	RatingCount   int

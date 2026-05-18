@@ -569,6 +569,10 @@ func (s *Store) Stats(ctx context.Context) (model.Stats, error) {
 	if err != nil {
 		return stats, err
 	}
+	stats.TopRestaurantsByCuisine, err = s.topRestaurantsByCuisine(ctx)
+	if err != nil {
+		return stats, err
+	}
 	return stats, nil
 }
 
@@ -592,6 +596,53 @@ func (s *Store) topRestaurants(ctx context.Context) ([]model.RestaurantRatingSta
 		var restaurant model.RestaurantRatingStat
 		if err := rows.Scan(&restaurant.Name, &restaurant.AverageRating, &restaurant.RatingCount, &restaurant.VisitCount); err != nil {
 			return nil, fmt.Errorf("scan top restaurant: %w", err)
+		}
+		restaurants = append(restaurants, restaurant)
+	}
+	return restaurants, rows.Err()
+}
+
+func (s *Store) topRestaurantsByCuisine(ctx context.Context) ([]model.CuisineRestaurantStat, error) {
+	rows, err := s.pool.Query(ctx, `
+		WITH rated_restaurants AS (
+			SELECT btrim(r.category) AS cuisine,
+			       r.name,
+			       AVG(vr.rating) AS average_rating,
+			       COUNT(vr.rating) AS rating_count,
+			       COUNT(DISTINCT v.id) AS visit_count
+			FROM restaurants r
+			JOIN dining_visits v ON v.restaurant_id = r.id
+			JOIN visit_participant_ratings vr ON vr.visit_id = v.id
+			WHERE r.category IS NOT NULL AND btrim(r.category) <> ''
+			GROUP BY lower(btrim(r.category)), btrim(r.category), r.id, r.name
+			HAVING COUNT(vr.rating) >= 2
+		),
+		ranked_restaurants AS (
+			SELECT cuisine,
+			       name,
+			       average_rating,
+			       rating_count,
+			       visit_count,
+			       ROW_NUMBER() OVER (
+			           PARTITION BY lower(cuisine)
+			           ORDER BY average_rating DESC, rating_count DESC, name
+			       ) AS cuisine_rank
+			FROM rated_restaurants
+		)
+		SELECT cuisine, name, average_rating, rating_count, visit_count
+		FROM ranked_restaurants
+		WHERE cuisine_rank = 1
+		ORDER BY cuisine`)
+	if err != nil {
+		return nil, fmt.Errorf("top restaurants by cuisine: %w", err)
+	}
+	defer rows.Close()
+
+	var restaurants []model.CuisineRestaurantStat
+	for rows.Next() {
+		var restaurant model.CuisineRestaurantStat
+		if err := rows.Scan(&restaurant.Cuisine, &restaurant.Name, &restaurant.AverageRating, &restaurant.RatingCount, &restaurant.VisitCount); err != nil {
+			return nil, fmt.Errorf("scan top restaurant by cuisine: %w", err)
 		}
 		restaurants = append(restaurants, restaurant)
 	}

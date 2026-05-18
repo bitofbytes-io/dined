@@ -562,10 +562,10 @@ func TestMemoryStoreTopRestaurantsRequireTwoRatingsAndSortDeterministically(t *t
 	store := NewMemoryStore()
 	people := store.people
 	now := time.Now()
-	abacus := model.Restaurant{ID: uuid.New(), Name: "Abacus", City: strPtr("Apex")}
-	alpha := model.Restaurant{ID: uuid.New(), Name: "Alpha", City: strPtr("Apex")}
-	bravo := model.Restaurant{ID: uuid.New(), Name: "Bravo", City: strPtr("Cary")}
-	solo := model.Restaurant{ID: uuid.New(), Name: "Solo", City: strPtr("Raleigh")}
+	abacus := model.Restaurant{ID: uuid.New(), Name: "Abacus", City: strPtr("Apex"), Category: strPtr("Italian")}
+	alpha := model.Restaurant{ID: uuid.New(), Name: "Alpha", City: strPtr("Apex"), Category: strPtr("Italian")}
+	bravo := model.Restaurant{ID: uuid.New(), Name: "Bravo", City: strPtr("Cary"), Category: strPtr("Mexican")}
+	solo := model.Restaurant{ID: uuid.New(), Name: "Solo", City: strPtr("Raleigh"), Category: strPtr("Indian")}
 	store.restaurants = []model.Restaurant{abacus, alpha, bravo, solo}
 	store.visits = []model.Visit{
 		demoVisit(alpha, people[0], now, 2, "", []model.Rating{{Person: people[0], Score: 9}, {Person: people[1], Score: 8}}, nil),
@@ -589,6 +589,19 @@ func TestMemoryStoreTopRestaurantsRequireTwoRatingsAndSortDeterministically(t *t
 	}
 	if stats.CitiesExplored != 3 {
 		t.Fatalf("CitiesExplored = %d, want 3", stats.CitiesExplored)
+	}
+	wantCuisine := []model.CuisineRestaurantStat{
+		{Cuisine: "Italian", Name: "Abacus"},
+		{Cuisine: "Mexican", Name: "Bravo"},
+	}
+	if len(stats.TopRestaurantsByCuisine) != len(wantCuisine) {
+		t.Fatalf("got %d cuisine winners, want %d: %#v", len(stats.TopRestaurantsByCuisine), len(wantCuisine), stats.TopRestaurantsByCuisine)
+	}
+	for i, want := range wantCuisine {
+		got := stats.TopRestaurantsByCuisine[i]
+		if got.Cuisine != want.Cuisine || got.Name != want.Name {
+			t.Fatalf("cuisine winner %d = %s/%s, want %s/%s", i, got.Cuisine, got.Name, want.Cuisine, want.Name)
+		}
 	}
 }
 
