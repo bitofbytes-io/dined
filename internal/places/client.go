@@ -188,6 +188,42 @@ func PriceLevelNumber(priceLevel string) int {
 	}
 }
 
+func Category(place Place) string {
+	for _, typ := range place.Types {
+		switch typ {
+		case "american_restaurant":
+			return "American"
+		case "mexican_restaurant":
+			return "Mexican"
+		case "italian_restaurant":
+			return "Italian"
+		case "pizza_restaurant":
+			return "Pizza"
+		case "hamburger_restaurant":
+			return "Burgers"
+		case "breakfast_restaurant":
+			return "Breakfast"
+		case "chinese_restaurant":
+			return "Chinese"
+		case "japanese_restaurant":
+			return "Japanese"
+		case "thai_restaurant":
+			return "Thai"
+		case "indian_restaurant":
+			return "Indian"
+		case "barbecue_restaurant":
+			return "BBQ"
+		case "seafood_restaurant":
+			return "Seafood"
+		case "dessert_restaurant", "ice_cream_shop", "bakery":
+			return "Dessert"
+		case "cafe", "coffee_shop":
+			return "Coffee"
+		}
+	}
+	return ""
+}
+
 func City(place Place) string {
 	for _, component := range place.AddressComponents {
 		if !hasAddressComponentType(component, "locality") {

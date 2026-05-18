@@ -1,6 +1,7 @@
 package places
 
 import (
+	"encoding/json"
 	"math"
 	"strings"
 	"testing"
@@ -35,6 +36,47 @@ func TestPriceLevelNumber(t *testing.T) {
 	}
 	if got := PriceLevelNumber("PRICE_LEVEL_UNSPECIFIED"); got != 0 {
 		t.Fatalf("got %d", got)
+	}
+}
+
+func TestPlaceDecodesGoogleMetadataFields(t *testing.T) {
+	var place Place
+	data := []byte(`{
+		"id": "ChIJt4Y3X4v1rIkRikvaj7MLK-M",
+		"displayName": {"text": "Tupelo Honey Southern Kitchen & Bar"},
+		"formattedAddress": "425 Oberlin Rd, Raleigh, NC 27605, USA",
+		"location": {"latitude": 35.7903375, "longitude": -78.6631725},
+		"nationalPhoneNumber": "(919) 723-9353",
+		"websiteUri": "https://tupelohoneycafe.com/restaurant/raleigh/",
+		"rating": 4.3,
+		"priceLevel": "PRICE_LEVEL_MODERATE"
+	}`)
+
+	if err := json.Unmarshal(data, &place); err != nil {
+		t.Fatal(err)
+	}
+	if place.Phone != "(919) 723-9353" {
+		t.Fatalf("Phone = %q", place.Phone)
+	}
+	if place.Website != "https://tupelohoneycafe.com/restaurant/raleigh/" {
+		t.Fatalf("Website = %q", place.Website)
+	}
+	if place.Rating != 4.3 {
+		t.Fatalf("Rating = %f", place.Rating)
+	}
+	if got := PriceLevelNumber(place.PriceLevel); got != 2 {
+		t.Fatalf("PriceLevel = %d", got)
+	}
+	if place.Location.Latitude != 35.7903375 || place.Location.Longitude != -78.6631725 {
+		t.Fatalf("Location = %#v", place.Location)
+	}
+}
+
+func TestCategoryMapsRestaurantTypes(t *testing.T) {
+	place := Place{Types: []string{"brunch_restaurant", "american_restaurant", "restaurant"}}
+
+	if got := Category(place); got != "American" {
+		t.Fatalf("Category = %q, want American", got)
 	}
 }
 

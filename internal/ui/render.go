@@ -20,6 +20,7 @@ type PageData struct {
 	Title               string
 	Authenticated       bool
 	Error               string
+	Notice              string
 	Visits              []model.Visit
 	People              []model.Person
 	Tags                []model.Tag
@@ -120,43 +121,9 @@ func funcs() template.FuncMap {
 			}
 			return fmt.Sprintf("%.0f mi", miles)
 		},
-		"avatar": avatar,
-		"placeCategory": func(place places.Place) string {
-			for _, typ := range place.Types {
-				switch typ {
-				case "american_restaurant":
-					return "American"
-				case "mexican_restaurant":
-					return "Mexican"
-				case "italian_restaurant":
-					return "Italian"
-				case "pizza_restaurant":
-					return "Pizza"
-				case "hamburger_restaurant":
-					return "Burgers"
-				case "breakfast_restaurant":
-					return "Breakfast"
-				case "chinese_restaurant":
-					return "Chinese"
-				case "japanese_restaurant":
-					return "Japanese"
-				case "thai_restaurant":
-					return "Thai"
-				case "indian_restaurant":
-					return "Indian"
-				case "barbecue_restaurant":
-					return "BBQ"
-				case "seafood_restaurant":
-					return "Seafood"
-				case "dessert_restaurant", "ice_cream_shop", "bakery":
-					return "Dessert"
-				case "cafe", "coffee_shop":
-					return "Coffee"
-				}
-			}
-			return ""
-		},
-		"placeCity": places.City,
+		"avatar":        avatar,
+		"placeCategory": places.Category,
+		"placeCity":     places.City,
 		"add1": func(value int) int {
 			return value + 1
 		},
@@ -242,6 +209,7 @@ const templates = `
       </nav>
     </header>
     {{if .Error}}<div class="flash" role="alert">{{.Error}}</div>{{end}}
+    {{if .Notice}}<div class="flash notice" role="status">{{.Notice}}</div>{{end}}
 {{end}}
 
 {{define "bottom"}}
@@ -518,7 +486,7 @@ const templates = `
 <main class="page-band ledger-page">
   <section class="wide-ticket ledger-panel">
     {{with .Restaurant}}
-    <div class="section-head"><div><h1>{{.Name}} {{if .IsChain}}<span class="badge">Chain</span>{{end}}</h1>{{if .Address}}<p>{{.Address}}</p>{{end}}</div>{{if $.Authenticated}}<a class="small-cta" href="/log?restaurant_id={{.ID}}&restaurant_name={{query .Name}}{{if .Address}}&address={{query .Address}}{{end}}{{if .City}}&city={{query .City}}{{end}}{{if .GooglePlaceID}}&google_place_id={{query .GooglePlaceID}}{{end}}{{if .Category}}&category={{query .Category}}{{end}}">Log Another Dine</a>{{end}}</div>
+	    <div class="section-head"><div><h1>{{.Name}} {{if .IsChain}}<span class="badge">Chain</span>{{end}}</h1>{{if .Address}}<p>{{.Address}}</p>{{end}}</div>{{if $.Authenticated}}<div class="section-actions"><a class="small-cta" href="/log?restaurant_id={{.ID}}&restaurant_name={{query .Name}}{{if .Address}}&address={{query .Address}}{{end}}{{if .City}}&city={{query .City}}{{end}}{{if .GooglePlaceID}}&google_place_id={{query .GooglePlaceID}}{{end}}{{if .Category}}&category={{query .Category}}{{end}}">Log Another Dine</a>{{if .GooglePlaceID}}<form method="post" action="/restaurants/{{.ID}}/google-refresh"><button class="secondary-button">Refresh Google Info</button></form>{{end}}</div>{{end}}</div>
     <dl class="details"><dt>Category</dt><dd>{{if .Category}}{{.Category}}{{else}}-{{end}}</dd><dt>Phone</dt><dd>{{if .Phone}}{{.Phone}}{{else}}-{{end}}</dd><dt>Website</dt><dd>{{if .Website}}<a href="{{.Website}}">{{.Website}}</a>{{else}}-{{end}}</dd><dt>Google rating</dt><dd>{{if .GoogleRating}}{{.GoogleRating}}{{else}}-{{end}}</dd></dl>
     {{if $.Authenticated}}<form method="post" action="/restaurants/{{.ID}}/chain" class="inline-form"><input type="hidden" name="is_chain" value="{{if .IsChain}}false{{else}}true{{end}}"><button class="small-cta">{{if .IsChain}}Clear Chain Badge{{else}}Mark Chain{{end}}</button></form>{{end}}
     {{end}}

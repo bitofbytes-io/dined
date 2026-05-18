@@ -217,6 +217,9 @@ h3 {
   font-weight: 900;
   text-transform: uppercase;
 }
+.flash.notice {
+  background: var(--aqua-dark);
+}
 
 button, .small-cta, .primary-button, .secondary-button {
   display: inline-flex;
@@ -312,6 +315,16 @@ a:focus-visible, button:focus-visible {
   font-size: 3.15rem;
 }
 .section-head a { font-weight: 900; }
+.section-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: .75rem;
+}
+.section-actions form {
+  margin: 0;
+}
 
 /* Home counter */
 .booth-stage {
