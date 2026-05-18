@@ -27,6 +27,7 @@ type DinerStore interface {
 	CreateVisit(context.Context, model.VisitInput) (*uuid.UUID, error)
 	UpdateRestaurantGoogleMetadata(context.Context, uuid.UUID, model.GoogleRestaurantMetadata) error
 	DeleteVisit(context.Context, uuid.UUID) error
+	DeleteRestaurantIfUnvisited(context.Context, uuid.UUID) (bool, error)
 	ToggleChain(context.Context, uuid.UUID, bool) error
 	Stats(context.Context) (model.Stats, error)
 	PickerTurn(context.Context) (model.PickerTurn, error)
@@ -354,6 +355,21 @@ func (s *Store) UpdateRestaurantGoogleMetadata(ctx context.Context, id uuid.UUID
 func (s *Store) DeleteVisit(ctx context.Context, id uuid.UUID) error {
 	_, err := s.pool.Exec(ctx, `DELETE FROM dining_visits WHERE id = $1`, id)
 	return err
+}
+
+func (s *Store) DeleteRestaurantIfUnvisited(ctx context.Context, id uuid.UUID) (bool, error) {
+	tag, err := s.pool.Exec(ctx, `
+		DELETE FROM restaurants r
+		WHERE r.id = $1
+		  AND NOT EXISTS (
+		    SELECT 1
+		    FROM dining_visits v
+		    WHERE v.restaurant_id = r.id
+		  )`, id)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, nil
 }
 
 func (s *Store) ToggleChain(ctx context.Context, id uuid.UUID, isChain bool) error {

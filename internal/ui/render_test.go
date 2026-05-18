@@ -272,6 +272,47 @@ func TestRenderAuthenticatedDinesUsesDeleteConfirmationModal(t *testing.T) {
 	}
 }
 
+func TestRenderSearchShowsRemoveOnlyForZeroVisitSavedSpots(t *testing.T) {
+	orphanID := uuid.New()
+	visitedID := uuid.New()
+	var out strings.Builder
+	err := Render(&out, "search", PageData{
+		Query: "Amigos",
+		SearchResults: []RestaurantResult{
+			{
+				Restaurant: model.Restaurant{ID: orphanID, Name: "Amigos"},
+				VisitCount: 0,
+			},
+			{
+				Restaurant: model.Restaurant{ID: visitedID, Name: "Tupelo Honey"},
+				LatestVisit: &model.Visit{
+					VisitedAt:  time.Date(2026, 5, 16, 18, 30, 0, 0, time.UTC),
+					Picker:     model.Person{Name: "Daniel"},
+					PriceLevel: 2,
+				},
+				VisitCount:    1,
+				AverageRating: 7.9,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered := out.String()
+	if got := strings.Count(rendered, "history-remove-button"); got != 1 {
+		t.Fatalf("rendered %d remove buttons, want 1:\n%s", got, rendered)
+	}
+	if !strings.Contains(rendered, `action="/restaurants/`+orphanID.String()+`/delete"`) {
+		t.Fatalf("rendered search missing orphan delete form:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, `name="q" value="Amigos"`) {
+		t.Fatalf("rendered search missing preserved query input:\n%s", rendered)
+	}
+	if strings.Contains(rendered, `action="/restaurants/`+visitedID.String()+`/delete"`) {
+		t.Fatalf("rendered search allowed removing visited restaurant:\n%s", rendered)
+	}
+}
+
 func withWorkingDir(t *testing.T) {
 	t.Helper()
 	original, err := os.Getwd()
