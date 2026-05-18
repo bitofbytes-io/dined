@@ -275,6 +275,7 @@ button:disabled {
 }
 input, select, textarea {
   width: 100%;
+  min-width: 0;
   min-height: 2.95rem;
   padding: .74rem .86rem;
   color: var(--ink);
@@ -821,6 +822,9 @@ a:focus-visible, button:focus-visible {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(13.5rem, 1fr));
   gap: .9rem;
+}
+.form-grid > label {
+  min-width: 0;
 }
 .visit-form-grid {
   grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
