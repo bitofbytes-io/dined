@@ -702,9 +702,13 @@ type restaurantRatingAggregate struct {
 }
 
 func topRestaurantStats(values map[uuid.UUID]*restaurantRatingAggregate) []model.RestaurantRatingStat {
+	return topRestaurantStatsWithMinRatings(values, 2)
+}
+
+func topRestaurantStatsWithMinRatings(values map[uuid.UUID]*restaurantRatingAggregate, minRatings int) []model.RestaurantRatingStat {
 	var restaurants []model.RestaurantRatingStat
 	for _, value := range values {
-		if len(value.ratings) < 2 {
+		if len(value.ratings) < minRatings {
 			continue
 		}
 		restaurants = append(restaurants, model.RestaurantRatingStat{
@@ -732,7 +736,7 @@ func topRestaurantStats(values map[uuid.UUID]*restaurantRatingAggregate) []model
 func topRestaurantStatsByCuisine(values map[string]map[uuid.UUID]*restaurantRatingAggregate) []model.CuisineRestaurantStat {
 	var restaurants []model.CuisineRestaurantStat
 	for _, cuisineRestaurants := range values {
-		candidates := topRestaurantStats(cuisineRestaurants)
+		candidates := topRestaurantStatsWithMinRatings(cuisineRestaurants, 1)
 		if len(candidates) == 0 {
 			continue
 		}

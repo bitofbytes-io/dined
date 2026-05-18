@@ -591,6 +591,7 @@ func TestMemoryStoreTopRestaurantsRequireTwoRatingsAndSortDeterministically(t *t
 		t.Fatalf("CitiesExplored = %d, want 3", stats.CitiesExplored)
 	}
 	wantCuisine := []model.CuisineRestaurantStat{
+		{Cuisine: "Indian", Name: "Solo"},
 		{Cuisine: "Italian", Name: "Abacus"},
 		{Cuisine: "Mexican", Name: "Bravo"},
 	}

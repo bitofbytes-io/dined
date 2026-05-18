@@ -615,7 +615,7 @@ func (s *Store) topRestaurantsByCuisine(ctx context.Context) ([]model.CuisineRes
 			JOIN visit_participant_ratings vr ON vr.visit_id = v.id
 			WHERE r.category IS NOT NULL AND btrim(r.category) <> ''
 			GROUP BY lower(btrim(r.category)), btrim(r.category), r.id, r.name
-			HAVING COUNT(vr.rating) >= 2
+			HAVING COUNT(vr.rating) >= 1
 		),
 		ranked_restaurants AS (
 			SELECT cuisine,
