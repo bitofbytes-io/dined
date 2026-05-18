@@ -372,20 +372,33 @@ const templates = `
 	      }
 	    });
 
-    document.addEventListener("submit", function (event) {
-      var form = event.target;
-      if (!form || form.id !== "nearby-form") return;
-      var lat = form.querySelector("input[name='lat']");
-      var lng = form.querySelector("input[name='lng']");
-      var near = form.querySelector("input[name='near']");
-      if (!lat || !lng || (lat.value.trim() && lng.value.trim()) || (near && near.value.trim())) return;
-      event.preventDefault();
-      var useLocation = document.getElementById("use-location");
-      if (useLocation) useLocation.click();
-    });
-  </script>
-</body>
-</html>
+	    document.addEventListener("submit", function (event) {
+	      var form = event.target;
+	      if (!form || form.id !== "nearby-form") return;
+	      var lat = form.querySelector("input[name='lat']");
+	      var lng = form.querySelector("input[name='lng']");
+	      var near = form.querySelector("input[name='near']");
+	      if (!lat || !lng || (lat.value.trim() && lng.value.trim()) || (near && near.value.trim())) return;
+	      event.preventDefault();
+	      var useLocation = document.getElementById("use-location");
+	      if (useLocation) useLocation.click();
+	    });
+
+	    function dinedConfirmDelete(event, form) {
+	      if (event) event.preventDefault();
+	      var modal = document.getElementById("delete-dine-modal");
+	      var modalForm = document.getElementById("delete-dine-confirm-form");
+	      if (!modal || !modalForm || typeof modal.showModal !== "function") {
+	        if (confirm("Delete this dine?")) form.submit();
+	        return false;
+	      }
+	      modalForm.action = form.action;
+	      modal.showModal();
+	      return false;
+	    }
+	  </script>
+	</body>
+	</html>
 {{end}}
 
 {{define "visit-list"}}
@@ -402,10 +415,23 @@ const templates = `
       <div class="ratings">{{range .Ratings}}<span>{{.Person.Name}} {{score .Score}}</span>{{end}}</div>
       {{if .Tags}}<div class="tags">{{range .Tags}}<span>{{.Name}}</span>{{end}}</div>{{end}}
       {{if .Notes}}<p class="note">{{.Notes}}</p>{{end}}
-      {{if $.Authenticated}}<form method="post" action="/visits/{{.ID}}/delete" onsubmit="return confirm('Delete this dine?')"><button class="danger">Delete</button></form>{{end}}
+      {{if $.Authenticated}}<form method="post" action="/visits/{{.ID}}/delete" data-delete-dine-form><button class="danger" type="button" onclick="return dinedConfirmDelete(event, this.form)">Delete</button></form>{{end}}
     </article>
   {{end}}
   </div>
+  {{if $.Authenticated}}
+  <dialog class="confirm-modal" id="delete-dine-modal" aria-labelledby="delete-dine-title">
+    <div class="confirm-card">
+      <h2 id="delete-dine-title">Delete this dine?</h2>
+      <p>This removes the dine and its ratings from the ledger.</p>
+      <div class="confirm-actions">
+        <button type="button" class="secondary-button" onclick="this.closest('dialog').close()">Cancel</button>
+        <button type="button" class="danger" onclick="document.getElementById('delete-dine-confirm-form').submit()">Delete</button>
+      </div>
+    </div>
+    <form method="post" id="delete-dine-confirm-form"></form>
+  </dialog>
+  {{end}}
 {{else}}
   <p class="empty">No dines logged yet.</p>
 {{end}}

@@ -205,6 +205,44 @@ func TestRenderLogPreservesPrefillCity(t *testing.T) {
 	}
 }
 
+func TestRenderAuthenticatedDinesUsesDeleteConfirmationModal(t *testing.T) {
+	visitID := uuid.New()
+	var out strings.Builder
+	err := Render(&out, "dines", PageData{
+		Authenticated: true,
+		Visits: []model.Visit{
+			{
+				ID: visitID,
+				Restaurant: model.Restaurant{
+					ID:   uuid.New(),
+					Name: "Tupelo Honey",
+				},
+				VisitedAt:  time.Date(2026, 5, 16, 12, 0, 0, 0, time.UTC),
+				Picker:     model.Person{Name: "Daniel"},
+				PriceLevel: 2,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rendered := out.String()
+	for _, fragment := range []string{
+		`action="/visits/` + visitID.String() + `/delete" data-delete-dine-form`,
+		`<dialog class="confirm-modal" id="delete-dine-modal"`,
+		`id="delete-dine-confirm-form"`,
+		`Delete this dine?`,
+	} {
+		if !strings.Contains(rendered, fragment) {
+			t.Fatalf("rendered dines missing %q:\n%s", fragment, rendered)
+		}
+	}
+	if strings.Contains(rendered, `onsubmit="return confirm`) {
+		t.Fatalf("rendered dines still uses inline browser confirm:\n%s", rendered)
+	}
+}
+
 func withWorkingDir(t *testing.T) {
 	t.Helper()
 	original, err := os.Getwd()
