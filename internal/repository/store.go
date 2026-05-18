@@ -358,12 +358,12 @@ func (s *Store) UpdateRestaurantGoogleMetadata(ctx context.Context, id uuid.UUID
 	latitude, longitude, phone, website, googleRating, googlePriceLevel := googleMetadataValues(metadata)
 	_, err := s.pool.Exec(ctx, `
 		UPDATE restaurants
-		SET latitude = COALESCE(latitude, $2),
-		    longitude = COALESCE(longitude, $3),
-		    phone = COALESCE(phone, $4),
-		    website = COALESCE(website, $5),
-		    google_rating = COALESCE(google_rating, $6),
-		    google_price_level = COALESCE(google_price_level, $7),
+		SET latitude = COALESCE($2, latitude),
+		    longitude = COALESCE($3, longitude),
+		    phone = COALESCE($4, phone),
+		    website = COALESCE($5, website),
+		    google_rating = COALESCE($6, google_rating),
+		    google_price_level = COALESCE($7, google_price_level),
 		    updated_at = NOW()
 		WHERE id = $1`, id, latitude, longitude, phone, website, googleRating, googlePriceLevel)
 	if err != nil {

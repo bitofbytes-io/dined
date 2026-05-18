@@ -477,6 +477,54 @@ func TestMemoryStoreCreateVisitPreservesRestaurantOverrides(t *testing.T) {
 	}
 }
 
+func TestMemoryStoreUpdateRestaurantGoogleMetadataRefreshesExistingValues(t *testing.T) {
+	store := NewMemoryStore()
+	restaurantID := store.restaurants[0].ID
+	if err := store.UpdateRestaurant(context.Background(), restaurantID, model.RestaurantInput{
+		Name:             "Hank's Corrected Diner",
+		Address:          "202 Corrected Way",
+		City:             "Garner",
+		Phone:            "919-555-0199",
+		Website:          "https://old.example",
+		GoogleRating:     floatPtr(4.1),
+		GooglePriceLevel: intPtr(1),
+		Category:         "Southern",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	lat := 35.8
+	lng := -78.7
+	rating := 4.9
+	price := 3
+	if err := store.UpdateRestaurantGoogleMetadata(context.Background(), restaurantID, model.GoogleRestaurantMetadata{
+		Latitude:         &lat,
+		Longitude:        &lng,
+		Phone:            "919-555-0101",
+		Website:          "https://fresh.example",
+		GoogleRating:     &rating,
+		GooglePriceLevel: &price,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	restaurant, err := store.Restaurant(context.Background(), restaurantID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertRestaurantGoogleMetadata(t, *restaurant, rating, price, lat, lng)
+	if restaurant.Phone == nil || *restaurant.Phone != "919-555-0101" {
+		t.Fatalf("Phone = %#v, want refreshed value", restaurant.Phone)
+	}
+	if restaurant.Website == nil || *restaurant.Website != "https://fresh.example" {
+		t.Fatalf("Website = %#v, want refreshed value", restaurant.Website)
+	}
+	visit := visitByID(t, store, store.visits[0].ID)
+	if visit.Restaurant.GoogleRating == nil || *visit.Restaurant.GoogleRating != rating {
+		t.Fatalf("visit restaurant copy was not refreshed: %#v", visit.Restaurant)
+	}
+}
+
 func TestMemoryStoreStatsIncludesTrophyMetrics(t *testing.T) {
 	store := NewMemoryStore()
 
