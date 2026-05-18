@@ -519,6 +519,24 @@ func TestRenderSearchShowsRemoveOnlyForZeroVisitSavedSpots(t *testing.T) {
 	if strings.Contains(rendered, `action="/restaurants/`+visitedID.String()+`/delete"`) {
 		t.Fatalf("rendered search allowed removing visited restaurant:\n%s", rendered)
 	}
+	if strings.Contains(rendered, "Google Places results will appear here") {
+		t.Fatalf("rendered search showed Google Places warning with saved spots:\n%s", rendered)
+	}
+}
+
+func TestRenderSearchDoesNotShowGooglePlacesWarningForEmptySavedSearch(t *testing.T) {
+	var out strings.Builder
+	err := Render(&out, "search", PageData{Query: "Amigos"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered := out.String()
+	if !strings.Contains(rendered, "No saved dines match that search yet.") {
+		t.Fatalf("rendered search missing saved-search empty state:\n%s", rendered)
+	}
+	if strings.Contains(rendered, "Google Places results will appear here") {
+		t.Fatalf("rendered search showed Google Places warning:\n%s", rendered)
+	}
 }
 
 func withWorkingDir(t *testing.T) {
