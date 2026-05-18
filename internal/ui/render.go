@@ -268,7 +268,10 @@ const templates = `
 
 {{define "bottom"}}
 	  </div>
+	  {{if .Authenticated}}{{template "delete-confirm-modal" .}}{{end}}
 	  <script>
+	    var dinedPendingDeleteForm = null;
+
 	    function dinedRestaurantOptions(value) {
 	      var options = document.querySelectorAll("#restaurant-options option");
 	      var matches = [];
@@ -408,19 +411,68 @@ const templates = `
 
 	    function dinedConfirmDelete(event, form) {
 	      if (event) event.preventDefault();
+	      if (!form) return false;
 	      var modal = document.getElementById("delete-dine-modal");
-	      var modalForm = document.getElementById("delete-dine-confirm-form");
-	      if (!modal || !modalForm || typeof modal.showModal !== "function") {
-	        if (confirm("Delete this dine?")) form.submit();
+	      var title = form.dataset.deleteTitle || "Delete this item?";
+	      var message = form.dataset.deleteMessage || "This action cannot be undone.";
+	      var confirmText = form.dataset.deleteConfirm || "Delete";
+	      if (!modal || typeof modal.showModal !== "function") {
+	        if (confirm(title)) dinedSubmitDeleteForm(form);
 	        return false;
 	      }
-	      modalForm.action = form.action;
-	      modal.showModal();
+	      dinedPendingDeleteForm = form;
+	      var titleNode = document.getElementById("delete-dine-title");
+	      var messageNode = document.getElementById("delete-dine-message");
+	      var confirmButton = document.getElementById("delete-dine-confirm-button");
+	      if (titleNode) titleNode.textContent = title;
+	      if (messageNode) messageNode.textContent = message;
+	      if (confirmButton) confirmButton.textContent = confirmText;
+	      if (!modal.open) modal.showModal();
 	      return false;
 	    }
+
+	    function dinedSubmitPendingDelete() {
+	      var form = dinedPendingDeleteForm;
+	      dinedPendingDeleteForm = null;
+	      if (!form) return;
+	      var modal = document.getElementById("delete-dine-modal");
+	      if (modal && modal.open) modal.close();
+	      dinedSubmitDeleteForm(form);
+	    }
+
+	    function dinedCancelDelete(button) {
+	      dinedPendingDeleteForm = null;
+	      var modal = button ? button.closest("dialog") : document.getElementById("delete-dine-modal");
+	      if (modal && modal.open) modal.close();
+	    }
+
+	    function dinedSubmitDeleteForm(form) {
+	      HTMLFormElement.prototype.submit.call(form);
+	    }
+
+	    (function () {
+	      var modal = document.getElementById("delete-dine-modal");
+	      if (!modal) return;
+	      modal.addEventListener("close", function () {
+	        dinedPendingDeleteForm = null;
+	      });
+	    }());
 	  </script>
 	</body>
 	</html>
+{{end}}
+
+{{define "delete-confirm-modal"}}
+  <dialog class="confirm-modal" id="delete-dine-modal" aria-labelledby="delete-dine-title" aria-describedby="delete-dine-message">
+    <div class="confirm-card">
+      <h2 id="delete-dine-title">Delete this item?</h2>
+      <p id="delete-dine-message">This action cannot be undone.</p>
+      <div class="confirm-actions">
+        <button type="button" class="secondary-button" id="delete-dine-cancel-button" onclick="dinedCancelDelete(this)">Cancel</button>
+        <button type="button" class="danger" id="delete-dine-confirm-button" onclick="dinedSubmitPendingDelete()">Delete</button>
+      </div>
+    </div>
+  </dialog>
 {{end}}
 
 {{define "visit-list"}}
@@ -437,23 +489,10 @@ const templates = `
       <div class="ratings">{{range .Ratings}}<span>{{.Person.Name}} {{score .Score}}</span>{{end}}</div>
       {{if .Tags}}<div class="tags">{{range .Tags}}<span>{{.Name}}</span>{{end}}</div>{{end}}
       {{if .Notes}}<p class="note">{{.Notes}}</p>{{end}}
-      {{if $.Authenticated}}<div class="visit-actions"><a class="secondary-button" href="/visits/{{.ID}}/edit">Edit</a><form method="post" action="/visits/{{.ID}}/delete" hx-boost="false" data-delete-dine-form onsubmit="return dinedConfirmDelete(event, this)"><button class="danger">Delete</button></form></div>{{end}}
+      {{if $.Authenticated}}<div class="visit-actions"><a class="secondary-button" href="/visits/{{.ID}}/edit">Edit</a><form method="post" action="/visits/{{.ID}}/delete" hx-boost="false" data-delete-dine-form data-delete-title="Delete this dine?" data-delete-message="This removes the dine and its ratings from the ledger." data-delete-confirm="Delete" onsubmit="return dinedConfirmDelete(event, this)"><button class="danger">Delete</button></form></div>{{end}}
     </article>
   {{end}}
   </div>
-  {{if $.Authenticated}}
-  <dialog class="confirm-modal" id="delete-dine-modal" aria-labelledby="delete-dine-title">
-    <div class="confirm-card">
-      <h2 id="delete-dine-title">Delete this dine?</h2>
-      <p>This removes the dine and its ratings from the ledger.</p>
-      <div class="confirm-actions">
-        <button type="button" class="secondary-button" onclick="this.closest('dialog').close()">Cancel</button>
-        <button type="button" class="danger" onclick="document.getElementById('delete-dine-confirm-form').submit()">Delete</button>
-      </div>
-    </div>
-    <form method="post" id="delete-dine-confirm-form"></form>
-  </dialog>
-  {{end}}
 {{else}}
   <p class="empty">No dines logged yet.</p>
 {{end}}
@@ -649,7 +688,7 @@ const templates = `
     <p class="eyebrow">Counter Search</p>
     <h1>Have we eaten here before?</h1>
     <form class="search-row" method="get" action="/search"><input name="q" type="search" value="{{.Query}}" placeholder="Restaurant name"><button>Search</button></form>
-    {{if .SearchResults}}<h2>Saved Spots</h2><div class="restaurant-list history-list">{{range .SearchResults}}<article class="restaurant-row history-row"><div class="history-title"><a href="/restaurants/{{.Restaurant.ID}}"><strong>{{.Restaurant.Name}}</strong></a>{{if .Restaurant.IsChain}}<em>Chain</em>{{end}}</div><span>{{if .Restaurant.Address}}{{.Restaurant.Address}}{{end}}</span>{{with .LatestVisit}}<span>Last visit {{date .VisitedAt}} · Picked by {{.Picker.Name}} · {{dollars .PriceLevel}}</span>{{end}}<div class="row-stats"><span>{{.VisitCount}} {{if eq .VisitCount 1}}visit{{else}}visits{{end}}</span><span>Avg {{score .AverageRating}}</span></div>{{if .Tags}}<div class="tags">{{range .Tags}}<span>{{.Name}}</span>{{end}}</div>{{end}}{{if eq .VisitCount 0}}<form class="history-remove-form" method="post" action="/restaurants/{{.Restaurant.ID}}/delete" onsubmit="return confirm('Remove this saved spot?')"><input type="hidden" name="q" value="{{$.Query}}"><button class="danger history-remove-button" type="submit" aria-label="Remove {{.Restaurant.Name}} from saved spots">Remove</button></form>{{end}}</article>{{end}}</div>{{else if .Query}}<p class="empty">No saved dines match that search yet.</p>{{end}}
+    {{if .SearchResults}}<h2>Saved Spots</h2><div class="restaurant-list history-list">{{range .SearchResults}}<article class="restaurant-row history-row"><div class="history-title"><a href="/restaurants/{{.Restaurant.ID}}"><strong>{{.Restaurant.Name}}</strong></a>{{if .Restaurant.IsChain}}<em>Chain</em>{{end}}</div><span>{{if .Restaurant.Address}}{{.Restaurant.Address}}{{end}}</span>{{with .LatestVisit}}<span>Last visit {{date .VisitedAt}} · Picked by {{.Picker.Name}} · {{dollars .PriceLevel}}</span>{{end}}<div class="row-stats"><span>{{.VisitCount}} {{if eq .VisitCount 1}}visit{{else}}visits{{end}}</span><span>Avg {{score .AverageRating}}</span></div>{{if .Tags}}<div class="tags">{{range .Tags}}<span>{{.Name}}</span>{{end}}</div>{{end}}{{if and $.Authenticated (eq .VisitCount 0)}}<form class="history-remove-form" method="post" action="/restaurants/{{.Restaurant.ID}}/delete" hx-boost="false" data-delete-title="Remove saved spot?" data-delete-message="This removes the saved restaurant from search. Dines with visits cannot be removed here." data-delete-confirm="Remove" onsubmit="return dinedConfirmDelete(event, this)"><input type="hidden" name="q" value="{{$.Query}}"><button class="danger history-remove-button" type="submit" aria-label="Remove {{.Restaurant.Name}} from saved spots">Remove</button></form>{{end}}</article>{{end}}</div>{{else if .Query}}<p class="empty">No saved dines match that search yet.</p>{{end}}
     {{if .Places}}<h2>Around Town</h2><div class="restaurant-list places-list">{{range .Places}}<article class="restaurant-row place-row"><div><strong>{{.DisplayName.Text}}</strong>{{if .Rating}}<em>{{score .Rating}} Google</em>{{end}}</div><span>{{.Address}}</span><span>{{if price .PriceLevel}}{{dollars (price .PriceLevel)}}{{else}}Price not listed{{end}}</span>{{if $.Authenticated}}<a class="small-cta" href="/log?restaurant_name={{query .DisplayName.Text}}&address={{query .Address}}&city={{query (placeCity .)}}&google_place_id={{query .ID}}{{if .Phone}}&phone={{query .Phone}}{{end}}{{if .Website}}&website={{query .Website}}{{end}}{{if .Rating}}&google_rating={{query (printf "%.1f" .Rating)}}{{end}}{{if price .PriceLevel}}&google_price_level={{price .PriceLevel}}{{end}}{{if .Location.Latitude}}&latitude={{query (printf "%.6f" .Location.Latitude)}}{{end}}{{if .Location.Longitude}}&longitude={{query (printf "%.6f" .Location.Longitude)}}{{end}}&category={{query (placeCategory .)}}&price_level={{price .PriceLevel}}">Log this dine</a>{{end}}</article>{{end}}</div>{{else if .Query}}<p class="empty">Google Places results will appear here when a Places API key is configured.</p>{{end}}
   </section>
 </main>

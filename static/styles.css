@@ -761,9 +761,6 @@ a:focus-visible, button:focus-visible {
   box-shadow: 0 0 0 .28rem rgba(255, 212, 99, .72), inset 0 -2px 0 rgba(0, 0, 0, .2), 0 3px 0 var(--red-dark);
   transform: translateY(1px);
 }
-#delete-dine-confirm-form {
-  display: none;
-}
 .empty {
   color: var(--ink-soft);
   font-family: var(--condensed);

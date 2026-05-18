@@ -285,9 +285,11 @@ func TestRenderAuthenticatedDinesUsesEditLinkAndDeleteConfirmationModal(t *testi
 		`/visits/` + visitID.String() + `/edit`,
 		`action="/visits/` + visitID.String() + `/delete" hx-boost="false" data-delete-dine-form`,
 		`onsubmit="return dinedConfirmDelete(event, this)"`,
+		`data-delete-title="Delete this dine?"`,
+		`data-delete-message="This removes the dine and its ratings from the ledger."`,
 		`<dialog class="confirm-modal" id="delete-dine-modal"`,
-		`id="delete-dine-confirm-form"`,
-		`Delete this dine?`,
+		`id="delete-dine-cancel-button"`,
+		`id="delete-dine-confirm-button"`,
 	} {
 		if !strings.Contains(rendered, fragment) {
 			t.Fatalf("rendered dines missing %q:\n%s", fragment, rendered)
@@ -390,7 +392,8 @@ func TestRenderSearchShowsRemoveOnlyForZeroVisitSavedSpots(t *testing.T) {
 	visitedID := uuid.New()
 	var out strings.Builder
 	err := Render(&out, "search", PageData{
-		Query: "Amigos",
+		Authenticated: true,
+		Query:         "Amigos",
 		SearchResults: []RestaurantResult{
 			{
 				Restaurant: model.Restaurant{ID: orphanID, Name: "Amigos"},
@@ -418,8 +421,22 @@ func TestRenderSearchShowsRemoveOnlyForZeroVisitSavedSpots(t *testing.T) {
 	if !strings.Contains(rendered, `action="/restaurants/`+orphanID.String()+`/delete"`) {
 		t.Fatalf("rendered search missing orphan delete form:\n%s", rendered)
 	}
+	for _, fragment := range []string{
+		`hx-boost="false"`,
+		`data-delete-title="Remove saved spot?"`,
+		`data-delete-confirm="Remove"`,
+		`onsubmit="return dinedConfirmDelete(event, this)"`,
+		`<dialog class="confirm-modal" id="delete-dine-modal"`,
+	} {
+		if !strings.Contains(rendered, fragment) {
+			t.Fatalf("rendered search missing %q:\n%s", fragment, rendered)
+		}
+	}
 	if !strings.Contains(rendered, `name="q" value="Amigos"`) {
 		t.Fatalf("rendered search missing preserved query input:\n%s", rendered)
+	}
+	if strings.Contains(rendered, `onsubmit="return confirm`) {
+		t.Fatalf("rendered search still uses inline browser confirm:\n%s", rendered)
 	}
 	if strings.Contains(rendered, `action="/restaurants/`+visitedID.String()+`/delete"`) {
 		t.Fatalf("rendered search allowed removing visited restaurant:\n%s", rendered)
