@@ -124,6 +124,9 @@ func TestRenderTrophyShowsRedesignedRecordsAndTopRestaurants(t *testing.T) {
 			TopRestaurants: []model.RestaurantRatingStat{
 				{Name: "El Patio Verde", AverageRating: 8.6, RatingCount: 4, VisitCount: 1},
 			},
+			TopRestaurantsByCuisine: []model.CuisineRestaurantStat{
+				{Cuisine: "Mexican", Name: "El Patio Verde", AverageRating: 8.6, RatingCount: 4, VisitCount: 1},
+			},
 		},
 		PickerTurn: model.PickerTurn{NextPicker: model.Person{Name: "Caleb"}},
 	}
@@ -139,6 +142,8 @@ func TestRenderTrophyShowsRedesignedRecordsAndTopRestaurants(t *testing.T) {
 		"New Places",
 		"Cities Explored",
 		"All-Time Top Restaurants",
+		"Best By Cuisine",
+		"Mexican",
 		"El Patio Verde",
 		"8.6 avg",
 	} {
@@ -162,7 +167,7 @@ func TestRenderTrophyTopRestaurantsEmptyState(t *testing.T) {
 		t.Fatal(err)
 	}
 	rendered := out.String()
-	if !strings.Contains(rendered, "All-Time Top Restaurants") || !strings.Contains(rendered, "Waiting on more dines") {
+	if !strings.Contains(rendered, "All-Time Top Restaurants") || !strings.Contains(rendered, "Waiting on more dines") || !strings.Contains(rendered, "Waiting on cuisine data") {
 		t.Fatalf("rendered trophy missing top restaurant empty state:\n%s", rendered)
 	}
 }

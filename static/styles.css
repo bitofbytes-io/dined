@@ -1355,6 +1355,11 @@ fieldset {
   font-size: .98rem;
   text-transform: uppercase;
 }
+.track-section-title {
+  margin-top: .85rem;
+  padding-top: .65rem;
+  border-top: 2px solid rgba(255, 247, 223, .22);
+}
 .top-restaurant-list {
   display: grid;
   gap: .18rem;
@@ -1377,6 +1382,13 @@ fieldset {
 .track-rank {
   color: var(--milk);
   text-align: center;
+}
+.track-cuisine {
+  color: var(--milk);
+  overflow-wrap: anywhere;
+}
+.cuisine-restaurant-list li {
+  grid-template-columns: minmax(4.5rem, 7rem) minmax(0, 1fr) auto;
 }
 .track-name {
   min-width: 0;
@@ -1736,10 +1748,16 @@ fieldset {
     grid-template-columns: 1.4rem minmax(0, 1fr);
     gap: .55rem;
   }
+  .cuisine-restaurant-list li {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .track-score {
     grid-column: 2;
     justify-self: start;
     text-align: left;
+  }
+  .cuisine-restaurant-list .track-score {
+    grid-column: 1;
   }
 }
 
