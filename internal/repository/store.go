@@ -314,9 +314,6 @@ func (s *Store) CreateVisit(ctx context.Context, input model.VisitInput) (*uuid.
 	}
 
 	for personID, score := range input.Ratings {
-		if score == 0 {
-			continue
-		}
 		_, err := tx.Exec(ctx, `
 			INSERT INTO visit_participant_ratings (visit_id, person_id, rating)
 			VALUES ($1, $2, $3)`, visitID, personID, score)
@@ -420,9 +417,6 @@ func (s *Store) UpdateVisit(ctx context.Context, id uuid.UUID, input model.Visit
 		return fmt.Errorf("clear visit ratings: %w", err)
 	}
 	for personID, score := range input.Ratings {
-		if score == 0 {
-			continue
-		}
 		_, err := tx.Exec(ctx, `
 			INSERT INTO visit_participant_ratings (visit_id, person_id, rating)
 			VALUES ($1, $2, $3)`, id, personID, score)

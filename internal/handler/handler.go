@@ -133,6 +133,10 @@ func (h *Handler) CreateVisit(w http.ResponseWriter, r *http.Request) {
 		h.renderLogError(w, r, err.Error())
 		return
 	}
+	if err := input.Validate(); err != nil {
+		h.renderLogError(w, r, err.Error())
+		return
+	}
 	enrichedInput, err := placesync.EnrichVisitInput(r.Context(), h.places, input)
 	if err != nil {
 		slog.Warn("places details failed", "place_id", input.GooglePlaceID, "error", err)
@@ -581,8 +585,45 @@ func (h *Handler) renderLogError(w http.ResponseWriter, r *http.Request, message
 		h.error(w, "log error data", err)
 		return
 	}
+	overlayLogPostForm(&data, r)
 	data.Error = message
 	h.render(w, "log", r, data)
+}
+
+func overlayLogPostForm(data *ui.PageData, r *http.Request) {
+	data.PrefillRestaurantID = r.FormValue("restaurant_id")
+	data.PrefillName = r.FormValue("restaurant_name")
+	data.PrefillAddress = r.FormValue("address")
+	data.PrefillCity = r.FormValue("city")
+	data.PrefillLatitude = r.FormValue("latitude")
+	data.PrefillLongitude = r.FormValue("longitude")
+	data.PrefillPhone = r.FormValue("phone")
+	data.PrefillWebsite = r.FormValue("website")
+	data.PrefillPlaceID = r.FormValue("google_place_id")
+	data.PrefillGoogleRating = r.FormValue("google_rating")
+	data.PrefillGooglePriceLevel = r.FormValue("google_price_level")
+	data.PrefillCategory = r.FormValue("category")
+	data.NowLocal = r.FormValue("visited_at")
+	data.PrefillPickerID = r.FormValue("picker_id")
+	data.PrefillNotes = r.FormValue("notes")
+	data.PrefillNewTag = r.FormValue("new_tag")
+	data.PrefillIsChain = r.FormValue("is_chain") == "true"
+	if priceLevel, err := strconv.Atoi(r.FormValue("price_level")); err == nil {
+		data.PrefillPriceLevel = priceLevel
+	}
+
+	data.PrefillRatings = map[string]string{}
+	for key, values := range r.PostForm {
+		if len(values) == 0 || !strings.HasPrefix(key, "rating_") {
+			continue
+		}
+		data.PrefillRatings[strings.TrimPrefix(key, "rating_")] = values[0]
+	}
+
+	data.PrefillTagIDs = map[string]bool{}
+	for _, tagID := range r.PostForm["tag_id"] {
+		data.PrefillTagIDs[tagID] = true
+	}
 }
 
 func (h *Handler) visitEditData(r *http.Request, id uuid.UUID) (ui.PageData, error) {

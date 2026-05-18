@@ -20,6 +20,19 @@ func TestVisitInputValidateRequiresRating(t *testing.T) {
 	}
 }
 
+func TestVisitInputValidateAcceptsZeroRating(t *testing.T) {
+	err := VisitInput{
+		RestaurantName: "Hank's",
+		VisitedAt:      time.Now(),
+		PickerID:       uuid.New(),
+		PriceLevel:     2,
+		Ratings:        map[uuid.UUID]float64{uuid.New(): 0},
+	}.Validate()
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestVisitInputValidateAcceptsHalfPoint(t *testing.T) {
 	err := VisitInput{
 		RestaurantName: "Hank's",

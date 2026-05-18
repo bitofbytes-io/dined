@@ -261,6 +261,74 @@ func TestRenderLogCarriesGoogleMetadataPrefill(t *testing.T) {
 	}
 }
 
+func TestRenderLogValidationAndPreservedState(t *testing.T) {
+	personID := uuid.New()
+	tagID := uuid.New()
+	var out strings.Builder
+	err := Render(&out, "log", PageData{
+		People: []model.Person{
+			{ID: personID, Name: "Jen"},
+		},
+		Tags:                []model.Tag{{ID: tagID, Name: "Great Service"}},
+		NowLocal:            "2026-05-17T20:50",
+		PrefillName:         "Tupelo Honey",
+		PrefillAddress:      "123 Main St",
+		PrefillCity:         "Apex",
+		PrefillPlaceID:      "place-1",
+		PrefillCategory:     "American",
+		PrefillPriceLevel:   3,
+		PrefillPickerID:     personID.String(),
+		PrefillRestaurantID: "restaurant-1",
+		PrefillNotes:        "Dinner notes",
+		PrefillNewTag:       "Patio",
+		PrefillIsChain:      true,
+		PrefillRatings:      map[string]string{personID.String(): "8.5"},
+		PrefillTagIDs:       map[string]bool{tagID.String(): true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered := out.String()
+	for _, fragment := range []string{
+		`data-log-form`,
+		`name="restaurant_name" list="restaurant-options" placeholder="Search or add restaurant" value="Tupelo Honey" required`,
+		`name="city" value="Apex"`,
+		`name="google_place_id" placeholder="Optional" value="place-1"`,
+		`<option selected>American</option>`,
+		`name="visited_at" value="2026-05-17T20:50" required`,
+		`value="` + personID.String() + `" selected>Jen</option>`,
+		`value="3" selected>$$$</option>`,
+		`data-rating-message aria-live="polite" hidden`,
+		`min="0" max="10" step="0.5"`,
+		`value="8.5" data-half-step-rating`,
+		`name="tag_id" value="` + tagID.String() + `" checked`,
+		`name="new_tag" placeholder="Great fries" value="Patio"`,
+		`Dinner notes</textarea>`,
+		`name="is_chain" value="true" checked`,
+		`data-log-submit`,
+		`dinedUpdateLogValidation`,
+	} {
+		if !strings.Contains(rendered, fragment) {
+			t.Fatalf("rendered log missing %q:\n%s", fragment, rendered)
+		}
+	}
+}
+
+func TestRenderLogShowsRatingRequirementWhenNoRating(t *testing.T) {
+	var out strings.Builder
+	err := Render(&out, "log", PageData{People: []model.Person{{ID: uuid.New(), Name: "Daniel"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered := out.String()
+	if !strings.Contains(rendered, "At least one rating is required before saving.") {
+		t.Fatalf("rendered log missing rating requirement:\n%s", rendered)
+	}
+	if strings.Contains(rendered, `data-rating-message aria-live="polite" hidden`) {
+		t.Fatalf("rendered log hid rating requirement without a rating:\n%s", rendered)
+	}
+}
+
 func TestRenderAuthenticatedDinesUsesEditLinkAndDeleteConfirmationModal(t *testing.T) {
 	visitID := uuid.New()
 	restaurantID := uuid.New()

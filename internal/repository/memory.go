@@ -578,17 +578,14 @@ func (m *MemoryStore) ratingsFromInput(input model.VisitInput) []model.Rating {
 	var ratings []model.Rating
 	seen := map[uuid.UUID]struct{}{}
 	for _, person := range m.people {
-		score := input.Ratings[person.ID]
-		if score == 0 {
+		score, ok := input.Ratings[person.ID]
+		if !ok {
 			continue
 		}
 		ratings = append(ratings, model.Rating{Person: person, Score: score})
 		seen[person.ID] = struct{}{}
 	}
 	for personID, score := range input.Ratings {
-		if score == 0 {
-			continue
-		}
 		if _, ok := seen[personID]; ok {
 			continue
 		}

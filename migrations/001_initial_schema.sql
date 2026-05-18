@@ -51,7 +51,7 @@ CREATE TABLE visit_participant_ratings (
     id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     visit_id   UUID NOT NULL REFERENCES dining_visits(id) ON DELETE CASCADE,
     person_id  UUID NOT NULL REFERENCES persons(id),
-    rating     NUMERIC(3,1) NOT NULL CHECK (rating >= 0.5 AND rating <= 10.0 AND rating * 2 = floor(rating * 2)),
+    rating     NUMERIC(3,1) NOT NULL CHECK (rating >= 0.0 AND rating <= 10.0 AND rating * 2 = floor(rating * 2)),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (visit_id, person_id)
