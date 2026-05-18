@@ -229,7 +229,8 @@ func TestRenderAuthenticatedDinesUsesDeleteConfirmationModal(t *testing.T) {
 
 	rendered := out.String()
 	for _, fragment := range []string{
-		`action="/visits/` + visitID.String() + `/delete" data-delete-dine-form`,
+		`action="/visits/` + visitID.String() + `/delete" hx-boost="false" data-delete-dine-form`,
+		`onsubmit="return dinedConfirmDelete(event, this)"`,
 		`<dialog class="confirm-modal" id="delete-dine-modal"`,
 		`id="delete-dine-confirm-form"`,
 		`Delete this dine?`,

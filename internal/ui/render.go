@@ -415,7 +415,7 @@ const templates = `
       <div class="ratings">{{range .Ratings}}<span>{{.Person.Name}} {{score .Score}}</span>{{end}}</div>
       {{if .Tags}}<div class="tags">{{range .Tags}}<span>{{.Name}}</span>{{end}}</div>{{end}}
       {{if .Notes}}<p class="note">{{.Notes}}</p>{{end}}
-      {{if $.Authenticated}}<form method="post" action="/visits/{{.ID}}/delete" data-delete-dine-form><button class="danger" type="button" onclick="return dinedConfirmDelete(event, this.form)">Delete</button></form>{{end}}
+      {{if $.Authenticated}}<form method="post" action="/visits/{{.ID}}/delete" hx-boost="false" data-delete-dine-form onsubmit="return dinedConfirmDelete(event, this)"><button class="danger">Delete</button></form>{{end}}
     </article>
   {{end}}
   </div>
