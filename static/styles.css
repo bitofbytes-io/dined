@@ -1194,7 +1194,7 @@ fieldset {
   --record-to-list-gap: var(--record-row-gap);
   position: relative;
   width: min(100%, 1180px);
-  min-height: 760px;
+  min-height: 880px;
   margin: 0 auto;
   overflow: hidden;
   color: var(--milk);
@@ -1339,7 +1339,7 @@ fieldset {
   position: absolute;
   left: 3rem;
   right: 3rem;
-  top: calc(var(--record-grid-top) + var(--record-size) + var(--record-size) + var(--record-row-gap) + var(--record-to-list-gap));
+  top: calc(var(--record-grid-top) + var(--record-size) + var(--record-size) + var(--record-size) + var(--record-row-gap) + var(--record-row-gap) + var(--record-to-list-gap));
   z-index: 1;
   padding: .95rem 1rem;
   color: var(--milk);
