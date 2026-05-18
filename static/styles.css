@@ -739,6 +739,17 @@ a:focus-visible, button:focus-visible {
 .confirm-actions button {
   min-width: 7.5rem;
 }
+.confirm-actions .danger:hover,
+.confirm-actions .danger:focus-visible {
+  color: var(--milk);
+  background: var(--red);
+  box-shadow: 0 0 0 .35rem rgba(255, 212, 99, .82), inset 0 -4px 0 rgba(0, 0, 0, .18), 0 7px 0 var(--red-dark), 0 12px 18px rgba(6, 21, 22, .28);
+  transform: translateY(-3px);
+}
+.confirm-actions .danger:active {
+  box-shadow: 0 0 0 .28rem rgba(255, 212, 99, .72), inset 0 -2px 0 rgba(0, 0, 0, .2), 0 3px 0 var(--red-dark);
+  transform: translateY(1px);
+}
 #delete-dine-confirm-form {
   display: none;
 }
