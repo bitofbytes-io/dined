@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,34 +18,41 @@ import (
 )
 
 type PageData struct {
-	Title               string
-	Authenticated       bool
-	Error               string
-	Notice              string
-	Visits              []model.Visit
-	People              []model.Person
-	Tags                []model.Tag
-	Restaurants         []model.Restaurant
-	SearchResults       []RestaurantResult
-	Restaurant          *model.Restaurant
-	Stats               model.Stats
-	PickerTurn          model.PickerTurn
-	Places              []places.Place
-	Query               string
-	LocationQuery       string
-	LocationStatus      string
-	HasLocation         bool
-	OriginLatitude      float64
-	OriginLongitude     float64
-	NowLocal            string
-	PrefillName         string
-	PrefillAddress      string
-	PrefillCity         string
-	PrefillPlaceID      string
-	PrefillCategory     string
-	PrefillPriceLevel   int
-	PrefillPickerID     string
-	PrefillRestaurantID string
+	Title                   string
+	Authenticated           bool
+	Error                   string
+	Notice                  string
+	Visits                  []model.Visit
+	Visit                   *model.Visit
+	People                  []model.Person
+	Tags                    []model.Tag
+	Restaurants             []model.Restaurant
+	SearchResults           []RestaurantResult
+	Restaurant              *model.Restaurant
+	Stats                   model.Stats
+	PickerTurn              model.PickerTurn
+	Places                  []places.Place
+	Query                   string
+	LocationQuery           string
+	LocationStatus          string
+	HasLocation             bool
+	OriginLatitude          float64
+	OriginLongitude         float64
+	NowLocal                string
+	PrefillName             string
+	PrefillAddress          string
+	PrefillCity             string
+	PrefillLatitude         string
+	PrefillLongitude        string
+	PrefillPhone            string
+	PrefillWebsite          string
+	PrefillPlaceID          string
+	PrefillGoogleRating     string
+	PrefillGooglePriceLevel string
+	PrefillCategory         string
+	PrefillPriceLevel       int
+	PrefillPickerID         string
+	PrefillRestaurantID     string
 }
 
 type RestaurantResult struct {
@@ -99,6 +107,52 @@ func funcs() template.FuncMap {
 				return fmt.Sprintf("%.0f", n)
 			}
 			return fmt.Sprintf("%.1f", n)
+		},
+		"str": func(value *string) string {
+			if value == nil {
+				return ""
+			}
+			return *value
+		},
+		"floatInput": func(value *float64) string {
+			if value == nil {
+				return ""
+			}
+			return strconv.FormatFloat(*value, 'f', -1, 64)
+		},
+		"intValue": func(value *int) int {
+			if value == nil {
+				return 0
+			}
+			return *value
+		},
+		"datetime": func(t time.Time) string {
+			if t.IsZero() {
+				return ""
+			}
+			return apptime.FormatDatetimeLocal(t)
+		},
+		"ratingValue": func(visit *model.Visit, person model.Person) string {
+			if visit == nil {
+				return ""
+			}
+			for _, rating := range visit.Ratings {
+				if rating.Person.ID == person.ID {
+					return strconv.FormatFloat(rating.Score, 'f', -1, 64)
+				}
+			}
+			return ""
+		},
+		"hasVisitTag": func(visit *model.Visit, tag model.Tag) bool {
+			if visit == nil {
+				return false
+			}
+			for _, existing := range visit.Tags {
+				if existing.ID == tag.ID {
+					return true
+				}
+			}
+			return false
 		},
 		"default": func(value, fallback string) string {
 			if strings.TrimSpace(value) == "" {
@@ -383,7 +437,7 @@ const templates = `
       <div class="ratings">{{range .Ratings}}<span>{{.Person.Name}} {{score .Score}}</span>{{end}}</div>
       {{if .Tags}}<div class="tags">{{range .Tags}}<span>{{.Name}}</span>{{end}}</div>{{end}}
       {{if .Notes}}<p class="note">{{.Notes}}</p>{{end}}
-      {{if $.Authenticated}}<form method="post" action="/visits/{{.ID}}/delete" hx-boost="false" data-delete-dine-form onsubmit="return dinedConfirmDelete(event, this)"><button class="danger">Delete</button></form>{{end}}
+      {{if $.Authenticated}}<div class="visit-actions"><a class="secondary-button" href="/visits/{{.ID}}/edit">Edit</a><form method="post" action="/visits/{{.ID}}/delete" hx-boost="false" data-delete-dine-form onsubmit="return dinedConfirmDelete(event, this)"><button class="danger">Delete</button></form></div>{{end}}
     </article>
   {{end}}
   </div>
@@ -457,6 +511,12 @@ const templates = `
 	      <section class="form-section restaurant-console">
 	        <input type="hidden" name="restaurant_id" value="{{.PrefillRestaurantID}}">
 	        <input type="hidden" name="city" value="{{.PrefillCity}}">
+	        <input type="hidden" name="latitude" value="{{.PrefillLatitude}}">
+	        <input type="hidden" name="longitude" value="{{.PrefillLongitude}}">
+	        <input type="hidden" name="phone" value="{{.PrefillPhone}}">
+	        <input type="hidden" name="website" value="{{.PrefillWebsite}}">
+	        <input type="hidden" name="google_rating" value="{{.PrefillGoogleRating}}">
+	        <input type="hidden" name="google_price_level" value="{{.PrefillGooglePriceLevel}}">
 	        <div class="form-grid restaurant-grid">
 	          <label>Restaurant<input name="restaurant_name" list="restaurant-options" placeholder="Search or add restaurant" value="{{.PrefillName}}"><datalist id="restaurant-options">{{range .Restaurants}}<option value="{{.Name}}" data-restaurant-id="{{.ID}}" data-address="{{if .Address}}{{.Address}}{{end}}" data-city="{{if .City}}{{.City}}{{end}}" data-google-place-id="{{if .GooglePlaceID}}{{.GooglePlaceID}}{{end}}" data-category="{{if .Category}}{{.Category}}{{end}}">{{if .Address}}{{.Address}}{{end}}</option>{{end}}</datalist></label>
 	          <label>Address<input name="address" placeholder="Optional" value="{{.PrefillAddress}}"></label>
@@ -481,17 +541,72 @@ const templates = `
 {{template "bottom" .}}
 {{end}}
 
+{{define "visit-edit"}}
+{{template "top" .}}
+<main class="page-band order-page">
+  {{with .Visit}}{{$visit := .}}
+  <form class="wide-ticket log-form order-pad console-pad" method="post" action="/visits/{{.ID}}">
+    <div class="section-head console-head">
+      <div><h1>Edit Dine</h1><p>{{.Restaurant.Name}}{{if .Restaurant.Address}} · {{.Restaurant.Address}}{{end}}</p></div>
+      <a class="secondary-button" href="/dines#{{.ID}}">Cancel</a>
+    </div>
+    <input type="hidden" name="restaurant_id" value="{{.Restaurant.ID}}">
+    <section class="form-section visit-console">
+      <div class="form-grid visit-form-grid">
+        <label>Date and time<input type="datetime-local" name="visited_at" value="{{datetime .VisitedAt}}"></label>
+        <label>Picked by<select name="picker_id" required>{{range $.People}}<option value="{{.ID}}" {{if eq $visit.Picker.ID .ID}}selected{{end}}>{{.Name}}</option>{{end}}</select></label>
+        <label>Price Level<select name="price_level"><option value="1" {{if eq .PriceLevel 1}}selected{{end}}>$</option><option value="2" {{if eq .PriceLevel 2}}selected{{end}}>$$</option><option value="3" {{if eq .PriceLevel 3}}selected{{end}}>$$$</option><option value="4" {{if eq .PriceLevel 4}}selected{{end}}>$$$$</option></select></label>
+      </div>
+    </section>
+    <fieldset class="ratings-field score-console"><legend>Rate Your Experience</legend>{{range $.People}}<label class="rating-card">{{if avatar .Name}}<img class="avatar-face" src="{{avatar .Name}}" alt="">{{else}}<span class="avatar-dot">{{slice .Name 0 1}}</span>{{end}}<span>{{.Name}}</span><input name="rating_{{.ID}}" type="number" min="0" max="10" step="0.5" inputmode="decimal" placeholder="0-10" value="{{ratingValue $visit .}}" data-half-step-rating></label>{{end}}</fieldset>
+    <fieldset class="tags-field chip-field"><legend>Tags</legend>{{range $.Tags}}<label><input type="checkbox" name="tag_id" value="{{.ID}}" {{if hasVisitTag $visit .}}checked{{end}}> <span>{{.Name}}</span></label>{{end}}<label class="new-tag">New tag<input name="new_tag" placeholder="Great fries"></label></fieldset>
+    <label class="notes-field">Notes<textarea name="notes" rows="4" placeholder="What should we remember next time?">{{str .Notes}}</textarea></label>
+    <div class="form-actions console-actions"><a class="secondary-button" href="/restaurants/{{.Restaurant.ID}}/edit">Edit Restaurant Details</a><button class="primary-button">Save Changes</button></div>
+  </form>
+  {{end}}
+</main>
+{{template "bottom" .}}
+{{end}}
+
 {{define "restaurant"}}
 {{template "top" .}}
 <main class="page-band ledger-page">
   <section class="wide-ticket ledger-panel">
     {{with .Restaurant}}
-	    <div class="section-head"><div><h1>{{.Name}} {{if .IsChain}}<span class="badge">Chain</span>{{end}}</h1>{{if .Address}}<p>{{.Address}}</p>{{end}}</div>{{if $.Authenticated}}<div class="section-actions"><a class="small-cta" href="/log?restaurant_id={{.ID}}&restaurant_name={{query .Name}}{{if .Address}}&address={{query .Address}}{{end}}{{if .City}}&city={{query .City}}{{end}}{{if .GooglePlaceID}}&google_place_id={{query .GooglePlaceID}}{{end}}{{if .Category}}&category={{query .Category}}{{end}}">Log Another Dine</a>{{if .GooglePlaceID}}<form method="post" action="/restaurants/{{.ID}}/google-refresh"><button class="secondary-button">Refresh Google Info</button></form>{{end}}</div>{{end}}</div>
-    <dl class="details"><dt>Category</dt><dd>{{if .Category}}{{.Category}}{{else}}-{{end}}</dd><dt>Phone</dt><dd>{{if .Phone}}{{.Phone}}{{else}}-{{end}}</dd><dt>Website</dt><dd>{{if .Website}}<a href="{{.Website}}">{{.Website}}</a>{{else}}-{{end}}</dd><dt>Google rating</dt><dd>{{if .GoogleRating}}{{.GoogleRating}}{{else}}-{{end}}</dd></dl>
+    <div class="section-head"><div><h1>{{.Name}} {{if .IsChain}}<span class="badge">Chain</span>{{end}}</h1>{{if .Address}}<p>{{.Address}}</p>{{end}}</div>{{if $.Authenticated}}<div class="section-actions"><a class="secondary-button" href="/restaurants/{{.ID}}/edit">Edit Details</a><a class="small-cta" href="/log?restaurant_id={{.ID}}&restaurant_name={{query .Name}}{{if .Address}}&address={{query .Address}}{{end}}{{if .City}}&city={{query .City}}{{end}}{{if .GooglePlaceID}}&google_place_id={{query .GooglePlaceID}}{{end}}{{if .Category}}&category={{query .Category}}{{end}}">Log Another Dine</a>{{if .GooglePlaceID}}<form method="post" action="/restaurants/{{.ID}}/google-refresh"><button class="secondary-button">Refresh Google Info</button></form>{{end}}</div>{{end}}</div>
+    <dl class="details"><dt>Category</dt><dd>{{if .Category}}{{.Category}}{{else}}-{{end}}</dd><dt>Address</dt><dd>{{if .Address}}{{.Address}}{{else}}-{{end}}</dd><dt>City</dt><dd>{{if .City}}{{.City}}{{else}}-{{end}}</dd><dt>Phone</dt><dd>{{if .Phone}}{{.Phone}}{{else}}-{{end}}</dd><dt>Website</dt><dd>{{if .Website}}<a href="{{.Website}}">{{.Website}}</a>{{else}}-{{end}}</dd><dt>Google rating</dt><dd>{{if .GoogleRating}}{{floatInput .GoogleRating}}{{else}}-{{end}}</dd><dt>Google price</dt><dd>{{if .GooglePriceLevel}}{{dollars (intValue .GooglePriceLevel)}}{{else}}-{{end}}</dd></dl>
     {{if $.Authenticated}}<form method="post" action="/restaurants/{{.ID}}/chain" class="inline-form"><input type="hidden" name="is_chain" value="{{if .IsChain}}false{{else}}true{{end}}"><button class="small-cta">{{if .IsChain}}Clear Chain Badge{{else}}Mark Chain{{end}}</button></form>{{end}}
     {{end}}
     {{template "visit-list" .}}
   </section>
+</main>
+{{template "bottom" .}}
+{{end}}
+
+{{define "restaurant-edit"}}
+{{template "top" .}}
+<main class="page-band order-page">
+  {{with .Restaurant}}
+  <form class="wide-ticket log-form order-pad console-pad" method="post" action="/restaurants/{{.ID}}">
+    <div class="section-head console-head">
+      <div><h1>Edit Restaurant</h1>{{if .GooglePlaceID}}<p>Google place: {{str .GooglePlaceID}}</p>{{end}}</div>
+      <a class="secondary-button" href="/restaurants/{{.ID}}">Cancel</a>
+    </div>
+    <section class="form-section restaurant-console">
+      <div class="form-grid restaurant-edit-grid">
+        <label>Restaurant<input name="restaurant_name" value="{{.Name}}" required></label>
+        <label>Category<input name="category" placeholder="American, Southern, Sushi..." value="{{str .Category}}"></label>
+        <label>Address<input name="address" placeholder="Optional" value="{{str .Address}}"></label>
+        <label>City<input name="city" placeholder="Optional" value="{{str .City}}"></label>
+        <label>Phone<input name="phone" placeholder="Optional" value="{{str .Phone}}"></label>
+        <label>Website<input name="website" type="url" placeholder="https://example.com" value="{{str .Website}}"></label>
+        <label>Google Rating<input name="google_rating" type="number" min="0" max="5" step="0.1" inputmode="decimal" placeholder="0-5" value="{{floatInput .GoogleRating}}"></label>
+        <label>Google Price<select name="google_price_level"><option></option><option value="1" {{if eq (intValue .GooglePriceLevel) 1}}selected{{end}}>$</option><option value="2" {{if eq (intValue .GooglePriceLevel) 2}}selected{{end}}>$$</option><option value="3" {{if eq (intValue .GooglePriceLevel) 3}}selected{{end}}>$$$</option><option value="4" {{if eq (intValue .GooglePriceLevel) 4}}selected{{end}}>$$$$</option></select></label>
+      </div>
+    </section>
+    <div class="form-actions console-actions"><label class="inline-check"><input type="checkbox" name="is_chain" value="true" {{if .IsChain}}checked{{end}}> Mark as chain</label><button class="primary-button">Save Restaurant</button></div>
+  </form>
+  {{end}}
 </main>
 {{template "bottom" .}}
 {{end}}
@@ -535,7 +650,7 @@ const templates = `
     <h1>Have we eaten here before?</h1>
     <form class="search-row" method="get" action="/search"><input name="q" type="search" value="{{.Query}}" placeholder="Restaurant name"><button>Search</button></form>
     {{if .SearchResults}}<h2>Saved Spots</h2><div class="restaurant-list history-list">{{range .SearchResults}}<article class="restaurant-row history-row"><div class="history-title"><a href="/restaurants/{{.Restaurant.ID}}"><strong>{{.Restaurant.Name}}</strong></a>{{if .Restaurant.IsChain}}<em>Chain</em>{{end}}</div><span>{{if .Restaurant.Address}}{{.Restaurant.Address}}{{end}}</span>{{with .LatestVisit}}<span>Last visit {{date .VisitedAt}} · Picked by {{.Picker.Name}} · {{dollars .PriceLevel}}</span>{{end}}<div class="row-stats"><span>{{.VisitCount}} {{if eq .VisitCount 1}}visit{{else}}visits{{end}}</span><span>Avg {{score .AverageRating}}</span></div>{{if .Tags}}<div class="tags">{{range .Tags}}<span>{{.Name}}</span>{{end}}</div>{{end}}{{if eq .VisitCount 0}}<form class="history-remove-form" method="post" action="/restaurants/{{.Restaurant.ID}}/delete" onsubmit="return confirm('Remove this saved spot?')"><input type="hidden" name="q" value="{{$.Query}}"><button class="danger history-remove-button" type="submit" aria-label="Remove {{.Restaurant.Name}} from saved spots">Remove</button></form>{{end}}</article>{{end}}</div>{{else if .Query}}<p class="empty">No saved dines match that search yet.</p>{{end}}
-    {{if .Places}}<h2>Around Town</h2><div class="restaurant-list places-list">{{range .Places}}<article class="restaurant-row place-row"><div><strong>{{.DisplayName.Text}}</strong>{{if .Rating}}<em>{{score .Rating}} Google</em>{{end}}</div><span>{{.Address}}</span><span>{{if price .PriceLevel}}{{dollars (price .PriceLevel)}}{{else}}Price not listed{{end}}</span>{{if $.Authenticated}}<a class="small-cta" href="/log?restaurant_name={{query .DisplayName.Text}}&address={{query .Address}}&city={{query (placeCity .)}}&google_place_id={{query .ID}}&category={{query (placeCategory .)}}&price_level={{price .PriceLevel}}">Log this dine</a>{{end}}</article>{{end}}</div>{{else if .Query}}<p class="empty">Google Places results will appear here when a Places API key is configured.</p>{{end}}
+    {{if .Places}}<h2>Around Town</h2><div class="restaurant-list places-list">{{range .Places}}<article class="restaurant-row place-row"><div><strong>{{.DisplayName.Text}}</strong>{{if .Rating}}<em>{{score .Rating}} Google</em>{{end}}</div><span>{{.Address}}</span><span>{{if price .PriceLevel}}{{dollars (price .PriceLevel)}}{{else}}Price not listed{{end}}</span>{{if $.Authenticated}}<a class="small-cta" href="/log?restaurant_name={{query .DisplayName.Text}}&address={{query .Address}}&city={{query (placeCity .)}}&google_place_id={{query .ID}}{{if .Phone}}&phone={{query .Phone}}{{end}}{{if .Website}}&website={{query .Website}}{{end}}{{if .Rating}}&google_rating={{query (printf "%.1f" .Rating)}}{{end}}{{if price .PriceLevel}}&google_price_level={{price .PriceLevel}}{{end}}{{if .Location.Latitude}}&latitude={{query (printf "%.6f" .Location.Latitude)}}{{end}}{{if .Location.Longitude}}&longitude={{query (printf "%.6f" .Location.Longitude)}}{{end}}&category={{query (placeCategory .)}}&price_level={{price .PriceLevel}}">Log this dine</a>{{end}}</article>{{end}}</div>{{else if .Query}}<p class="empty">Google Places results will appear here when a Places API key is configured.</p>{{end}}
   </section>
 </main>
 {{template "bottom" .}}
@@ -549,7 +664,7 @@ const templates = `
     <h1>Nearby</h1>
     <form class="nearby-controls" id="nearby-form" method="get" action="/nearby"><input type="hidden" name="lat"><input type="hidden" name="lng"><div class="nearby-search-line"><input name="q" type="search" value="{{.Query}}" placeholder="Restaurant or cuisine" aria-label="Restaurant or cuisine"><button class="primary-button" id="use-location" type="button">Search Near Me</button></div><div class="nearby-search-line nearby-fallback-line"><input name="near" type="search" value="{{.LocationQuery}}" placeholder="City, address, or neighborhood" aria-label="City, address, or neighborhood"><button class="secondary-button">Search This Area</button></div></form>
     <p class="empty" id="location-status">{{if .LocationStatus}}{{.LocationStatus}}{{else}}Share your browser location, or search near a city, address, or neighborhood.{{end}}</p>
-    {{if .Places}}<div class="restaurant-list places-list">{{range .Places}}<article class="restaurant-row place-row"><div><strong>{{.DisplayName.Text}}</strong>{{if .Rating}}<em>{{score .Rating}} Google</em>{{end}}</div><span>{{.Address}}</span><span>{{if $.HasLocation}}{{distance $.OriginLatitude $.OriginLongitude .}} · {{end}}{{if price .PriceLevel}}{{dollars (price .PriceLevel)}}{{else}}Price not listed{{end}}</span>{{if $.Authenticated}}<a class="small-cta" href="/log?restaurant_name={{query .DisplayName.Text}}&address={{query .Address}}&city={{query (placeCity .)}}&google_place_id={{query .ID}}&category={{query (placeCategory .)}}&price_level={{price .PriceLevel}}">Log this dine</a>{{end}}</article>{{end}}</div>{{end}}
+    {{if .Places}}<div class="restaurant-list places-list">{{range .Places}}<article class="restaurant-row place-row"><div><strong>{{.DisplayName.Text}}</strong>{{if .Rating}}<em>{{score .Rating}} Google</em>{{end}}</div><span>{{.Address}}</span><span>{{if $.HasLocation}}{{distance $.OriginLatitude $.OriginLongitude .}} · {{end}}{{if price .PriceLevel}}{{dollars (price .PriceLevel)}}{{else}}Price not listed{{end}}</span>{{if $.Authenticated}}<a class="small-cta" href="/log?restaurant_name={{query .DisplayName.Text}}&address={{query .Address}}&city={{query (placeCity .)}}&google_place_id={{query .ID}}{{if .Phone}}&phone={{query .Phone}}{{end}}{{if .Website}}&website={{query .Website}}{{end}}{{if .Rating}}&google_rating={{query (printf "%.1f" .Rating)}}{{end}}{{if price .PriceLevel}}&google_price_level={{price .PriceLevel}}{{end}}{{if .Location.Latitude}}&latitude={{query (printf "%.6f" .Location.Latitude)}}{{end}}{{if .Location.Longitude}}&longitude={{query (printf "%.6f" .Location.Longitude)}}{{end}}&category={{query (placeCategory .)}}&price_level={{price .PriceLevel}}">Log this dine</a>{{end}}</article>{{end}}</div>{{end}}
   </section>
 </main>
 {{template "bottom" .}}

@@ -702,6 +702,17 @@ a:focus-visible, button:focus-visible {
 .visit-card form {
   grid-column: 1 / -1;
 }
+.visit-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .65rem;
+  padding-top: .2rem;
+}
+.visit-actions form {
+  margin: 0;
+}
 .confirm-modal {
   width: min(calc(100% - 2rem), 28rem);
   padding: 0;
@@ -813,6 +824,9 @@ a:focus-visible, button:focus-visible {
 }
 .visit-form-grid {
   grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+}
+.restaurant-edit-grid {
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
 }
 label, legend, dt {
   display: grid;

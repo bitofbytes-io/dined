@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"strings"
 	"sync"
@@ -118,6 +119,18 @@ func (m *MemoryStore) Restaurant(_ context.Context, id uuid.UUID) (*model.Restau
 	return nil, nil
 }
 
+func (m *MemoryStore) Visit(_ context.Context, id uuid.UUID) (*model.Visit, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, visit := range m.visits {
+		if visit.ID == id {
+			copy := visit
+			return &copy, nil
+		}
+	}
+	return nil, nil
+}
+
 func (m *MemoryStore) Visits(_ context.Context, limit int) ([]model.Visit, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -189,12 +202,7 @@ func (m *MemoryStore) CreateVisit(_ context.Context, input model.VisitInput) (*u
 		CreatedAt:  time.Now(),
 		UpdatedAt:  time.Now(),
 	}
-	for personID, score := range input.Ratings {
-		if score == 0 {
-			continue
-		}
-		visit.Ratings = append(visit.Ratings, model.Rating{Person: m.personByID(personID), Score: score})
-	}
+	visit.Ratings = m.ratingsFromInput(input)
 	for _, tagID := range input.TagIDs {
 		if tag, ok := m.tagByID(tagID); ok {
 			visit.Tags = append(visit.Tags, tag)
@@ -214,10 +222,66 @@ func (m *MemoryStore) UpdateRestaurantGoogleMetadata(_ context.Context, id uuid.
 	defer m.mu.Unlock()
 	for i := range m.restaurants {
 		if m.restaurants[i].ID == id {
-			m.updateGoogleMetadata(i, metadata)
+			m.refreshGoogleMetadata(i, metadata)
 			return nil
 		}
 	}
+	return nil
+}
+
+func (m *MemoryStore) UpdateVisit(_ context.Context, id uuid.UUID, input model.VisitInput) error {
+	if err := input.Validate(); err != nil {
+		return err
+	}
+	if input.RestaurantID == nil {
+		return errors.New("restaurant is required")
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	restaurant, ok := m.findRestaurant(input.RestaurantID)
+	if !ok {
+		return errors.New("restaurant not found")
+	}
+	picker := m.personByID(input.PickerID)
+	if picker.ID == uuid.Nil {
+		return errors.New("picker not found")
+	}
+	visitIndex := -1
+	for i := range m.visits {
+		if m.visits[i].ID == id {
+			visitIndex = i
+			break
+		}
+	}
+	if visitIndex == -1 {
+		return errors.New("visit not found")
+	}
+
+	ratings := m.ratingsFromInput(input)
+
+	tagIDs := append([]uuid.UUID(nil), input.TagIDs...)
+	if name := strings.TrimSpace(input.NewTag); name != "" {
+		tag := model.Tag{ID: uuid.New(), Name: name}
+		m.tags = append(m.tags, tag)
+		tagIDs = append(tagIDs, tag.ID)
+	}
+	var tags []model.Tag
+	for _, tagID := range tagIDs {
+		if tag, ok := m.tagByID(tagID); ok {
+			tags = append(tags, tag)
+		}
+	}
+
+	m.visits[visitIndex].Restaurant = restaurant
+	m.visits[visitIndex].VisitedAt = input.VisitedAt
+	m.visits[visitIndex].Picker = picker
+	m.visits[visitIndex].PriceLevel = input.PriceLevel
+	m.visits[visitIndex].Notes = strPtrOrNil(input.Notes)
+	m.visits[visitIndex].Ratings = ratings
+	m.visits[visitIndex].Tags = tags
+	m.visits[visitIndex].UpdatedAt = time.Now()
 	return nil
 }
 
@@ -248,6 +312,33 @@ func (m *MemoryStore) DeleteRestaurantIfUnvisited(_ context.Context, id uuid.UUI
 		}
 	}
 	return false, nil
+}
+
+func (m *MemoryStore) UpdateRestaurant(_ context.Context, id uuid.UUID, input model.RestaurantInput) error {
+	if err := input.Validate(); err != nil {
+		return err
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i := range m.restaurants {
+		if m.restaurants[i].ID != id {
+			continue
+		}
+		m.restaurants[i].Name = strings.TrimSpace(input.Name)
+		m.restaurants[i].Address = strPtrOrNil(input.Address)
+		m.restaurants[i].City = strPtrOrNil(input.City)
+		m.restaurants[i].Phone = strPtrOrNil(input.Phone)
+		m.restaurants[i].Website = strPtrOrNil(input.Website)
+		m.restaurants[i].GoogleRating = floatPtrOrNil(input.GoogleRating)
+		m.restaurants[i].GooglePriceLevel = intPtrOrNil(input.GooglePriceLevel)
+		m.restaurants[i].Category = strPtrOrNil(input.Category)
+		m.restaurants[i].IsChain = input.IsChain
+		m.restaurants[i].UpdatedAt = time.Now()
+		m.syncRestaurant(m.restaurants[i])
+		return nil
+	}
+	return errors.New("restaurant not found")
 }
 
 func (m *MemoryStore) ToggleChain(_ context.Context, id uuid.UUID, isChain bool) error {
@@ -418,6 +509,35 @@ func (m *MemoryStore) updateRestaurantMetadataByID(id uuid.UUID, input model.Vis
 
 func (m *MemoryStore) updateGoogleMetadata(index int, metadata model.GoogleRestaurantMetadata) {
 	now := time.Now()
+	if metadata.Latitude != nil && m.restaurants[index].Latitude == nil {
+		m.restaurants[index].Latitude = floatPtr(*metadata.Latitude)
+		m.restaurants[index].UpdatedAt = now
+	}
+	if metadata.Longitude != nil && m.restaurants[index].Longitude == nil {
+		m.restaurants[index].Longitude = floatPtr(*metadata.Longitude)
+		m.restaurants[index].UpdatedAt = now
+	}
+	if phone := strings.TrimSpace(metadata.Phone); phone != "" && m.restaurants[index].Phone == nil {
+		m.restaurants[index].Phone = strPtr(phone)
+		m.restaurants[index].UpdatedAt = now
+	}
+	if website := strings.TrimSpace(metadata.Website); website != "" && m.restaurants[index].Website == nil {
+		m.restaurants[index].Website = strPtr(website)
+		m.restaurants[index].UpdatedAt = now
+	}
+	if metadata.GoogleRating != nil && m.restaurants[index].GoogleRating == nil {
+		m.restaurants[index].GoogleRating = floatPtr(*metadata.GoogleRating)
+		m.restaurants[index].UpdatedAt = now
+	}
+	if metadata.GooglePriceLevel != nil && m.restaurants[index].GooglePriceLevel == nil {
+		m.restaurants[index].GooglePriceLevel = intPtr(*metadata.GooglePriceLevel)
+		m.restaurants[index].UpdatedAt = now
+	}
+	m.syncRestaurant(m.restaurants[index])
+}
+
+func (m *MemoryStore) refreshGoogleMetadata(index int, metadata model.GoogleRestaurantMetadata) {
+	now := time.Now()
 	if metadata.Latitude != nil {
 		m.restaurants[index].Latitude = floatPtr(*metadata.Latitude)
 		m.restaurants[index].UpdatedAt = now
@@ -442,6 +562,7 @@ func (m *MemoryStore) updateGoogleMetadata(index int, metadata model.GoogleResta
 		m.restaurants[index].GooglePriceLevel = intPtr(*metadata.GooglePriceLevel)
 		m.restaurants[index].UpdatedAt = now
 	}
+	m.syncRestaurant(m.restaurants[index])
 }
 
 func (m *MemoryStore) personByID(id uuid.UUID) model.Person {
@@ -451,6 +572,29 @@ func (m *MemoryStore) personByID(id uuid.UUID) model.Person {
 		}
 	}
 	return model.Person{}
+}
+
+func (m *MemoryStore) ratingsFromInput(input model.VisitInput) []model.Rating {
+	var ratings []model.Rating
+	seen := map[uuid.UUID]struct{}{}
+	for _, person := range m.people {
+		score := input.Ratings[person.ID]
+		if score == 0 {
+			continue
+		}
+		ratings = append(ratings, model.Rating{Person: person, Score: score})
+		seen[person.ID] = struct{}{}
+	}
+	for personID, score := range input.Ratings {
+		if score == 0 {
+			continue
+		}
+		if _, ok := seen[personID]; ok {
+			continue
+		}
+		ratings = append(ratings, model.Rating{Person: m.personByID(personID), Score: score})
+	}
+	return ratings
 }
 
 func (m *MemoryStore) tagByID(id uuid.UUID) (model.Tag, bool) {
@@ -604,7 +748,8 @@ func floatPtrOrNil(value *float64) *float64 {
 	if value == nil {
 		return nil
 	}
-	return floatPtr(*value)
+	copy := *value
+	return &copy
 }
 
 func intPtr(value int) *int {
@@ -615,5 +760,14 @@ func intPtrOrNil(value *int) *int {
 	if value == nil {
 		return nil
 	}
-	return intPtr(*value)
+	copy := *value
+	return &copy
+}
+
+func (m *MemoryStore) syncRestaurant(restaurant model.Restaurant) {
+	for i := range m.visits {
+		if m.visits[i].Restaurant.ID == restaurant.ID {
+			m.visits[i].Restaurant = restaurant
+		}
+	}
 }

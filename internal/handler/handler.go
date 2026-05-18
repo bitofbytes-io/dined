@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -81,6 +82,24 @@ func (h *Handler) Restaurant(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *Handler) EditRestaurantPage(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "Invalid restaurant ID", http.StatusBadRequest)
+		return
+	}
+	data, err := h.restaurantEditData(r, id)
+	if err != nil {
+		h.error(w, "restaurant edit", err)
+		return
+	}
+	if data.Restaurant == nil {
+		http.NotFound(w, r)
+		return
+	}
+	h.render(w, "restaurant-edit", r, data)
+}
+
 func (h *Handler) Trophy(w http.ResponseWriter, r *http.Request) {
 	stats, err := h.store.Stats(r.Context())
 	if err != nil {
@@ -128,6 +147,46 @@ func (h *Handler) CreateVisit(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/dines#"+visitID.String(), http.StatusSeeOther)
 }
 
+func (h *Handler) EditVisitPage(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "Invalid visit ID", http.StatusBadRequest)
+		return
+	}
+	data, err := h.visitEditData(r, id)
+	if err != nil {
+		h.error(w, "visit edit", err)
+		return
+	}
+	if data.Visit == nil {
+		http.NotFound(w, r)
+		return
+	}
+	h.render(w, "visit-edit", r, data)
+}
+
+func (h *Handler) UpdateVisit(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "Invalid visit ID", http.StatusBadRequest)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Invalid form", http.StatusBadRequest)
+		return
+	}
+	input, err := h.visitInput(r)
+	if err != nil {
+		h.renderVisitEditError(w, r, id, err.Error())
+		return
+	}
+	if err := h.store.UpdateVisit(r.Context(), id, input); err != nil {
+		h.renderVisitEditError(w, r, id, err.Error())
+		return
+	}
+	http.Redirect(w, r, "/dines#"+id.String(), http.StatusSeeOther)
+}
+
 func (h *Handler) DeleteVisit(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
@@ -157,6 +216,28 @@ func (h *Handler) DeleteRestaurant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, searchRedirect(r.FormValue("q")), http.StatusSeeOther)
+}
+
+func (h *Handler) UpdateRestaurant(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "Invalid restaurant ID", http.StatusBadRequest)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Invalid form", http.StatusBadRequest)
+		return
+	}
+	input, err := h.restaurantInput(r)
+	if err != nil {
+		h.renderRestaurantEditError(w, r, id, err.Error())
+		return
+	}
+	if err := h.store.UpdateRestaurant(r.Context(), id, input); err != nil {
+		h.renderRestaurantEditError(w, r, id, err.Error())
+		return
+	}
+	http.Redirect(w, r, "/restaurants/"+id.String(), http.StatusSeeOther)
 }
 
 func (h *Handler) ToggleChain(w http.ResponseWriter, r *http.Request) {
@@ -368,18 +449,24 @@ func (h *Handler) logData(r *http.Request) (ui.PageData, error) {
 		return ui.PageData{}, err
 	}
 	return ui.PageData{
-		Title:               "Log a Dine",
-		People:              people,
-		Tags:                tags,
-		Restaurants:         restaurants,
-		PrefillName:         r.URL.Query().Get("restaurant_name"),
-		PrefillAddress:      r.URL.Query().Get("address"),
-		PrefillCity:         r.URL.Query().Get("city"),
-		PrefillPlaceID:      r.URL.Query().Get("google_place_id"),
-		PrefillCategory:     r.URL.Query().Get("category"),
-		PrefillPriceLevel:   prefillPrice,
-		PrefillPickerID:     pickerTurn.NextPicker.ID.String(),
-		PrefillRestaurantID: r.URL.Query().Get("restaurant_id"),
+		Title:                   "Log a Dine",
+		People:                  people,
+		Tags:                    tags,
+		Restaurants:             restaurants,
+		PrefillName:             r.URL.Query().Get("restaurant_name"),
+		PrefillAddress:          r.URL.Query().Get("address"),
+		PrefillCity:             r.URL.Query().Get("city"),
+		PrefillLatitude:         r.URL.Query().Get("latitude"),
+		PrefillLongitude:        r.URL.Query().Get("longitude"),
+		PrefillPhone:            r.URL.Query().Get("phone"),
+		PrefillWebsite:          r.URL.Query().Get("website"),
+		PrefillPlaceID:          r.URL.Query().Get("google_place_id"),
+		PrefillGoogleRating:     r.URL.Query().Get("google_rating"),
+		PrefillGooglePriceLevel: r.URL.Query().Get("google_price_level"),
+		PrefillCategory:         r.URL.Query().Get("category"),
+		PrefillPriceLevel:       prefillPrice,
+		PrefillPickerID:         pickerTurn.NextPicker.ID.String(),
+		PrefillRestaurantID:     r.URL.Query().Get("restaurant_id"),
 	}, nil
 }
 
@@ -393,19 +480,43 @@ func (h *Handler) visitInput(r *http.Request) (model.VisitInput, error) {
 		return model.VisitInput{}, err
 	}
 	priceLevel, _ := strconv.Atoi(r.FormValue("price_level"))
+	latitude, err := optionalFloat(r.FormValue("latitude"), "latitude")
+	if err != nil {
+		return model.VisitInput{}, err
+	}
+	longitude, err := optionalFloat(r.FormValue("longitude"), "longitude")
+	if err != nil {
+		return model.VisitInput{}, err
+	}
+	googleRating, err := optionalFloat(r.FormValue("google_rating"), "Google rating")
+	if err != nil {
+		return model.VisitInput{}, err
+	}
+	googlePriceLevel, err := optionalInt(r.FormValue("google_price_level"), "Google price level")
+	if err != nil {
+		return model.VisitInput{}, err
+	}
 	input := model.VisitInput{
 		RestaurantName: r.FormValue("restaurant_name"),
 		Address:        r.FormValue("address"),
 		City:           r.FormValue("city"),
 		GooglePlaceID:  r.FormValue("google_place_id"),
-		Category:       r.FormValue("category"),
-		IsChain:        r.FormValue("is_chain") == "true",
-		VisitedAt:      visitedAt,
-		PickerID:       pickerID,
-		PriceLevel:     priceLevel,
-		Notes:          r.FormValue("notes"),
-		NewTag:         r.FormValue("new_tag"),
-		Ratings:        map[uuid.UUID]float64{},
+		GoogleMetadata: model.GoogleRestaurantMetadata{
+			Latitude:         latitude,
+			Longitude:        longitude,
+			Phone:            r.FormValue("phone"),
+			Website:          r.FormValue("website"),
+			GoogleRating:     googleRating,
+			GooglePriceLevel: googlePriceLevel,
+		},
+		Category:   r.FormValue("category"),
+		IsChain:    r.FormValue("is_chain") == "true",
+		VisitedAt:  visitedAt,
+		PickerID:   pickerID,
+		PriceLevel: priceLevel,
+		Notes:      r.FormValue("notes"),
+		NewTag:     r.FormValue("new_tag"),
+		Ratings:    map[uuid.UUID]float64{},
 	}
 	if restaurantID := r.FormValue("restaurant_id"); restaurantID != "" {
 		id, err := uuid.Parse(restaurantID)
@@ -438,6 +549,32 @@ func (h *Handler) visitInput(r *http.Request) (model.VisitInput, error) {
 	return input, nil
 }
 
+func (h *Handler) restaurantInput(r *http.Request) (model.RestaurantInput, error) {
+	googleRating, err := optionalFloat(r.FormValue("google_rating"), "Google rating")
+	if err != nil {
+		return model.RestaurantInput{}, err
+	}
+	googlePriceLevel, err := optionalInt(r.FormValue("google_price_level"), "Google price level")
+	if err != nil {
+		return model.RestaurantInput{}, err
+	}
+	input := model.RestaurantInput{
+		Name:             r.FormValue("restaurant_name"),
+		Address:          r.FormValue("address"),
+		City:             r.FormValue("city"),
+		Phone:            r.FormValue("phone"),
+		Website:          r.FormValue("website"),
+		GoogleRating:     googleRating,
+		GooglePriceLevel: googlePriceLevel,
+		Category:         r.FormValue("category"),
+		IsChain:          r.FormValue("is_chain") == "true",
+	}
+	if err := input.Validate(); err != nil {
+		return model.RestaurantInput{}, err
+	}
+	return input, nil
+}
+
 func (h *Handler) renderLogError(w http.ResponseWriter, r *http.Request, message string) {
 	data, err := h.logData(r)
 	if err != nil {
@@ -448,12 +585,94 @@ func (h *Handler) renderLogError(w http.ResponseWriter, r *http.Request, message
 	h.render(w, "log", r, data)
 }
 
+func (h *Handler) visitEditData(r *http.Request, id uuid.UUID) (ui.PageData, error) {
+	visit, err := h.store.Visit(r.Context(), id)
+	if err != nil {
+		return ui.PageData{}, err
+	}
+	if visit == nil {
+		return ui.PageData{}, nil
+	}
+	people, err := h.store.People(r.Context())
+	if err != nil {
+		return ui.PageData{}, err
+	}
+	tags, err := h.store.Tags(r.Context())
+	if err != nil {
+		return ui.PageData{}, err
+	}
+	return ui.PageData{Title: "Edit Dine", Visit: visit, People: people, Tags: tags}, nil
+}
+
+func (h *Handler) restaurantEditData(r *http.Request, id uuid.UUID) (ui.PageData, error) {
+	restaurant, err := h.store.Restaurant(r.Context(), id)
+	if err != nil {
+		return ui.PageData{}, err
+	}
+	if restaurant == nil {
+		return ui.PageData{}, nil
+	}
+	return ui.PageData{Title: "Edit " + restaurant.Name, Restaurant: restaurant}, nil
+}
+
+func (h *Handler) renderVisitEditError(w http.ResponseWriter, r *http.Request, id uuid.UUID, message string) {
+	data, err := h.visitEditData(r, id)
+	if err != nil {
+		h.error(w, "visit edit error data", err)
+		return
+	}
+	if data.Visit == nil {
+		http.NotFound(w, r)
+		return
+	}
+	data.Error = message
+	h.render(w, "visit-edit", r, data)
+}
+
+func (h *Handler) renderRestaurantEditError(w http.ResponseWriter, r *http.Request, id uuid.UUID, message string) {
+	data, err := h.restaurantEditData(r, id)
+	if err != nil {
+		h.error(w, "restaurant edit error data", err)
+		return
+	}
+	if data.Restaurant == nil {
+		http.NotFound(w, r)
+		return
+	}
+	data.Error = message
+	h.render(w, "restaurant-edit", r, data)
+}
+
 func (h *Handler) render(w http.ResponseWriter, name string, r *http.Request, data ui.PageData) {
 	data.Authenticated = middleware.IsAuthenticated(r, h.cfg.APIToken)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := ui.Render(w, name, data); err != nil {
 		slog.Error("render page", "page", name, "error", err)
 	}
+}
+
+func optionalFloat(value, label string) (*float64, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, nil
+	}
+	parsed, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return nil, fmt.Errorf("%s must be a number", label)
+	}
+	return &parsed, nil
+}
+
+func optionalInt(value, label string) (*int, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, nil
+	}
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return nil, fmt.Errorf("%s must be a number", label)
+	}
+	return &parsed, nil
 }
 
 func (h *Handler) searchResults(r *http.Request, restaurants []model.Restaurant) ([]ui.RestaurantResult, error) {

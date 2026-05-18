@@ -80,6 +80,18 @@ type VisitInput struct {
 	NewTag         string
 }
 
+type RestaurantInput struct {
+	Name             string
+	Address          string
+	City             string
+	Phone            string
+	Website          string
+	GoogleRating     *float64
+	GooglePriceLevel *int
+	Category         string
+	IsChain          bool
+}
+
 type Stats struct {
 	TotalDines             int
 	AverageRating          float64
