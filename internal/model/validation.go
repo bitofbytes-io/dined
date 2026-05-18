@@ -37,3 +37,16 @@ func (in VisitInput) Validate() error {
 	}
 	return nil
 }
+
+func (in RestaurantInput) Validate() error {
+	if strings.TrimSpace(in.Name) == "" {
+		return errors.New("restaurant name is required")
+	}
+	if in.GoogleRating != nil && (*in.GoogleRating < 0 || *in.GoogleRating > 5) {
+		return errors.New("Google rating must be between 0 and 5")
+	}
+	if in.GooglePriceLevel != nil && (*in.GooglePriceLevel < 1 || *in.GooglePriceLevel > 4) {
+		return errors.New("Google price level must be between 1 and 4")
+	}
+	return nil
+}

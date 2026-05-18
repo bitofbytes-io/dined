@@ -233,23 +233,48 @@ func TestRenderLogPreservesPrefillCity(t *testing.T) {
 	}
 }
 
-func TestRenderAuthenticatedDinesUsesDeleteConfirmationModal(t *testing.T) {
+func TestRenderLogCarriesGoogleMetadataPrefill(t *testing.T) {
+	var out strings.Builder
+	err := Render(&out, "log", PageData{
+		PrefillPhone:            "919-555-0100",
+		PrefillWebsite:          "https://example.com",
+		PrefillGoogleRating:     "4.7",
+		PrefillGooglePriceLevel: "3",
+		PrefillLatitude:         "35.779600",
+		PrefillLongitude:        "-78.638200",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered := out.String()
+	for _, fragment := range []string{
+		`name="phone" value="919-555-0100"`,
+		`name="website" value="https://example.com"`,
+		`name="google_rating" value="4.7"`,
+		`name="google_price_level" value="3"`,
+		`name="latitude" value="35.779600"`,
+		`name="longitude" value="-78.638200"`,
+	} {
+		if !strings.Contains(rendered, fragment) {
+			t.Fatalf("rendered log missing %q:\n%s", fragment, rendered)
+		}
+	}
+}
+
+func TestRenderAuthenticatedDinesUsesEditLinkAndDeleteConfirmationModal(t *testing.T) {
 	visitID := uuid.New()
+	restaurantID := uuid.New()
 	var out strings.Builder
 	err := Render(&out, "dines", PageData{
 		Authenticated: true,
-		Visits: []model.Visit{
-			{
-				ID: visitID,
-				Restaurant: model.Restaurant{
-					ID:   uuid.New(),
-					Name: "Tupelo Honey",
-				},
-				VisitedAt:  time.Date(2026, 5, 16, 12, 0, 0, 0, time.UTC),
-				Picker:     model.Person{Name: "Daniel"},
-				PriceLevel: 2,
-			},
-		},
+		Visits: []model.Visit{{
+			ID:         visitID,
+			Restaurant: model.Restaurant{ID: restaurantID, Name: "Hank's"},
+			VisitedAt:  time.Date(2026, 5, 16, 12, 0, 0, 0, time.UTC),
+			Picker:     model.Person{Name: "Daniel"},
+			PriceLevel: 2,
+			Ratings:    []model.Rating{{Person: model.Person{Name: "Daniel"}, Score: 8}},
+		}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -257,6 +282,7 @@ func TestRenderAuthenticatedDinesUsesDeleteConfirmationModal(t *testing.T) {
 
 	rendered := out.String()
 	for _, fragment := range []string{
+		`/visits/` + visitID.String() + `/edit`,
 		`action="/visits/` + visitID.String() + `/delete" hx-boost="false" data-delete-dine-form`,
 		`onsubmit="return dinedConfirmDelete(event, this)"`,
 		`<dialog class="confirm-modal" id="delete-dine-modal"`,
@@ -269,6 +295,93 @@ func TestRenderAuthenticatedDinesUsesDeleteConfirmationModal(t *testing.T) {
 	}
 	if strings.Contains(rendered, `onsubmit="return confirm`) {
 		t.Fatalf("rendered dines still uses inline browser confirm:\n%s", rendered)
+	}
+}
+
+func TestRenderVisitEditPrefillsRatingsTagsAndNotes(t *testing.T) {
+	danielID := uuid.New()
+	jenID := uuid.New()
+	tagID := uuid.New()
+	visitID := uuid.New()
+	restaurantID := uuid.New()
+	visitedAt := time.Date(2026, 5, 16, 19, 30, 0, 0, apptime.EasternLocation())
+	note := "Updated score after dessert."
+	var out strings.Builder
+	err := Render(&out, "visit-edit", PageData{
+		Visit: &model.Visit{
+			ID:         visitID,
+			Restaurant: model.Restaurant{ID: restaurantID, Name: "Hank's"},
+			VisitedAt:  visitedAt,
+			Picker:     model.Person{ID: jenID, Name: "Jen"},
+			PriceLevel: 3,
+			Notes:      &note,
+			Ratings:    []model.Rating{{Person: model.Person{ID: danielID, Name: "Daniel"}, Score: 8.5}},
+			Tags:       []model.Tag{{ID: tagID, Name: "Would Return"}},
+		},
+		People: []model.Person{{ID: danielID, Name: "Daniel"}, {ID: jenID, Name: "Jen"}},
+		Tags:   []model.Tag{{ID: tagID, Name: "Would Return"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered := out.String()
+	for _, fragment := range []string{
+		`action="/visits/` + visitID.String() + `"`,
+		`name="restaurant_id" value="` + restaurantID.String() + `"`,
+		`value="` + apptime.FormatDatetimeLocal(visitedAt) + `"`,
+		`value="` + jenID.String() + `" selected>Jen</option>`,
+		`name="rating_` + danielID.String() + `" type="number" min="0" max="10" step="0.5" inputmode="decimal" placeholder="0-10" value="8.5"`,
+		`value="` + tagID.String() + `" checked>`,
+		note,
+	} {
+		if !strings.Contains(rendered, fragment) {
+			t.Fatalf("rendered visit edit missing %q:\n%s", fragment, rendered)
+		}
+	}
+}
+
+func TestRenderRestaurantEditPrefillsOverrideFields(t *testing.T) {
+	restaurantID := uuid.New()
+	address := "202 Corrected Way"
+	city := "Garner"
+	phone := "919-555-0199"
+	website := "https://hanks.example"
+	category := "Southern"
+	rating := 4.9
+	price := 2
+	var out strings.Builder
+	err := Render(&out, "restaurant-edit", PageData{
+		Restaurant: &model.Restaurant{
+			ID:               restaurantID,
+			Name:             "Hank's Corrected Diner",
+			Address:          &address,
+			City:             &city,
+			Phone:            &phone,
+			Website:          &website,
+			GoogleRating:     &rating,
+			GooglePriceLevel: &price,
+			Category:         &category,
+			IsChain:          true,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered := out.String()
+	for _, fragment := range []string{
+		`action="/restaurants/` + restaurantID.String() + `"`,
+		`name="restaurant_name" value="Hank&#39;s Corrected Diner"`,
+		`name="category" placeholder="American, Southern, Sushi..." value="Southern"`,
+		`name="address" placeholder="Optional" value="202 Corrected Way"`,
+		`name="phone" placeholder="Optional" value="919-555-0199"`,
+		`name="website" type="url" placeholder="https://example.com" value="https://hanks.example"`,
+		`name="google_rating" type="number" min="0" max="5" step="0.1" inputmode="decimal" placeholder="0-5" value="4.9"`,
+		`value="2" selected>$$</option>`,
+		`name="is_chain" value="true" checked>`,
+	} {
+		if !strings.Contains(rendered, fragment) {
+			t.Fatalf("rendered restaurant edit missing %q:\n%s", fragment, rendered)
+		}
 	}
 }
 

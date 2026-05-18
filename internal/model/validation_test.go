@@ -45,3 +45,18 @@ func TestVisitInputValidateRejectsFiveDollarPrice(t *testing.T) {
 		t.Fatal("expected validation error")
 	}
 }
+
+func TestRestaurantInputValidateRequiresName(t *testing.T) {
+	err := RestaurantInput{}.Validate()
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+}
+
+func TestRestaurantInputValidateRejectsInvalidGoogleRating(t *testing.T) {
+	rating := 5.5
+	err := RestaurantInput{Name: "Hank's", GoogleRating: &rating}.Validate()
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+}
