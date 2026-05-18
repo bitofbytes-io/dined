@@ -12,10 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bitofbytes-io/dined/internal/config"
 	"github.com/bitofbytes-io/dined/internal/middleware"
 	"github.com/bitofbytes-io/dined/internal/model"
-	"github.com/bitofbytes-io/dined/internal/places"
 	"github.com/bitofbytes-io/dined/internal/repository"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
@@ -56,7 +54,7 @@ func TestSearchRemoveCancelDoesNotDeleteRestaurant(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	router := New(&config.Config{APIToken: "secret"}, store, places.NewClient("")).Router()
+	router, token := newAuthenticatedTestRouter(t, store)
 	var deletePosts atomic.Int64
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost && r.URL.Path == "/restaurants/"+restaurantID.String()+"/delete" {
@@ -87,7 +85,7 @@ func TestSearchRemoveCancelDoesNotDeleteRestaurant(t *testing.T) {
 		network.Enable(),
 		chromedp.Navigate(server.URL+"/health"),
 		chromedp.ActionFunc(func(ctx context.Context) error {
-			return network.SetCookie(middleware.CookieName, "secret").
+			return network.SetCookie(middleware.CookieName, token).
 				WithURL(server.URL).
 				WithPath("/").
 				Do(ctx)

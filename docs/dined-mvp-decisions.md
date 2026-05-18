@@ -7,7 +7,7 @@ Updated from Daniel's answers on May 10, 2026.
 - Audience: one family only.
 - People: Daniel, Jen, Caleb, Aiden.
 - Account model: one writable user/admin.
-- Auth model: API token is used for user access and should generate a session.
+- Auth model: Google OAuth with an app-enforced allowlist is used for writable access and should generate a session.
 - Write access: an authenticated session can create visits and edit existing selections.
 - Destructive edits: deleting a restaurant or visit should require a simple confirmation modal.
 - Public access: readonly view should be publicly viewable, similar to Dejaview.

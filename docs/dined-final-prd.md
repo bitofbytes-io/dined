@@ -67,8 +67,8 @@ Desktop views still matter for public readonly browsing and visual direction exp
 
 ### Writable Access
 
-- One API token grants user access.
-- The API token should create an authenticated session.
+- An allowlisted Google account grants writable family access.
+- Google OAuth should create an authenticated session.
 - An authenticated session can:
   - create restaurants
   - create visits
@@ -533,7 +533,7 @@ Reference:
 
 ### Must Have
 
-- API token session login
+- Google OAuth session login
 - Public readonly visit history
 - Seed people: Daniel, Jen, Caleb, Aiden
 - Google Places restaurant search
@@ -605,7 +605,7 @@ Dined MVP is successful if:
 
 - Audience is one family.
 - There is one writable user/session model.
-- API token creates a session.
+- Google OAuth creates a session for allowlisted family accounts.
 - Public readonly exposes every visit and notes.
 - Saved Google-backed restaurant details can be public readonly.
 - Readonly cannot edit.

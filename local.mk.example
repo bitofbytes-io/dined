@@ -2,9 +2,18 @@
 PORT := 4600
 APP_ENV := development
 DATA_STORE := memory
-API_TOKEN := dined
 GOOGLE_PLACES_API_KEY :=
 SECURE_COOKIES := false
+
+# Google OAuth local client.
+# Google Console local origin: http://localhost:4600
+# Google Console local redirect URI: http://localhost:4600/api/auth/google/callback
+AUTH_GOOGLE_CLIENT_ID := your-local-client-id.apps.googleusercontent.com
+AUTH_GOOGLE_CLIENT_SECRET := your-local-client-secret
+AUTH_GOOGLE_REDIRECT_URL := http://localhost:4600/api/auth/google/callback
+AUTH_GOOGLE_ALLOWED_EMAILS := you@gmail.com
+AUTH_GOOGLE_ALLOWED_DOMAINS :=
+AUTH_SESSION_TTL := 2160h
 
 # Used by make run-postgres and migration targets.
 # Credentials must already be URL-encoded.

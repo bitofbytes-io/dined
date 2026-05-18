@@ -21,7 +21,7 @@ Dined has a clear wedge: private restaurant memory, not discovery or public revi
 - Restaurant data source needs a first choice. Supporting both Google Places and Yelp in v1 increases integration and matching complexity.
 - Duplicate restaurant handling will matter. Places data, manual entries, renamed restaurants, and multiple locations can create messy history.
 - Offline or poor-signal logging should be considered because users may log from inside restaurants.
-- Visit ownership is now clear: one family-owned dataset with one writable account/API token and a public readonly view.
+- Visit ownership is now clear: one family-owned dataset with allowlisted Google accounts sharing one writable role and a public readonly view.
 - Search ranking should prioritize personal history over external search results.
 - Stats need guardrails so joke awards feel affectionate and never make the app feel mean.
 - Photos, receipts, and notes are tempting but could slow the core logging flow if added too early.
@@ -30,7 +30,7 @@ Dined has a clear wedge: private restaurant memory, not discovery or public revi
 
 Start with a family-first private PWA:
 
-1. One API token grants user access and creates an authenticated session.
+1. Google OAuth grants allowlisted family accounts writable access and creates an authenticated session.
 2. The four people are Daniel, Jen, Caleb, and Aiden.
 3. Google Places is the only external restaurant source for v1.
 4. Public readonly view should be supported, similar to Dejaview, and should expose every visit.
@@ -43,8 +43,8 @@ Start with a family-first private PWA:
 ## Resolved Decisions
 
 - Audience: one family, not broad friend groups or formal shared spaces.
-- Account model: one writable user; family can share the same API token if needed.
-- Auth: API token creates a session, and that session can create visits and edit existing selections.
+- Account model: one writable role shared by allowlisted family Google accounts.
+- Auth: Google OAuth creates a session, and that session can create visits and edit existing selections.
 - Destructive edits: deleting a restaurant or visit should require a simple confirmation modal.
 - Readonly: public readonly view exposes every visit, including notes and saved Google-backed restaurant details, but never allows editing.
 - Picker: one picker per visit, chosen from the four family members.

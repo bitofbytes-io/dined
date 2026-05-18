@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/bitofbytes-io/dined/internal/auth"
 	"github.com/bitofbytes-io/dined/internal/config"
 	"github.com/bitofbytes-io/dined/internal/places"
 	"github.com/bitofbytes-io/dined/internal/repository"
@@ -27,11 +28,25 @@ func main() {
 	}
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: level})))
 
-	store, cleanup := openStore(cfg)
+	store, authRepo, cleanup := openStores(cfg)
 	defer cleanup()
 
+	authService := auth.NewService(authRepo, cfg.AuthSessionTTL)
+	googleAuth, err := auth.NewGoogleAuthenticator(
+		context.Background(),
+		cfg.GoogleClientID,
+		cfg.GoogleClientSecret,
+		cfg.GoogleRedirectURL,
+		cfg.GoogleAllowedDomains,
+		cfg.GoogleAllowedEmails,
+	)
+	if err != nil {
+		slog.Error("initialize google auth", "error", err)
+		os.Exit(1)
+	}
+
 	placesClient := places.NewClient(cfg.GooglePlacesAPIKey)
-	srv := server.New(cfg, store, placesClient)
+	srv := server.New(cfg, store, placesClient, authService, googleAuth)
 
 	httpServer := &http.Server{
 		Addr:              ":" + cfg.Port,
@@ -46,10 +61,10 @@ func main() {
 	}
 }
 
-func openStore(cfg *config.Config) (repository.DinerStore, func()) {
+func openStores(cfg *config.Config) (repository.DinerStore, auth.Repository, func()) {
 	if cfg.DataStore == config.DataStoreMemory {
 		slog.Info("using in-memory data store")
-		return repository.NewMemoryStore(), func() {}
+		return repository.NewMemoryStore(), auth.NewMemoryRepository(), func() {}
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -67,5 +82,5 @@ func openStore(cfg *config.Config) (repository.DinerStore, func()) {
 		os.Exit(1)
 	}
 
-	return repository.New(pool), pool.Close
+	return repository.New(pool), auth.NewPostgresRepository(pool), pool.Close
 }
