@@ -3,6 +3,7 @@ package server
 import (
 	"net/http"
 
+	"github.com/bitofbytes-io/dined/internal/auth"
 	"github.com/bitofbytes-io/dined/internal/config"
 	"github.com/bitofbytes-io/dined/internal/handler"
 	"github.com/bitofbytes-io/dined/internal/middleware"
@@ -13,13 +14,15 @@ import (
 )
 
 type Server struct {
-	cfg    *config.Config
-	store  repository.DinerStore
-	places *places.Client
+	cfg         *config.Config
+	store       repository.DinerStore
+	places      *places.Client
+	authService *auth.Service
+	googleAuth  *auth.GoogleAuthenticator
 }
 
-func New(cfg *config.Config, store repository.DinerStore, placesClient *places.Client) *Server {
-	return &Server{cfg: cfg, store: store, places: placesClient}
+func New(cfg *config.Config, store repository.DinerStore, placesClient *places.Client, authService *auth.Service, googleAuth *auth.GoogleAuthenticator) *Server {
+	return &Server{cfg: cfg, store: store, places: placesClient, authService: authService, googleAuth: googleAuth}
 }
 
 func (s *Server) Router() http.Handler {
@@ -42,12 +45,15 @@ func (s *Server) Router() http.Handler {
 		_, _ = w.Write([]byte("ok"))
 	})
 
-	h := handler.New(s.cfg, s.store, s.places)
+	h := handler.New(s.cfg, s.store, s.places, s.authService, s.googleAuth)
 	r.Get("/login", h.LoginPage)
 	r.Post("/login", h.Login)
+	r.Get("/api/auth/google", h.StartGoogleLogin)
+	r.Get("/api/auth/google/callback", h.GoogleCallback)
+	r.Post("/logout", h.Logout)
 
 	r.Group(func(r chi.Router) {
-		r.Use(middleware.Auth(s.cfg.APIToken, s.cfg.SecureCookies))
+		r.Use(middleware.Auth(s.authService, s.cfg.SecureCookies))
 		r.Get("/", h.Home)
 		r.Get("/dines", h.Dines)
 		r.Get("/restaurants/{id}", h.Restaurant)
@@ -65,7 +71,6 @@ func (s *Server) Router() http.Handler {
 		r.Post("/restaurants/{id}/google-refresh", h.RefreshRestaurantGoogle)
 		r.Get("/search", h.Search)
 		r.Get("/nearby", h.Nearby)
-		r.Post("/logout", h.Logout)
 	})
 
 	return r

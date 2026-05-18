@@ -1,15 +1,17 @@
 package middleware
 
 import (
-	"crypto/subtle"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
+
+	"github.com/bitofbytes-io/dined/internal/auth"
 )
 
 const CookieName = "dined_session"
 
-func Auth(apiToken string, secureCookies bool) func(http.Handler) http.Handler {
+func Auth(authService *auth.Service, secureCookies bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if isPublicReadRequest(r) {
@@ -17,21 +19,22 @@ func Auth(apiToken string, secureCookies bool) func(http.Handler) http.Handler {
 				return
 			}
 
-			if authHeader := r.Header.Get("Authorization"); authHeader != "" {
-				token, ok := strings.CutPrefix(authHeader, "Bearer ")
-				if ok && constantTimeEqual(token, apiToken) {
-					next.ServeHTTP(w, r)
-					return
-				}
-				http.Error(w, "Unauthorized", http.StatusUnauthorized)
-				return
-			}
-
 			cookie, err := r.Cookie(CookieName)
-			if err != nil || !constantTimeEqual(cookie.Value, apiToken) {
+			if err != nil || cookie.Value == "" {
 				if err == nil {
 					clearCookie(w, secureCookies)
 				}
+				if shouldReturnUnauthorized(r) {
+					http.Error(w, "Unauthorized", http.StatusUnauthorized)
+					return
+				}
+				redirectToLogin(w, r)
+				return
+			}
+
+			user, err := authService.ValidateSession(r.Context(), cookie.Value)
+			if err != nil || user == nil {
+				clearCookie(w, secureCookies)
 				if shouldReturnUnauthorized(r) {
 					http.Error(w, "Unauthorized", http.StatusUnauthorized)
 					return
@@ -45,7 +48,7 @@ func Auth(apiToken string, secureCookies bool) func(http.Handler) http.Handler {
 	}
 }
 
-func SetSessionCookie(w http.ResponseWriter, token string, secure bool) {
+func SetSessionCookie(w http.ResponseWriter, token string, secure bool, ttl time.Duration) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     CookieName,
 		Value:    token,
@@ -53,7 +56,7 @@ func SetSessionCookie(w http.ResponseWriter, token string, secure bool) {
 		HttpOnly: true,
 		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
-		MaxAge:   60 * 60 * 24 * 365,
+		MaxAge:   int(ttl.Seconds()),
 	})
 }
 
@@ -61,9 +64,13 @@ func ClearSessionCookie(w http.ResponseWriter, secure bool) {
 	clearCookie(w, secure)
 }
 
-func IsAuthenticated(r *http.Request, apiToken string) bool {
+func IsAuthenticated(r *http.Request, authService *auth.Service) bool {
 	cookie, err := r.Cookie(CookieName)
-	return err == nil && constantTimeEqual(cookie.Value, apiToken)
+	if err != nil || cookie.Value == "" || authService == nil {
+		return false
+	}
+	user, err := authService.ValidateSession(r.Context(), cookie.Value)
+	return err == nil && user != nil
 }
 
 func isPublicReadRequest(r *http.Request) bool {
@@ -103,12 +110,9 @@ func clearCookie(w http.ResponseWriter, secure bool) {
 		Value:    "",
 		Path:     "/",
 		MaxAge:   -1,
+		Expires:  time.Unix(0, 0),
 		HttpOnly: true,
 		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 	})
-}
-
-func constantTimeEqual(a, b string) bool {
-	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
 }

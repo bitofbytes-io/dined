@@ -9,9 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bitofbytes-io/dined/internal/config"
+	"github.com/bitofbytes-io/dined/internal/middleware"
 	"github.com/bitofbytes-io/dined/internal/model"
-	"github.com/bitofbytes-io/dined/internal/places"
 	"github.com/bitofbytes-io/dined/internal/repository"
 	"github.com/google/uuid"
 )
@@ -44,9 +43,9 @@ func TestRouterDeletesUnvisitedRestaurantAndPreservesSearch(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	router := New(&config.Config{APIToken: "secret"}, store, places.NewClient("")).Router()
+	router, token := newAuthenticatedTestRouter(t, store)
 	req := httptest.NewRequest(http.MethodPost, "/restaurants/"+restaurants[0].ID.String()+"/delete", strings.NewReader("q=Amigos"))
-	req.Header.Set("Authorization", "Bearer secret")
+	req.AddCookie(&http.Cookie{Name: middleware.CookieName, Value: token})
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
 
@@ -78,9 +77,9 @@ func TestRouterRefusesVisitedRestaurantDelete(t *testing.T) {
 		t.Fatalf("expected one Hank restaurant, got %d", len(restaurants))
 	}
 
-	router := New(&config.Config{APIToken: "secret"}, store, places.NewClient("")).Router()
+	router, token := newAuthenticatedTestRouter(t, store)
 	req := httptest.NewRequest(http.MethodPost, "/restaurants/"+restaurants[0].ID.String()+"/delete", strings.NewReader("q=Hank"))
-	req.Header.Set("Authorization", "Bearer secret")
+	req.AddCookie(&http.Cookie{Name: middleware.CookieName, Value: token})
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
 
@@ -128,9 +127,9 @@ func TestRouterCreateVisitWithoutRatingPreservesPostedForm(t *testing.T) {
 	form.Set("is_chain", "true")
 	form.Add("tag_id", tags[0].ID.String())
 
-	router := New(&config.Config{APIToken: "secret"}, store, places.NewClient("")).Router()
+	router, token := newAuthenticatedTestRouter(t, store)
 	req := httptest.NewRequest(http.MethodPost, "/visits", strings.NewReader(form.Encode()))
-	req.Header.Set("Authorization", "Bearer secret")
+	req.AddCookie(&http.Cookie{Name: middleware.CookieName, Value: token})
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
 
@@ -188,9 +187,9 @@ func TestRouterCreateVisitAcceptsZeroRating(t *testing.T) {
 	form.Set("price_level", "2")
 	form.Set("rating_"+people[0].ID.String(), "0")
 
-	router := New(&config.Config{APIToken: "secret"}, store, places.NewClient("")).Router()
+	router, token := newAuthenticatedTestRouter(t, store)
 	req := httptest.NewRequest(http.MethodPost, "/visits", strings.NewReader(form.Encode()))
-	req.Header.Set("Authorization", "Bearer secret")
+	req.AddCookie(&http.Cookie{Name: middleware.CookieName, Value: token})
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
 

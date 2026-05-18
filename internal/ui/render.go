@@ -780,7 +780,7 @@ const templates = `
 
 {{define "login"}}
 {{template "top" .}}
-<main class="page-band pass-page"><form class="login-card kitchen-pass" method="post" action="/login"><p class="eyebrow">Private Counter</p><h1>Kitchen Pass</h1><label>API token<input type="password" name="token" autofocus></label><input type="hidden" name="redirect" value="{{.Query}}"><button class="primary-button">Enter</button></form></main>
+<main class="page-band pass-page"><section class="login-card kitchen-pass"><p class="eyebrow">Private Counter</p><h1>Kitchen Pass</h1><a class="primary-button" href="/api/auth/google{{if .Query}}?redirect={{query .Query}}{{end}}" hx-boost="false">Continue with Google</a></section></main>
 {{template "bottom" .}}
 {{end}}
 

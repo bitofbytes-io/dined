@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/bitofbytes-io/dined/internal/apptime"
+	"github.com/bitofbytes-io/dined/internal/auth"
 	"github.com/bitofbytes-io/dined/internal/config"
 	"github.com/bitofbytes-io/dined/internal/middleware"
 	"github.com/bitofbytes-io/dined/internal/model"
@@ -22,13 +23,15 @@ import (
 )
 
 type Handler struct {
-	cfg    *config.Config
-	store  repository.DinerStore
-	places *places.Client
+	cfg         *config.Config
+	store       repository.DinerStore
+	places      *places.Client
+	authService *auth.Service
+	googleAuth  googleAuthenticator
 }
 
-func New(cfg *config.Config, store repository.DinerStore, placesClient *places.Client) *Handler {
-	return &Handler{cfg: cfg, store: store, places: placesClient}
+func New(cfg *config.Config, store repository.DinerStore, placesClient *places.Client, authService *auth.Service, googleAuth googleAuthenticator) *Handler {
+	return &Handler{cfg: cfg, store: store, places: placesClient, authService: authService, googleAuth: googleAuth}
 }
 
 func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
@@ -409,27 +412,23 @@ func nearbyTextQuery(query, near string) string {
 }
 
 func (h *Handler) LoginPage(w http.ResponseWriter, r *http.Request) {
-	h.render(w, "login", r, ui.PageData{Title: "Login", Query: r.URL.Query().Get("redirect")})
+	data := ui.PageData{Title: "Login", Query: r.URL.Query().Get("redirect")}
+	if message := r.URL.Query().Get("message"); message != "" {
+		data.Error = message
+	}
+	h.render(w, "login", r, data)
 }
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "Invalid form", http.StatusBadRequest)
-		return
-	}
-	if r.FormValue("token") != h.cfg.APIToken {
-		h.render(w, "login", r, ui.PageData{Title: "Login", Query: r.FormValue("redirect"), Error: "Invalid token"})
-		return
-	}
-	middleware.SetSessionCookie(w, h.cfg.APIToken, h.cfg.SecureCookies)
-	redirect := r.FormValue("redirect")
-	if redirect == "" {
-		redirect = "/"
-	}
-	http.Redirect(w, r, redirect, http.StatusSeeOther)
+	http.Redirect(w, r, googleLoginPath(r.FormValue("redirect")), http.StatusSeeOther)
 }
 
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
+	if cookie, err := r.Cookie(middleware.CookieName); err == nil && cookie.Value != "" && h.authService != nil {
+		if err := h.authService.DeleteSession(r.Context(), cookie.Value); err != nil {
+			slog.Error("delete session", "error", err)
+		}
+	}
 	middleware.ClearSessionCookie(w, h.cfg.SecureCookies)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
@@ -685,7 +684,7 @@ func (h *Handler) renderRestaurantEditError(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *Handler) render(w http.ResponseWriter, name string, r *http.Request, data ui.PageData) {
-	data.Authenticated = middleware.IsAuthenticated(r, h.cfg.APIToken)
+	data.Authenticated = middleware.IsAuthenticated(r, h.authService)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := ui.Render(w, name, data); err != nil {
 		slog.Error("render page", "page", name, "error", err)

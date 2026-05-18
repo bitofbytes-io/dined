@@ -84,6 +84,17 @@ func TestRenderUsesVersionedStylesheetAndScript(t *testing.T) {
 	}
 }
 
+func TestRenderLoginOAuthLinkOptsOutOfBoost(t *testing.T) {
+	var out strings.Builder
+	if err := Render(&out, "login", PageData{}); err != nil {
+		t.Fatal(err)
+	}
+	rendered := out.String()
+	if !strings.Contains(rendered, `href="/api/auth/google" hx-boost="false"`) {
+		t.Fatalf("rendered login missing unboosted OAuth link:\n%s", rendered)
+	}
+}
+
 func TestRenderDefaultsNowLocalToEasternTime(t *testing.T) {
 	before := apptime.FormatDatetimeLocal(time.Now())
 	var out strings.Builder
