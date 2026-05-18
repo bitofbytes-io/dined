@@ -1082,7 +1082,7 @@ fieldset {
   margin: 0 auto;
   overflow: hidden;
   color: var(--milk);
-  background: url("/static/assets/dined-jukebox-trophy-clean.jpg") center / cover no-repeat;
+  background: url("/static/assets/dined-jukebox-trophy-clean-v2.jpg") left center / cover no-repeat;
   border: 7px solid var(--chrome);
   border-radius: var(--radius);
   box-shadow: 0 30px 90px rgba(0, 0, 0, .5), inset 0 0 0 4px rgba(255, 247, 223, .14);
@@ -1179,7 +1179,7 @@ fieldset {
   left: 50%;
   width: .75rem;
   height: .75rem;
-  background: var(--butter);
+  background: #050707;
   border: 3px solid var(--night);
   border-radius: 50%;
   transform: translate(-50%, -50%);
