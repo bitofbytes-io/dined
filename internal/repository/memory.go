@@ -155,18 +155,27 @@ func (m *MemoryStore) CreateVisit(_ context.Context, input model.VisitInput) (*u
 		if !ok {
 			now := time.Now()
 			restaurant = model.Restaurant{
-				ID:            uuid.New(),
-				Name:          strings.TrimSpace(input.RestaurantName),
-				Address:       strPtrOrNil(input.Address),
-				City:          strPtrOrNil(input.City),
-				GooglePlaceID: strPtrOrNil(input.GooglePlaceID),
-				Category:      strPtrOrNil(input.Category),
-				IsChain:       input.IsChain,
-				CreatedAt:     now,
-				UpdatedAt:     now,
+				ID:               uuid.New(),
+				Name:             strings.TrimSpace(input.RestaurantName),
+				Address:          strPtrOrNil(input.Address),
+				City:             strPtrOrNil(input.City),
+				Latitude:         floatPtrOrNil(input.GoogleMetadata.Latitude),
+				Longitude:        floatPtrOrNil(input.GoogleMetadata.Longitude),
+				Phone:            strPtrOrNil(input.GoogleMetadata.Phone),
+				Website:          strPtrOrNil(input.GoogleMetadata.Website),
+				GooglePlaceID:    strPtrOrNil(input.GooglePlaceID),
+				GoogleRating:     floatPtrOrNil(input.GoogleMetadata.GoogleRating),
+				GooglePriceLevel: intPtrOrNil(input.GoogleMetadata.GooglePriceLevel),
+				Category:         strPtrOrNil(input.Category),
+				IsChain:          input.IsChain,
+				CreatedAt:        now,
+				UpdatedAt:        now,
 			}
 			m.restaurants = append(m.restaurants, restaurant)
 		}
+	} else if input.RestaurantID != nil {
+		m.updateRestaurantMetadataByID(*input.RestaurantID, input)
+		restaurant, _ = m.findRestaurant(input.RestaurantID)
 	}
 
 	picker := m.personByID(input.PickerID)
@@ -198,6 +207,18 @@ func (m *MemoryStore) CreateVisit(_ context.Context, input model.VisitInput) (*u
 	}
 	m.visits = append(m.visits, visit)
 	return &visit.ID, nil
+}
+
+func (m *MemoryStore) UpdateRestaurantGoogleMetadata(_ context.Context, id uuid.UUID, metadata model.GoogleRestaurantMetadata) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i := range m.restaurants {
+		if m.restaurants[i].ID == id {
+			m.updateGoogleMetadata(i, metadata)
+			return nil
+		}
+	}
+	return nil
 }
 
 func (m *MemoryStore) DeleteVisit(_ context.Context, id uuid.UUID) error {
@@ -366,6 +387,44 @@ func (m *MemoryStore) updateRestaurantMetadata(index int, input model.VisitInput
 		m.restaurants[index].City = strPtr(city)
 		m.restaurants[index].UpdatedAt = now
 	}
+	m.updateGoogleMetadata(index, input.GoogleMetadata)
+}
+
+func (m *MemoryStore) updateRestaurantMetadataByID(id uuid.UUID, input model.VisitInput) {
+	for i := range m.restaurants {
+		if m.restaurants[i].ID == id {
+			m.updateRestaurantMetadata(i, input)
+			return
+		}
+	}
+}
+
+func (m *MemoryStore) updateGoogleMetadata(index int, metadata model.GoogleRestaurantMetadata) {
+	now := time.Now()
+	if metadata.Latitude != nil {
+		m.restaurants[index].Latitude = floatPtr(*metadata.Latitude)
+		m.restaurants[index].UpdatedAt = now
+	}
+	if metadata.Longitude != nil {
+		m.restaurants[index].Longitude = floatPtr(*metadata.Longitude)
+		m.restaurants[index].UpdatedAt = now
+	}
+	if phone := strings.TrimSpace(metadata.Phone); phone != "" {
+		m.restaurants[index].Phone = strPtr(phone)
+		m.restaurants[index].UpdatedAt = now
+	}
+	if website := strings.TrimSpace(metadata.Website); website != "" {
+		m.restaurants[index].Website = strPtr(website)
+		m.restaurants[index].UpdatedAt = now
+	}
+	if metadata.GoogleRating != nil {
+		m.restaurants[index].GoogleRating = floatPtr(*metadata.GoogleRating)
+		m.restaurants[index].UpdatedAt = now
+	}
+	if metadata.GooglePriceLevel != nil {
+		m.restaurants[index].GooglePriceLevel = intPtr(*metadata.GooglePriceLevel)
+		m.restaurants[index].UpdatedAt = now
+	}
 }
 
 func (m *MemoryStore) personByID(id uuid.UUID) model.Person {
@@ -522,4 +581,22 @@ func strPtrOrNil(value string) *string {
 
 func floatPtr(value float64) *float64 {
 	return &value
+}
+
+func floatPtrOrNil(value *float64) *float64 {
+	if value == nil {
+		return nil
+	}
+	return floatPtr(*value)
+}
+
+func intPtr(value int) *int {
+	return &value
+}
+
+func intPtrOrNil(value *int) *int {
+	if value == nil {
+		return nil
+	}
+	return intPtr(*value)
 }

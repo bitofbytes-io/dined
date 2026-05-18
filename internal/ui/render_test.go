@@ -167,6 +167,34 @@ func TestRenderTrophyTopRestaurantsEmptyState(t *testing.T) {
 	}
 }
 
+func TestRenderRestaurantShowsGoogleRefreshAction(t *testing.T) {
+	restaurantID := uuid.New()
+	placeID := "place-1"
+	var out strings.Builder
+	err := Render(&out, "restaurant", PageData{
+		Authenticated: true,
+		Notice:        "Google info refreshed",
+		Restaurant: &model.Restaurant{
+			ID:            restaurantID,
+			Name:          "Tupelo Honey Southern Kitchen & Bar",
+			GooglePlaceID: &placeID,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered := out.String()
+	for _, fragment := range []string{
+		"Google info refreshed",
+		`action="/restaurants/` + restaurantID.String() + `/google-refresh"`,
+		"Refresh Google Info",
+	} {
+		if !strings.Contains(rendered, fragment) {
+			t.Fatalf("rendered restaurant missing %q:\n%s", fragment, rendered)
+		}
+	}
+}
+
 func TestRenderLogPreselectsNextPicker(t *testing.T) {
 	jenID := uuid.New()
 	var out strings.Builder

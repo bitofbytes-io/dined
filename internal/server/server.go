@@ -57,6 +57,7 @@ func (s *Server) Router() http.Handler {
 		r.Post("/visits", h.CreateVisit)
 		r.Post("/visits/{id}/delete", h.DeleteVisit)
 		r.Post("/restaurants/{id}/chain", h.ToggleChain)
+		r.Post("/restaurants/{id}/google-refresh", h.RefreshRestaurantGoogle)
 		r.Get("/search", h.Search)
 		r.Get("/nearby", h.Nearby)
 		r.Post("/logout", h.Logout)

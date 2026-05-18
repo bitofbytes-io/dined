@@ -12,6 +12,7 @@ import (
 	"github.com/bitofbytes-io/dined/internal/middleware"
 	"github.com/bitofbytes-io/dined/internal/model"
 	"github.com/bitofbytes-io/dined/internal/places"
+	"github.com/bitofbytes-io/dined/internal/placesync"
 	"github.com/bitofbytes-io/dined/internal/repository"
 	"github.com/bitofbytes-io/dined/internal/ui"
 	"github.com/go-chi/chi/v5"
@@ -71,7 +72,12 @@ func (h *Handler) Restaurant(w http.ResponseWriter, r *http.Request) {
 		h.error(w, "restaurant visits", err)
 		return
 	}
-	h.render(w, "restaurant", r, ui.PageData{Title: restaurant.Name, Restaurant: restaurant, Visits: visits})
+	h.render(w, "restaurant", r, ui.PageData{
+		Title:      restaurant.Name,
+		Restaurant: restaurant,
+		Visits:     visits,
+		Notice:     googleRefreshNotice(r.URL.Query().Get("google_refresh")),
+	})
 }
 
 func (h *Handler) Trophy(w http.ResponseWriter, r *http.Request) {
@@ -107,6 +113,12 @@ func (h *Handler) CreateVisit(w http.ResponseWriter, r *http.Request) {
 		h.renderLogError(w, r, err.Error())
 		return
 	}
+	enrichedInput, err := placesync.EnrichVisitInput(r.Context(), h.places, input)
+	if err != nil {
+		slog.Warn("places details failed", "place_id", input.GooglePlaceID, "error", err)
+	} else {
+		input = enrichedInput
+	}
 	visitID, err := h.store.CreateVisit(r.Context(), input)
 	if err != nil {
 		h.renderLogError(w, r, err.Error())
@@ -140,6 +152,65 @@ func (h *Handler) ToggleChain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/restaurants/"+id.String(), http.StatusSeeOther)
+}
+
+func (h *Handler) RefreshRestaurantGoogle(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "Invalid restaurant ID", http.StatusBadRequest)
+		return
+	}
+	restaurant, err := h.store.Restaurant(r.Context(), id)
+	if err != nil {
+		h.error(w, "restaurant", err)
+		return
+	}
+	if restaurant == nil {
+		http.NotFound(w, r)
+		return
+	}
+	if h.places == nil || !h.places.Configured() {
+		redirectRestaurantGoogleRefresh(w, r, id, "unconfigured")
+		return
+	}
+	if restaurant.GooglePlaceID == nil || strings.TrimSpace(*restaurant.GooglePlaceID) == "" {
+		redirectRestaurantGoogleRefresh(w, r, id, "missing-place-id")
+		return
+	}
+	place, err := h.places.Details(r.Context(), *restaurant.GooglePlaceID)
+	if err != nil {
+		slog.Warn("places details refresh failed", "restaurant_id", id, "place_id", *restaurant.GooglePlaceID, "error", err)
+		redirectRestaurantGoogleRefresh(w, r, id, "failed")
+		return
+	}
+	if place == nil {
+		redirectRestaurantGoogleRefresh(w, r, id, "failed")
+		return
+	}
+	if err := h.store.UpdateRestaurantGoogleMetadata(r.Context(), id, placesync.MetadataFromPlace(*place)); err != nil {
+		h.error(w, "refresh restaurant google metadata", err)
+		return
+	}
+	redirectRestaurantGoogleRefresh(w, r, id, "updated")
+}
+
+func redirectRestaurantGoogleRefresh(w http.ResponseWriter, r *http.Request, id uuid.UUID, status string) {
+	http.Redirect(w, r, "/restaurants/"+id.String()+"?google_refresh="+status, http.StatusSeeOther)
+}
+
+func googleRefreshNotice(status string) string {
+	switch status {
+	case "updated":
+		return "Google info refreshed"
+	case "failed":
+		return "Google info refresh failed"
+	case "missing-place-id":
+		return "No Google Place ID saved for this restaurant"
+	case "unconfigured":
+		return "Google Places is not configured"
+	default:
+		return ""
+	}
 }
 
 func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {

@@ -30,6 +30,15 @@ type Restaurant struct {
 	UpdatedAt        time.Time
 }
 
+type GoogleRestaurantMetadata struct {
+	Latitude         *float64
+	Longitude        *float64
+	Phone            string
+	Website          string
+	GoogleRating     *float64
+	GooglePriceLevel *int
+}
+
 type Visit struct {
 	ID         uuid.UUID
 	Restaurant Restaurant
@@ -59,6 +68,7 @@ type VisitInput struct {
 	Address        string
 	City           string
 	GooglePlaceID  string
+	GoogleMetadata GoogleRestaurantMetadata
 	Category       string
 	IsChain        bool
 	VisitedAt      time.Time

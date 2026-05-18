@@ -180,6 +180,18 @@ func TestMemoryStoreCreateVisitReusesNameAddressWithPlaceID(t *testing.T) {
 	withPlace.GooglePlaceID = "manual-cafe-place"
 	withPlace.Category = "Coffee"
 	withPlace.City = "Apex"
+	rating := 4.3
+	price := 2
+	lat := 35.7903375
+	lng := -78.6631725
+	withPlace.GoogleMetadata = model.GoogleRestaurantMetadata{
+		Latitude:         &lat,
+		Longitude:        &lng,
+		Phone:            "(919) 723-9353",
+		Website:          "https://tupelohoneycafe.com/restaurant/raleigh/",
+		GoogleRating:     &rating,
+		GooglePriceLevel: &price,
+	}
 
 	secondID, err := store.CreateVisit(context.Background(), withPlace)
 	if err != nil {
@@ -196,6 +208,60 @@ func TestMemoryStoreCreateVisitReusesNameAddressWithPlaceID(t *testing.T) {
 	}
 	if second.Restaurant.City == nil || *second.Restaurant.City != "Apex" {
 		t.Fatalf("expected city to be attached, got %#v", second.Restaurant.City)
+	}
+	assertRestaurantGoogleMetadata(t, second.Restaurant, rating, price, lat, lng)
+}
+
+func TestMemoryStoreCreateVisitUpdatesExistingRestaurantIDGoogleMetadata(t *testing.T) {
+	store := NewMemoryStore()
+	people, err := store.People(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := model.VisitInput{
+		RestaurantName: "Manual Cafe",
+		Address:        "1 Test Way",
+		GooglePlaceID:  "manual-cafe-place",
+		Category:       "Coffee",
+		VisitedAt:      time.Now(),
+		PickerID:       people[0].ID,
+		PriceLevel:     2,
+		Ratings:        map[uuid.UUID]float64{people[0].ID: 8},
+	}
+	firstID, err := store.CreateVisit(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := visitByID(t, store, *firstID)
+	if first.Restaurant.GoogleRating != nil {
+		t.Fatalf("expected first visit to have no Google rating, got %#v", first.Restaurant.GoogleRating)
+	}
+
+	rating := 4.6
+	price := 3
+	lat := 35.7
+	lng := -78.6
+	withMetadata := input
+	withMetadata.RestaurantID = &first.Restaurant.ID
+	withMetadata.VisitedAt = input.VisitedAt.Add(time.Hour)
+	withMetadata.Category = "Other"
+	withMetadata.GoogleMetadata = model.GoogleRestaurantMetadata{
+		Latitude:         &lat,
+		Longitude:        &lng,
+		Phone:            "919-555-1212",
+		Website:          "https://example.com",
+		GoogleRating:     &rating,
+		GooglePriceLevel: &price,
+	}
+
+	secondID, err := store.CreateVisit(context.Background(), withMetadata)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second := visitByID(t, store, *secondID)
+	assertRestaurantGoogleMetadata(t, second.Restaurant, rating, price, lat, lng)
+	if second.Restaurant.Category == nil || *second.Restaurant.Category != "Coffee" {
+		t.Fatalf("expected existing category to be preserved, got %#v", second.Restaurant.Category)
 	}
 }
 
@@ -275,4 +341,26 @@ func visitByID(t *testing.T, store *MemoryStore, id uuid.UUID) model.Visit {
 	}
 	t.Fatalf("visit %s not found", id)
 	return model.Visit{}
+}
+
+func assertRestaurantGoogleMetadata(t *testing.T, restaurant model.Restaurant, rating float64, price int, lat float64, lng float64) {
+	t.Helper()
+	if restaurant.Latitude == nil || *restaurant.Latitude != lat {
+		t.Fatalf("Latitude = %#v, want %f", restaurant.Latitude, lat)
+	}
+	if restaurant.Longitude == nil || *restaurant.Longitude != lng {
+		t.Fatalf("Longitude = %#v, want %f", restaurant.Longitude, lng)
+	}
+	if restaurant.Phone == nil || *restaurant.Phone == "" {
+		t.Fatalf("Phone = %#v", restaurant.Phone)
+	}
+	if restaurant.Website == nil || *restaurant.Website == "" {
+		t.Fatalf("Website = %#v", restaurant.Website)
+	}
+	if restaurant.GoogleRating == nil || *restaurant.GoogleRating != rating {
+		t.Fatalf("GoogleRating = %#v, want %f", restaurant.GoogleRating, rating)
+	}
+	if restaurant.GooglePriceLevel == nil || *restaurant.GooglePriceLevel != price {
+		t.Fatalf("GooglePriceLevel = %#v, want %d", restaurant.GooglePriceLevel, price)
+	}
 }
