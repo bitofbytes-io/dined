@@ -1064,6 +1064,9 @@ fieldset {
   color: var(--night);
   font-size: 2.7rem;
 }
+.kitchen-pass .primary-button {
+  margin-top: .75rem;
+}
 
 /* Trophy screen */
 .jukebox-stage {
