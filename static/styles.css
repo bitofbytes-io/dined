@@ -1012,17 +1012,36 @@ fieldset {
 .history-row > span, .history-row .tags {
   grid-column: 1 / -1;
 }
-.history-row > div:first-child, .place-row > div:first-child {
+.history-title, .place-row > div:first-child {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: .45rem;
+}
+.history-title a {
+  text-decoration: none;
+}
+.history-title a:hover strong,
+.history-title a:focus-visible strong {
+  color: var(--red);
 }
 .row-stats {
   grid-column: 1 / -1;
   display: flex;
   flex-wrap: wrap;
   gap: .45rem;
+}
+.history-remove-form {
+  grid-column: 2;
+  grid-row: 1 / span 4;
+  align-self: start;
+  justify-self: end;
+  margin: 0;
+}
+.history-remove-button {
+  min-height: 2.1rem;
+  padding: .45rem .68rem;
+  font-size: .72rem;
 }
 .restaurant-row .row-stats span {
   display: inline-flex;
@@ -1614,6 +1633,17 @@ fieldset {
   }
   .place-row {
     grid-template-columns: 1fr;
+  }
+  .history-row {
+    grid-template-columns: 1fr;
+  }
+  .history-remove-form {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: stretch;
+  }
+  .history-remove-button {
+    width: 100%;
   }
   .place-row .small-cta {
     grid-column: 1;

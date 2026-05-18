@@ -233,6 +233,23 @@ func (m *MemoryStore) DeleteVisit(_ context.Context, id uuid.UUID) error {
 	return nil
 }
 
+func (m *MemoryStore) DeleteRestaurantIfUnvisited(_ context.Context, id uuid.UUID) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, visit := range m.visits {
+		if visit.Restaurant.ID == id {
+			return false, nil
+		}
+	}
+	for i, restaurant := range m.restaurants {
+		if restaurant.ID == id {
+			m.restaurants = append(m.restaurants[:i], m.restaurants[i+1:]...)
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (m *MemoryStore) ToggleChain(_ context.Context, id uuid.UUID, isChain bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()

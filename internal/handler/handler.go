@@ -3,6 +3,7 @@ package handler
 import (
 	"log/slog"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -140,6 +141,24 @@ func (h *Handler) DeleteVisit(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/dines", http.StatusSeeOther)
 }
 
+func (h *Handler) DeleteRestaurant(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.Error(w, "Invalid restaurant ID", http.StatusBadRequest)
+		return
+	}
+	deleted, err := h.store.DeleteRestaurantIfUnvisited(r.Context(), id)
+	if err != nil {
+		h.error(w, "delete restaurant", err)
+		return
+	}
+	if !deleted {
+		http.Error(w, "Restaurant has visits and cannot be removed from saved spots", http.StatusConflict)
+		return
+	}
+	http.Redirect(w, r, searchRedirect(r.FormValue("q")), http.StatusSeeOther)
+}
+
 func (h *Handler) ToggleChain(w http.ResponseWriter, r *http.Request) {
 	id, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
@@ -211,6 +230,13 @@ func googleRefreshNotice(status string) string {
 	default:
 		return ""
 	}
+}
+
+func searchRedirect(q string) string {
+	if q == "" {
+		return "/search"
+	}
+	return "/search?q=" + url.QueryEscape(q)
 }
 
 func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {

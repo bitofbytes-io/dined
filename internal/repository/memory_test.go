@@ -265,6 +265,43 @@ func TestMemoryStoreCreateVisitUpdatesExistingRestaurantIDGoogleMetadata(t *test
 	}
 }
 
+func TestMemoryStoreDeleteRestaurantIfUnvisitedDeletesOrphan(t *testing.T) {
+	store := NewMemoryStore()
+	restaurant := model.Restaurant{ID: uuid.New(), Name: "Amigos"}
+	store.restaurants = append(store.restaurants, restaurant)
+
+	deleted, err := store.DeleteRestaurantIfUnvisited(context.Background(), restaurant.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !deleted {
+		t.Fatal("expected orphan restaurant to be deleted")
+	}
+	if got, err := store.Restaurant(context.Background(), restaurant.ID); err != nil {
+		t.Fatal(err)
+	} else if got != nil {
+		t.Fatalf("expected restaurant to be gone, got %#v", got)
+	}
+}
+
+func TestMemoryStoreDeleteRestaurantIfUnvisitedRefusesVisitedRestaurant(t *testing.T) {
+	store := NewMemoryStore()
+	restaurant := store.restaurants[0]
+
+	deleted, err := store.DeleteRestaurantIfUnvisited(context.Background(), restaurant.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deleted {
+		t.Fatal("expected visited restaurant deletion to be refused")
+	}
+	if got, err := store.Restaurant(context.Background(), restaurant.ID); err != nil {
+		t.Fatal(err)
+	} else if got == nil {
+		t.Fatal("expected visited restaurant to remain")
+	}
+}
+
 func TestMemoryStoreStatsIncludesTrophyMetrics(t *testing.T) {
 	store := NewMemoryStore()
 
