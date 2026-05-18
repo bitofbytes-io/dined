@@ -762,6 +762,7 @@ const templates = `
       <div class="record"><span class="record-value">{{.Stats.TotalDines}}</span><p>Total Dines</p></div>
       <div class="record"><span class="record-value">{{score .Stats.AverageRating}}</span><p>Family Average</p></div>
       <div class="record"><span class="record-value record-name">{{default .Stats.BestPicker "Waiting"}}</span><p>Best Picker</p>{{if .Stats.BestPicker}}<small>{{score .Stats.BestPickerAverage}} average</small>{{else}}<small>More dines needed</small>{{end}}</div>
+      <div class="record"><span class="record-value record-name">{{default .Stats.WorstPicker "Waiting"}}</span><p>Worst Picker</p>{{if .Stats.WorstPicker}}<small>{{score .Stats.WorstPickerAverage}} average</small>{{else}}<small>More dines needed</small>{{end}}</div>
       <div class="record"><span class="record-value record-name">{{default .PickerTurn.NextPicker.Name "Waiting"}}</span><p>Next Up</p><small>Picker turn</small></div>
       <div class="record"><span class="record-value">{{.Stats.NewPlaces}}</span><p>New Places</p></div>
       <div class="record"><span class="record-value">{{.Stats.CitiesExplored}}</span><p>Cities Explored</p></div>

@@ -544,6 +544,12 @@ func TestMemoryStoreStatsIncludesTrophyMetrics(t *testing.T) {
 	if math.Abs(stats.BestPickerAverage-8.375) > 0.001 {
 		t.Fatalf("BestPickerAverage = %f, want 8.375", stats.BestPickerAverage)
 	}
+	if stats.WorstPicker != "Daniel" {
+		t.Fatalf("WorstPicker = %q, want Daniel", stats.WorstPicker)
+	}
+	if math.Abs(stats.WorstPickerAverage-7.75) > 0.001 {
+		t.Fatalf("WorstPickerAverage = %f, want 7.75", stats.WorstPickerAverage)
+	}
 	if len(stats.TopRestaurants) != 3 {
 		t.Fatalf("expected 3 top restaurants, got %d", len(stats.TopRestaurants))
 	}

@@ -99,6 +99,8 @@ type Stats struct {
 	HighestRatedRestaurant  string
 	BestPicker              string
 	BestPickerAverage       float64
+	WorstPicker             string
+	WorstPickerAverage      float64
 	BiggestSplitRestaurant  string
 	NewPlaces               int
 	CitiesExplored          int

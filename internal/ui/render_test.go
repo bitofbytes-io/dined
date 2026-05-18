@@ -115,12 +115,14 @@ func TestRenderTrophyShowsRedesignedRecordsAndTopRestaurants(t *testing.T) {
 	var out strings.Builder
 	data := PageData{
 		Stats: model.Stats{
-			TotalDines:        12,
-			AverageRating:     8.4,
-			BestPicker:        "Jen",
-			BestPickerAverage: 8.8,
-			NewPlaces:         7,
-			CitiesExplored:    3,
+			TotalDines:         12,
+			AverageRating:      8.4,
+			BestPicker:         "Jen",
+			BestPickerAverage:  8.8,
+			WorstPicker:        "Daniel",
+			WorstPickerAverage: 6.9,
+			NewPlaces:          7,
+			CitiesExplored:     3,
 			TopRestaurants: []model.RestaurantRatingStat{
 				{Name: "El Patio Verde", AverageRating: 8.6, RatingCount: 4, VisitCount: 1},
 			},
@@ -138,6 +140,9 @@ func TestRenderTrophyShowsRedesignedRecordsAndTopRestaurants(t *testing.T) {
 		"Total Dines",
 		"Family Average",
 		"Best Picker",
+		"Worst Picker",
+		"Daniel",
+		"6.9 average",
 		"Next Up",
 		"New Places",
 		"Cities Explored",
@@ -151,8 +156,8 @@ func TestRenderTrophyShowsRedesignedRecordsAndTopRestaurants(t *testing.T) {
 			t.Fatalf("rendered trophy missing %q:\n%s", fragment, rendered)
 		}
 	}
-	if got := strings.Count(rendered, `class="record"`); got != 6 {
-		t.Fatalf("rendered %d trophy records, want 6:\n%s", got, rendered)
+	if got := strings.Count(rendered, `class="record"`); got != 7 {
+		t.Fatalf("rendered %d trophy records, want 7:\n%s", got, rendered)
 	}
 	for _, oldAward := range []string{"Safe Bet", "The Regular", "Table Divided"} {
 		if strings.Contains(rendered, oldAward) {

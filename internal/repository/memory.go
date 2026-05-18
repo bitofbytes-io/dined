@@ -430,6 +430,7 @@ func (m *MemoryStore) Stats(context.Context) (model.Stats, error) {
 	stats.MostVisitedRestaurant = topCount(visitsByRestaurant)
 	stats.HighestRatedRestaurant = topAverage(ratingByRestaurant)
 	stats.BestPicker, stats.BestPickerAverage = topAverageWithScore(ratingByPicker)
+	stats.WorstPicker, stats.WorstPickerAverage = bottomAverageWithScore(ratingByPicker)
 	stats.NewPlaces = len(visitedRestaurants)
 	stats.CitiesExplored = len(cities)
 	stats.TopRestaurants = topRestaurantStats(ratingsByRestaurantID)
@@ -692,6 +693,19 @@ func topAverageWithScore(values map[string][]float64) (string, float64) {
 		return "", 0
 	}
 	return bestName, bestAvg
+}
+
+func bottomAverageWithScore(values map[string][]float64) (string, float64) {
+	worstName := ""
+	worstAvg := 0.0
+	for name, scores := range values {
+		avg := average(scores)
+		if worstName == "" || avg < worstAvg || (avg == worstAvg && name < worstName) {
+			worstName = name
+			worstAvg = avg
+		}
+	}
+	return worstName, worstAvg
 }
 
 type restaurantRatingAggregate struct {

@@ -556,6 +556,16 @@ func (s *Store) Stats(ctx context.Context) (model.Stats, error) {
 		return stats, fmt.Errorf("best picker: %w", err)
 	}
 	err = s.pool.QueryRow(ctx, `
+		SELECT p.name, AVG(vr.rating) FROM persons p
+		JOIN dining_visits v ON v.picked_by_person_id = p.id
+		JOIN visit_participant_ratings vr ON vr.visit_id = v.id
+		GROUP BY p.id, p.name
+		ORDER BY AVG(vr.rating) ASC, p.name
+		LIMIT 1`).Scan(&stats.WorstPicker, &stats.WorstPickerAverage)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return stats, fmt.Errorf("worst picker: %w", err)
+	}
+	err = s.pool.QueryRow(ctx, `
 		SELECT r.name FROM restaurants r
 		JOIN dining_visits v ON v.restaurant_id = r.id
 		JOIN visit_participant_ratings vr ON vr.visit_id = v.id
