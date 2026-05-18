@@ -1032,23 +1032,21 @@ fieldset {
   position: relative;
   z-index: 1;
   display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(12rem, 16rem);
   gap: .7rem;
   margin: 1rem 0 1.4rem;
 }
 .nearby-search-line {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: .6rem;
+  display: contents;
 }
 .nearby-search-line input {
   min-width: 0;
+  width: 100%;
 }
 .nearby-search-line button {
-  min-width: 12rem;
+  width: 100%;
+  min-width: 0;
   white-space: nowrap;
-}
-.nearby-fallback-line button {
-  min-width: 11.5rem;
 }
 .pass-page {
   display: grid;
@@ -1539,7 +1537,11 @@ fieldset {
     right: 1rem;
     opacity: .1;
   }
+  .nearby-controls {
+    grid-template-columns: 1fr;
+  }
   .nearby-search-line {
+    display: grid;
     grid-template-columns: 1fr;
   }
   .nearby-search-line button {
