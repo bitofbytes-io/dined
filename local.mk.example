@@ -5,7 +5,8 @@ DATA_STORE := memory
 GOOGLE_PLACES_API_KEY :=
 SECURE_COOKIES := false
 
-# Google OAuth local client.
+# Google OAuth local client. Use your local/test OAuth client here; it can be
+# different from the production client used by dined.bitofbytes.io.
 # Google Console local origin: http://localhost:4600
 # Google Console local redirect URI: http://localhost:4600/api/auth/google/callback
 AUTH_GOOGLE_CLIENT_ID := your-local-client-id.apps.googleusercontent.com

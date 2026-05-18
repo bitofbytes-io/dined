@@ -20,7 +20,7 @@ make run
 ```
 
 Open `http://localhost:4600`. Google OAuth is required for write access. Copy `local.mk.example` to
-`local.mk`, then set:
+`local.mk`, then set your local/test OAuth client values:
 
 ```make
 AUTH_GOOGLE_CLIENT_ID := your-local-client-id.apps.googleusercontent.com
