@@ -571,18 +571,6 @@ a:focus-visible, button:focus-visible {
 .ledger-panel {
   padding-top: 1.8rem;
 }
-.ledger-panel::after {
-  content: "DINED";
-  position: absolute;
-  right: 1rem;
-  top: 1.35rem;
-  color: rgba(6, 21, 22, .1);
-  font-family: var(--display);
-  font-size: 4rem;
-  line-height: 1;
-  pointer-events: none;
-}
-
 .visit-list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
@@ -1502,7 +1490,6 @@ fieldset {
     padding-top: 1.8rem;
     box-shadow: 5px 5px 0 rgba(6, 21, 22, .18), inset 0 0 0 3px var(--chrome);
   }
-  .ledger-panel::after { display: none; }
   .section-head {
     display: grid;
     gap: .75rem;
