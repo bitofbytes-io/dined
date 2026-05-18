@@ -1110,6 +1110,10 @@ fieldset {
   background: var(--night);
 }
 .trophy-panel {
+  --record-grid-top: 8.8rem;
+  --record-size: 10.4rem;
+  --record-row-gap: 1rem;
+  --record-to-list-gap: var(--record-row-gap);
   position: relative;
   width: min(100%, 1180px);
   min-height: 760px;
@@ -1170,18 +1174,18 @@ fieldset {
 }
 .record-grid {
   position: absolute;
-  top: 8.8rem;
+  top: var(--record-grid-top);
   right: 3rem;
   z-index: 1;
   display: grid;
   grid-template-columns: repeat(3, minmax(8.5rem, 1fr));
-  gap: 1rem;
+  gap: var(--record-row-gap);
   width: min(43rem, 62%);
 }
 .record {
   position: relative;
-  width: 10.4rem;
-  min-height: 10.4rem;
+  width: var(--record-size);
+  min-height: var(--record-size);
   justify-self: center;
   aspect-ratio: 1;
   display: grid;
@@ -1257,7 +1261,7 @@ fieldset {
   position: absolute;
   left: 3rem;
   right: 3rem;
-  bottom: 2rem;
+  top: calc(var(--record-grid-top) + var(--record-size) + var(--record-size) + var(--record-row-gap) + var(--record-to-list-gap));
   z-index: 1;
   padding: .95rem 1rem;
   color: var(--milk);
