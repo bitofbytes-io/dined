@@ -24,11 +24,8 @@ func (in VisitInput) Validate() error {
 	}
 	validRatings := 0
 	for _, rating := range in.Ratings {
-		if rating == 0 {
-			continue
-		}
-		if rating < 0.5 || rating > 10 || rating*2 != float64(int(rating*2)) {
-			return errors.New("ratings must use 0.5 increments between 0.5 and 10")
+		if rating < 0 || rating > 10 || rating*2 != float64(int(rating*2)) {
+			return errors.New("ratings must use 0.5 increments between 0 and 10")
 		}
 		validRatings++
 	}

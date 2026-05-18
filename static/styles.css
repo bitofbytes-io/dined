@@ -247,8 +247,8 @@ button:focus-visible, .small-cta:focus-visible, .primary-button:focus-visible {
   box-shadow: inset 0 -4px 0 rgba(0, 0, 0, .16), 0 5px 0 var(--mustard);
   transform: translateY(-2px);
 }
-button:disabled {
-  cursor: wait;
+button:disabled, button[aria-disabled="true"] {
+  cursor: not-allowed;
   opacity: .65;
   transform: none;
 }
@@ -853,6 +853,26 @@ fieldset {
 }
 .score-console {
   grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.rating-requirement {
+  grid-column: 1 / -1;
+  margin: -.2rem 0 .1rem;
+  padding: .55rem .7rem;
+  color: var(--red-dark);
+  background: #f8ead0;
+  border: 2px solid var(--mustard);
+  border-radius: var(--radius);
+  font-family: var(--condensed);
+  font-size: .9rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.rating-requirement[hidden] {
+  display: none;
+}
+.log-form-incomplete [data-log-submit] {
+  background: var(--aqua-dark);
+  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, .18), 0 5px 0 rgba(6, 21, 22, .35);
 }
 .rating-card {
   min-height: 8.6rem;

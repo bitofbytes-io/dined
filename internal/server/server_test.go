@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -94,5 +95,121 @@ func TestRouterRefusesVisitedRestaurantDelete(t *testing.T) {
 	}
 	if len(remaining) != 1 {
 		t.Fatalf("expected visited restaurant to remain, got %#v", remaining)
+	}
+}
+
+func TestRouterCreateVisitWithoutRatingPreservesPostedForm(t *testing.T) {
+	ctx := context.Background()
+	store := repository.NewMemoryStore()
+	people, err := store.People(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tags, err := store.Tags(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := store.Visits(ctx, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	form := url.Values{}
+	form.Set("restaurant_name", "Tupelo Honey")
+	form.Set("address", "123 Main St")
+	form.Set("city", "Apex")
+	form.Set("google_place_id", "place-1")
+	form.Set("category", "American")
+	form.Set("visited_at", "2026-05-17T20:50")
+	form.Set("picker_id", people[1].ID.String())
+	form.Set("price_level", "3")
+	form.Set("notes", "Dinner notes")
+	form.Set("new_tag", "Patio")
+	form.Set("is_chain", "true")
+	form.Add("tag_id", tags[0].ID.String())
+
+	router := New(&config.Config{APIToken: "secret"}, store, places.NewClient("")).Router()
+	req := httptest.NewRequest(http.MethodPost, "/visits", strings.NewReader(form.Encode()))
+	req.Header.Set("Authorization", "Bearer secret")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("got status %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	rendered := rec.Body.String()
+	for _, fragment := range []string{
+		"at least one rating is required",
+		`name="restaurant_name" list="restaurant-options" placeholder="Search or add restaurant" value="Tupelo Honey" required`,
+		`name="address" placeholder="Optional" value="123 Main St"`,
+		`name="city" value="Apex"`,
+		`name="google_place_id" placeholder="Optional" value="place-1"`,
+		`<option selected>American</option>`,
+		`name="visited_at" value="2026-05-17T20:50" required`,
+		`value="` + people[1].ID.String() + `" selected>` + people[1].Name + `</option>`,
+		`value="3" selected>$$$</option>`,
+		`name="tag_id" value="` + tags[0].ID.String() + `" checked`,
+		`name="new_tag" placeholder="Great fries" value="Patio"`,
+		`Dinner notes</textarea>`,
+		`name="is_chain" value="true" checked`,
+	} {
+		if !strings.Contains(rendered, fragment) {
+			t.Fatalf("response missing %q:\n%s", fragment, rendered)
+		}
+	}
+
+	after, err := store.Visits(ctx, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after) != len(before) {
+		t.Fatalf("visit count = %d, want %d", len(after), len(before))
+	}
+}
+
+func TestRouterCreateVisitAcceptsZeroRating(t *testing.T) {
+	ctx := context.Background()
+	store := repository.NewMemoryStore()
+	people, err := store.People(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := store.Visits(ctx, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	form := url.Values{}
+	form.Set("restaurant_name", "Zero Star Diner")
+	form.Set("visited_at", "2026-05-17T20:50")
+	form.Set("picker_id", people[0].ID.String())
+	form.Set("price_level", "2")
+	form.Set("rating_"+people[0].ID.String(), "0")
+
+	router := New(&config.Config{APIToken: "secret"}, store, places.NewClient("")).Router()
+	req := httptest.NewRequest(http.MethodPost, "/visits", strings.NewReader(form.Encode()))
+	req.Header.Set("Authorization", "Bearer secret")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("got status %d, want %d: %s", rec.Code, http.StatusSeeOther, rec.Body.String())
+	}
+	after, err := store.Visits(ctx, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after) != len(before)+1 {
+		t.Fatalf("visit count = %d, want %d", len(after), len(before)+1)
+	}
+	if after[0].Restaurant.Name != "Zero Star Diner" {
+		t.Fatalf("newest restaurant = %q, want Zero Star Diner", after[0].Restaurant.Name)
+	}
+	if len(after[0].Ratings) != 1 || after[0].Ratings[0].Score != 0 {
+		t.Fatalf("newest ratings = %#v, want one zero rating", after[0].Ratings)
 	}
 }

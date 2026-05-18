@@ -15,6 +15,7 @@ import (
 	"github.com/bitofbytes-io/dined/internal/apptime"
 	"github.com/bitofbytes-io/dined/internal/model"
 	"github.com/bitofbytes-io/dined/internal/places"
+	"github.com/google/uuid"
 )
 
 type PageData struct {
@@ -53,6 +54,11 @@ type PageData struct {
 	PrefillPriceLevel       int
 	PrefillPickerID         string
 	PrefillRestaurantID     string
+	PrefillNotes            string
+	PrefillNewTag           string
+	PrefillIsChain          bool
+	PrefillRatings          map[string]string
+	PrefillTagIDs           map[string]bool
 }
 
 type RestaurantResult struct {
@@ -175,13 +181,37 @@ func funcs() template.FuncMap {
 			}
 			return fmt.Sprintf("%.0f mi", miles)
 		},
-		"avatar":        avatar,
-		"placeCategory": places.Category,
-		"placeCity":     places.City,
+		"avatar":             avatar,
+		"placeCategory":      places.Category,
+		"placeCity":          places.City,
+		"prefillRatingValue": prefillRatingValue,
+		"prefillTagChecked":  prefillTagChecked,
+		"prefillHasRating":   prefillHasRating,
 		"add1": func(value int) int {
 			return value + 1
 		},
 	}
+}
+
+func prefillRatingValue(ratings map[string]string, id uuid.UUID) string {
+	if ratings == nil {
+		return ""
+	}
+	return ratings[id.String()]
+}
+
+func prefillTagChecked(tags map[string]bool, id uuid.UUID) bool {
+	return tags != nil && tags[id.String()]
+}
+
+func prefillHasRating(ratings map[string]string) bool {
+	for _, value := range ratings {
+		rating, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+		if err == nil && rating >= 0 && rating <= 10 && rating*2 == float64(int(rating*2)) {
+			return true
+		}
+	}
+	return false
 }
 
 func asset(assetPath string) template.URL {
@@ -322,31 +352,91 @@ const templates = `
 	      if (category && !category.value) category.value = option.dataset.category || "";
 	    }
 
-	    document.addEventListener("input", function (event) {
-	      if (event.target.name === "restaurant_name" || event.target.name === "address") {
-	        dinedSyncRestaurantSelection(event.target.form);
-	      }
-	      if (event.target.matches("[data-half-step-rating]")) {
-	        dinedValidateHalfStepRating(event.target);
-	      }
-	    });
+		    document.addEventListener("input", function (event) {
+		      if (event.target.name === "restaurant_name" || event.target.name === "address") {
+		        dinedSyncRestaurantSelection(event.target.form);
+		      }
+		      if (event.target.matches("[data-half-step-rating]")) {
+		        dinedValidateHalfStepRating(event.target);
+		      }
+		      var logForm = event.target.closest ? event.target.closest("[data-log-form]") : null;
+		      if (logForm) {
+		        dinedUpdateLogValidation(logForm);
+		      }
+		    });
 
-	    function dinedValidateHalfStepRating(input) {
-	      if (!input || input.value === "") {
-	        input.setCustomValidity("");
-	        return;
-	      }
-	      var rating = Number(input.value);
-	      var isHalfStep = Number.isFinite(rating) && rating >= 0 && rating <= 10 && Number.isInteger(rating * 2);
-	      input.setCustomValidity(isHalfStep ? "" : "Use whole numbers or .5 increments from 0 to 10.");
-	    }
+		    document.addEventListener("change", function (event) {
+		      var logForm = event.target.closest ? event.target.closest("[data-log-form]") : null;
+		      if (logForm) {
+		        dinedUpdateLogValidation(logForm);
+		      }
+		    });
 
-	    document.addEventListener("DOMContentLoaded", function () {
-	      var ratings = document.querySelectorAll("[data-half-step-rating]");
-	      for (var i = 0; i < ratings.length; i += 1) {
-	        dinedValidateHalfStepRating(ratings[i]);
-	      }
-	    });
+		    function dinedValidateHalfStepRating(input) {
+		      if (!input || input.value === "") {
+		        input.setCustomValidity("");
+		        return;
+		      }
+		      var rating = Number(input.value);
+		      var isHalfStep = Number.isFinite(rating) && rating >= 0 && rating <= 10 && Number.isInteger(rating * 2);
+		      input.setCustomValidity(isHalfStep ? "" : "Use whole numbers or .5 increments from 0 to 10.");
+		    }
+
+		    function dinedIsValidRatingValue(value) {
+		      if (!value || !value.trim()) return false;
+		      var rating = Number(value);
+		      return Number.isFinite(rating) && rating >= 0 && rating <= 10 && Number.isInteger(rating * 2);
+		    }
+
+		    function dinedUpdateLogValidation(form) {
+		      if (!form) return true;
+		      var ratings = form.querySelectorAll("[data-half-step-rating]");
+		      var hasRating = false;
+		      for (var i = 0; i < ratings.length; i += 1) {
+		        dinedValidateHalfStepRating(ratings[i]);
+		        if (dinedIsValidRatingValue(ratings[i].value)) {
+		          hasRating = true;
+		        }
+		      }
+
+		      var message = form.querySelector("[data-rating-message]");
+		      if (message) {
+		        message.hidden = hasRating;
+		      }
+		      if (ratings.length && !hasRating && ratings[0].value === "") {
+		        ratings[0].setCustomValidity("At least one rating is required.");
+		      }
+
+		      var restaurant = form.querySelector("input[name='restaurant_name']");
+		      var visitedAt = form.querySelector("input[name='visited_at']");
+		      var submit = form.querySelector("[data-log-submit]");
+		      var hasRequiredFields = (!restaurant || restaurant.value.trim()) && (!visitedAt || visitedAt.value.trim());
+		      var canSubmit = Boolean(hasRequiredFields && hasRating && form.checkValidity());
+		      form.classList.toggle("log-form-incomplete", !canSubmit);
+		      if (submit) {
+		        submit.disabled = !canSubmit;
+		        submit.setAttribute("aria-disabled", canSubmit ? "false" : "true");
+		      }
+		      return canSubmit;
+		    }
+
+		    function dinedInitializeLogValidation() {
+		      var ratings = document.querySelectorAll("[data-half-step-rating]");
+		      for (var i = 0; i < ratings.length; i += 1) {
+		        dinedValidateHalfStepRating(ratings[i]);
+		      }
+		      var logForms = document.querySelectorAll("[data-log-form]");
+		      for (var j = 0; j < logForms.length; j += 1) {
+		        dinedUpdateLogValidation(logForms[j]);
+		      }
+		    }
+
+		    if (document.readyState === "loading") {
+		      document.addEventListener("DOMContentLoaded", dinedInitializeLogValidation);
+		    } else {
+		      dinedInitializeLogValidation();
+		    }
+		    document.addEventListener("htmx:load", dinedInitializeLogValidation);
 
 	    document.addEventListener("click", function (event) {
 	      if (event.target.id !== "use-location") return;
@@ -394,9 +484,19 @@ const templates = `
 	      }
 	    });
 
-	    document.addEventListener("submit", function (event) {
-	      var form = event.target;
-	      if (!form || form.id !== "nearby-form") return;
+		    document.addEventListener("submit", function (event) {
+		      var form = event.target;
+		      if (form && form.matches("[data-log-form]")) {
+		        dinedSyncRestaurantSelection(form);
+		        if (!dinedUpdateLogValidation(form)) {
+		          event.preventDefault();
+		          if (typeof form.reportValidity === "function") {
+		            form.reportValidity();
+		          }
+		        }
+		        return;
+		      }
+		      if (!form || form.id !== "nearby-form") return;
 	      var lat = form.querySelector("input[name='lat']");
 	      var lng = form.querySelector("input[name='lng']");
 	      var near = form.querySelector("input[name='near']");
@@ -502,7 +602,7 @@ const templates = `
 {{define "log"}}
 {{template "top" .}}
 <main class="page-band order-page">
-	<form class="wide-ticket log-form order-pad console-pad" method="post" action="/visits">
+		<form class="wide-ticket log-form order-pad console-pad" method="post" action="/visits" data-log-form>
 	    <div class="section-head console-head">
 		      <div><h1>Log a Dine</h1></div>
 	    </div>
@@ -518,7 +618,7 @@ const templates = `
 	        <input type="hidden" name="google_rating" value="{{.PrefillGoogleRating}}">
 	        <input type="hidden" name="google_price_level" value="{{.PrefillGooglePriceLevel}}">
 	        <div class="form-grid restaurant-grid">
-	          <label>Restaurant<input name="restaurant_name" list="restaurant-options" placeholder="Search or add restaurant" value="{{.PrefillName}}"><datalist id="restaurant-options">{{range .Restaurants}}<option value="{{.Name}}" data-restaurant-id="{{.ID}}" data-address="{{if .Address}}{{.Address}}{{end}}" data-city="{{if .City}}{{.City}}{{end}}" data-google-place-id="{{if .GooglePlaceID}}{{.GooglePlaceID}}{{end}}" data-category="{{if .Category}}{{.Category}}{{end}}">{{if .Address}}{{.Address}}{{end}}</option>{{end}}</datalist></label>
+		          <label>Restaurant<input name="restaurant_name" list="restaurant-options" placeholder="Search or add restaurant" value="{{.PrefillName}}" required><datalist id="restaurant-options">{{range .Restaurants}}<option value="{{.Name}}" data-restaurant-id="{{.ID}}" data-address="{{if .Address}}{{.Address}}{{end}}" data-city="{{if .City}}{{.City}}{{end}}" data-google-place-id="{{if .GooglePlaceID}}{{.GooglePlaceID}}{{end}}" data-category="{{if .Category}}{{.Category}}{{end}}">{{if .Address}}{{.Address}}{{end}}</option>{{end}}</datalist></label>
 	          <label>Address<input name="address" placeholder="Optional" value="{{.PrefillAddress}}"></label>
           <label>Google Place ID<input name="google_place_id" placeholder="Optional" value="{{.PrefillPlaceID}}"></label>
           <label>Category<select name="category"><option></option><option {{if eq .PrefillCategory "American"}}selected{{end}}>American</option><option {{if eq .PrefillCategory "Mexican"}}selected{{end}}>Mexican</option><option {{if eq .PrefillCategory "Italian"}}selected{{end}}>Italian</option><option {{if eq .PrefillCategory "Pizza"}}selected{{end}}>Pizza</option><option {{if eq .PrefillCategory "Burgers"}}selected{{end}}>Burgers</option><option {{if eq .PrefillCategory "Breakfast"}}selected{{end}}>Breakfast</option><option {{if eq .PrefillCategory "Chinese"}}selected{{end}}>Chinese</option><option {{if eq .PrefillCategory "Japanese"}}selected{{end}}>Japanese</option><option {{if eq .PrefillCategory "Thai"}}selected{{end}}>Thai</option><option {{if eq .PrefillCategory "Indian"}}selected{{end}}>Indian</option><option {{if eq .PrefillCategory "BBQ"}}selected{{end}}>BBQ</option><option {{if eq .PrefillCategory "Seafood"}}selected{{end}}>Seafood</option><option {{if eq .PrefillCategory "Dessert"}}selected{{end}}>Dessert</option><option {{if eq .PrefillCategory "Coffee"}}selected{{end}}>Coffee</option><option {{if eq .PrefillCategory "Other"}}selected{{end}}>Other</option></select></label>
@@ -526,16 +626,16 @@ const templates = `
       </section>
       <section class="form-section visit-console">
         <div class="form-grid visit-form-grid">
-          <label>Date and time<input type="datetime-local" name="visited_at" value="{{.NowLocal}}"></label>
+	          <label>Date and time<input type="datetime-local" name="visited_at" value="{{.NowLocal}}" required></label>
           <label>Picked by<select name="picker_id" required>{{range .People}}<option value="{{.ID}}" {{if eq $.PrefillPickerID .ID.String}}selected{{end}}>{{.Name}}</option>{{end}}</select></label>
           <label>Price Level<select name="price_level"><option value="1" {{if eq .PrefillPriceLevel 1}}selected{{end}}>$</option><option value="2" {{if or (eq .PrefillPriceLevel 0) (eq .PrefillPriceLevel 2)}}selected{{end}}>$$</option><option value="3" {{if eq .PrefillPriceLevel 3}}selected{{end}}>$$$</option><option value="4" {{if eq .PrefillPriceLevel 4}}selected{{end}}>$$$$</option></select></label>
         </div>
       </section>
     </div>
-	    <fieldset class="ratings-field score-console"><legend>Rate Your Experience</legend>{{range .People}}<label class="rating-card">{{if avatar .Name}}<img class="avatar-face" src="{{avatar .Name}}" alt="">{{else}}<span class="avatar-dot">{{slice .Name 0 1}}</span>{{end}}<span>{{.Name}}</span><input name="rating_{{.ID}}" type="number" min="0" max="10" step="0.5" inputmode="decimal" placeholder="0-10" data-half-step-rating></label>{{end}}</fieldset>
-    <fieldset class="tags-field chip-field"><legend>Tags</legend>{{range .Tags}}<label><input type="checkbox" name="tag_id" value="{{.ID}}"> <span>{{.Name}}</span></label>{{end}}<label class="new-tag">New tag<input name="new_tag" placeholder="Great fries"></label></fieldset>
-    <label class="notes-field">Notes<textarea name="notes" rows="4" placeholder="What should we remember next time?"></textarea></label>
-    <div class="form-actions console-actions"><label class="inline-check"><input type="checkbox" name="is_chain" value="true"> Mark new restaurant as chain</label><button class="primary-button">Save Dine</button></div>
+		    <fieldset class="ratings-field score-console" aria-describedby="rating-requirement"><legend>Rate Your Experience</legend><p class="rating-requirement" id="rating-requirement" data-rating-message aria-live="polite"{{if prefillHasRating .PrefillRatings}} hidden{{end}}>At least one rating is required before saving.</p>{{range .People}}<label class="rating-card">{{if avatar .Name}}<img class="avatar-face" src="{{avatar .Name}}" alt="">{{else}}<span class="avatar-dot">{{slice .Name 0 1}}</span>{{end}}<span>{{.Name}}</span><input name="rating_{{.ID}}" type="number" min="0" max="10" step="0.5" inputmode="decimal" placeholder="0-10" value="{{prefillRatingValue $.PrefillRatings .ID}}" data-half-step-rating></label>{{end}}</fieldset>
+		    <fieldset class="tags-field chip-field"><legend>Tags</legend>{{range .Tags}}<label><input type="checkbox" name="tag_id" value="{{.ID}}" {{if prefillTagChecked $.PrefillTagIDs .ID}}checked{{end}}> <span>{{.Name}}</span></label>{{end}}<label class="new-tag">New tag<input name="new_tag" placeholder="Great fries" value="{{.PrefillNewTag}}"></label></fieldset>
+	    <label class="notes-field">Notes<textarea name="notes" rows="4" placeholder="What should we remember next time?">{{.PrefillNotes}}</textarea></label>
+	    <div class="form-actions console-actions"><label class="inline-check"><input type="checkbox" name="is_chain" value="true" {{if .PrefillIsChain}}checked{{end}}> Mark new restaurant as chain</label><button class="primary-button" data-log-submit>Save Dine</button></div>
   </form>
 </main>
 {{template "bottom" .}}
