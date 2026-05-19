@@ -89,6 +89,9 @@ func TestTrophyMapUsesStoredCoordinatesOnly(t *testing.T) {
 	if rec.Header().Get("Content-Type") != "image/png" {
 		t.Fatalf("content type = %q", rec.Header().Get("Content-Type"))
 	}
+	if fakePlaces.staticMapCalls != 1 {
+		t.Fatalf("static map calls = %d, want 1", fakePlaces.staticMapCalls)
+	}
 	if len(fakePlaces.staticMapMarkers) != len(expected) {
 		t.Fatalf("markers len = %d, want %d", len(fakePlaces.staticMapMarkers), len(expected))
 	}
@@ -100,6 +103,18 @@ func TestTrophyMapUsesStoredCoordinatesOnly(t *testing.T) {
 		if marker.Latitude == 1 || marker.Longitude == 2 {
 			t.Fatalf("marker %d used request query coordinates: %#v", i, marker)
 		}
+	}
+
+	second := httptest.NewRecorder()
+	handler.TrophyMap(second, httptest.NewRequest(http.MethodGet, "/trophy-case/map.png", nil))
+	if second.Code != http.StatusOK {
+		t.Fatalf("second status = %d, want %d: %s", second.Code, http.StatusOK, second.Body.String())
+	}
+	if second.Body.String() != "png" {
+		t.Fatalf("second body = %q, want cached static map image bytes", second.Body.String())
+	}
+	if fakePlaces.staticMapCalls != 1 {
+		t.Fatalf("static map calls after cache hit = %d, want 1", fakePlaces.staticMapCalls)
 	}
 }
 
@@ -168,6 +183,7 @@ type fakeGooglePlacesClient struct {
 	staticMapImage   *places.StaticMapImage
 	staticMapErr     error
 	staticMapMarkers []places.StaticMapMarker
+	staticMapCalls   int
 }
 
 func (f *fakeGooglePlacesClient) Configured() bool {
@@ -191,6 +207,7 @@ func (f *fakeGooglePlacesClient) Details(context.Context, string) (*places.Place
 }
 
 func (f *fakeGooglePlacesClient) StaticMap(_ context.Context, markers []places.StaticMapMarker) (*places.StaticMapImage, error) {
+	f.staticMapCalls++
 	f.staticMapMarkers = append([]places.StaticMapMarker(nil), markers...)
 	if f.staticMapErr != nil {
 		return nil, f.staticMapErr

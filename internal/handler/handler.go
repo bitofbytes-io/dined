@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/bitofbytes-io/dined/internal/apptime"
 	"github.com/bitofbytes-io/dined/internal/auth"
@@ -38,7 +40,17 @@ type Handler struct {
 	places      googlePlacesClient
 	authService *auth.Service
 	googleAuth  googleAuthenticator
+	mapCacheMu  sync.Mutex
+	mapCache    trophyMapCacheEntry
 }
+
+type trophyMapCacheEntry struct {
+	key       string
+	image     places.StaticMapImage
+	expiresAt time.Time
+}
+
+const trophyMapCacheTTL = 5 * time.Minute
 
 func New(cfg *config.Config, store repository.DinerStore, placesClient googlePlacesClient, authService *auth.Service, googleAuth googleAuthenticator) *Handler {
 	return &Handler{cfg: cfg, store: store, places: placesClient, authService: authService, googleAuth: googleAuth}
@@ -159,6 +171,11 @@ func (h *Handler) TrophyMap(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Map service is not configured", http.StatusServiceUnavailable)
 		return
 	}
+	cacheKey := trophyMapCacheKey(mapPoints)
+	if image, ok := h.cachedTrophyMap(cacheKey, time.Now()); ok {
+		writeStaticMapImage(w, image)
+		return
+	}
 	image, err := h.places.StaticMap(r.Context(), staticMapMarkers(mapPoints))
 	if err != nil {
 		slog.Warn("static map failed", "error", err)
@@ -170,15 +187,47 @@ func (h *Handler) TrophyMap(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Map unavailable", http.StatusBadGateway)
 		return
 	}
+	h.cacheTrophyMap(cacheKey, *image, time.Now())
+	writeStaticMapImage(w, *image)
+}
+
+func (h *Handler) cachedTrophyMap(key string, now time.Time) (places.StaticMapImage, bool) {
+	h.mapCacheMu.Lock()
+	defer h.mapCacheMu.Unlock()
+	if h.mapCache.key != key || now.After(h.mapCache.expiresAt) {
+		return places.StaticMapImage{}, false
+	}
+	return h.mapCache.image, true
+}
+
+func (h *Handler) cacheTrophyMap(key string, image places.StaticMapImage, now time.Time) {
+	h.mapCacheMu.Lock()
+	defer h.mapCacheMu.Unlock()
+	h.mapCache = trophyMapCacheEntry{
+		key:       key,
+		image:     image,
+		expiresAt: now.Add(trophyMapCacheTTL),
+	}
+}
+
+func writeStaticMapImage(w http.ResponseWriter, image places.StaticMapImage) {
 	contentType := strings.TrimSpace(image.ContentType)
 	if contentType == "" {
 		contentType = "image/png"
 	}
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Cache-Control", "private, max-age=300")
+	w.Header().Set("Cache-Control", "public, max-age=300")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(image.Data)
+}
+
+func trophyMapCacheKey(points []model.RestaurantMapPoint) string {
+	var key strings.Builder
+	for _, point := range points {
+		fmt.Fprintf(&key, "%s|%.6f|%.6f|%d|%d\n", point.RestaurantID, point.Latitude, point.Longitude, point.VisitCount, point.LatestVisitedAt.UnixNano())
+	}
+	return key.String()
 }
 
 func staticMapMarkers(points []model.RestaurantMapPoint) []places.StaticMapMarker {
