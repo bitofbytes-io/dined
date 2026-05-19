@@ -186,6 +186,37 @@ func TestRenderTrophyTopRestaurantsEmptyState(t *testing.T) {
 	if !strings.Contains(rendered, "All-Time Top Restaurants") || !strings.Contains(rendered, "Waiting on more dines") || !strings.Contains(rendered, "Waiting on cuisine data") {
 		t.Fatalf("rendered trophy missing top restaurant empty state:\n%s", rendered)
 	}
+	if !strings.Contains(rendered, "No mapped dines yet") {
+		t.Fatalf("rendered trophy missing map empty state:\n%s", rendered)
+	}
+}
+
+func TestRenderTrophyShowsMapProxyImageWithoutGoogleKey(t *testing.T) {
+	var out strings.Builder
+	err := Render(&out, "trophy", PageData{
+		TrophyMapReady: true,
+		TrophyMapPoints: []model.RestaurantMapPoint{
+			{RestaurantID: uuid.New(), Name: "Hank's Downtown Diner", Latitude: 35.7796, Longitude: -78.6382, VisitCount: 1, LatestVisitedAt: time.Now()},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered := out.String()
+	for _, fragment := range []string{
+		"Places We've Dined",
+		"1 pinned",
+		`src="/trophy-case/map.png"`,
+	} {
+		if !strings.Contains(rendered, fragment) {
+			t.Fatalf("rendered trophy missing %q:\n%s", fragment, rendered)
+		}
+	}
+	for _, fragment := range []string{"maps.googleapis.com", "key=", "GOOGLE_PLACES_API_KEY"} {
+		if strings.Contains(rendered, fragment) {
+			t.Fatalf("rendered trophy leaked %q:\n%s", fragment, rendered)
+		}
+	}
 }
 
 func TestRenderRestaurantIsReadOnlyForAuthenticatedUsers(t *testing.T) {

@@ -60,6 +60,7 @@ func (s *Server) Router() http.Handler {
 		r.Get("/restaurants/{id}/edit", h.EditRestaurantPage)
 		r.Post("/restaurants/{id}", h.UpdateRestaurant)
 		r.Get("/trophy-case", h.Trophy)
+		r.Get("/trophy-case/map.png", h.TrophyMap)
 
 		r.Get("/log", h.LogPage)
 		r.Post("/visits", h.CreateVisit)

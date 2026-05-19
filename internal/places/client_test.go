@@ -1,8 +1,12 @@
 package places
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"math"
+	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -121,4 +125,110 @@ func TestDistanceMiles(t *testing.T) {
 	if got := DistanceMiles(35.7327, -78.8503, place); math.Abs(got-0.691) > 0.01 {
 		t.Fatalf("got %f miles", got)
 	}
+}
+
+func TestStaticMapURLRequiresMarkers(t *testing.T) {
+	if _, err := staticMapURL("api-key", nil); err == nil {
+		t.Fatal("expected marker validation error")
+	}
+}
+
+func TestStaticMapURLCentersSingleMarker(t *testing.T) {
+	mapURL, err := staticMapURL("api-key", []StaticMapMarker{{Latitude: 35.7796, Longitude: -78.6382}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	values := staticMapQuery(t, mapURL)
+
+	if values.Get("size") != "640x360" || values.Get("scale") != "2" || values.Get("maptype") != "roadmap" {
+		t.Fatalf("unexpected static map basics: %s", values.Encode())
+	}
+	if values.Get("key") != "api-key" {
+		t.Fatalf("key = %q", values.Get("key"))
+	}
+	if values.Get("center") != "35.779600,-78.638200" || values.Get("zoom") != "13" {
+		t.Fatalf("single marker center/zoom = %q/%q", values.Get("center"), values.Get("zoom"))
+	}
+	if got := values.Get("markers"); got != "color:red|35.779600,-78.638200" {
+		t.Fatalf("markers = %q", got)
+	}
+}
+
+func TestStaticMapURLOmitsCenterAndZoomForMultipleMarkers(t *testing.T) {
+	mapURL, err := staticMapURL("api-key", []StaticMapMarker{
+		{Latitude: 35.7796, Longitude: -78.6382},
+		{Latitude: 35.7327, Longitude: -78.8503},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	values := staticMapQuery(t, mapURL)
+
+	if values.Has("center") || values.Has("zoom") {
+		t.Fatalf("multiple markers should rely on implicit positioning, got %s", values.Encode())
+	}
+	if got := values.Get("markers"); got != "color:red|35.779600,-78.638200|35.732700,-78.850300" {
+		t.Fatalf("markers = %q", got)
+	}
+}
+
+func TestStaticMapURLCapsMarkers(t *testing.T) {
+	markers := make([]StaticMapMarker, staticMapMaxMarkers+25)
+	for i := range markers {
+		markers[i] = StaticMapMarker{Latitude: 35 + float64(i)*0.001, Longitude: -78 - float64(i)*0.001}
+	}
+
+	mapURL, err := staticMapURL("api-key", markers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	values := staticMapQuery(t, mapURL)
+	parts := strings.Split(values.Get("markers"), "|")
+	if len(parts) != staticMapMaxMarkers+1 {
+		t.Fatalf("markers parts len = %d, want color plus %d markers", len(parts), staticMapMaxMarkers)
+	}
+	if len(mapURL) >= 16384 {
+		t.Fatalf("map URL length = %d, want under Google Static Maps limit", len(mapURL))
+	}
+}
+
+func TestStaticMapRedactsRequestErrors(t *testing.T) {
+	client := &Client{
+		apiKey: "secret-key",
+		http: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return nil, &url.Error{Op: "Get", URL: req.URL.String(), Err: errors.New("network down")}
+		})},
+	}
+
+	_, err := client.StaticMap(context.Background(), []StaticMapMarker{{Latitude: 35.7796, Longitude: -78.6382}})
+	if err == nil {
+		t.Fatal("expected request error")
+	}
+	message := err.Error()
+	for _, leaked := range []string{"secret-key", "key=", "maps.googleapis.com"} {
+		if strings.Contains(message, leaked) {
+			t.Fatalf("static map error leaked %q: %q", leaked, message)
+		}
+	}
+	if !strings.Contains(message, "google static map request failed") {
+		t.Fatalf("static map error = %q", message)
+	}
+}
+
+func staticMapQuery(t *testing.T, mapURL string) url.Values {
+	t.Helper()
+	parsed, err := url.Parse(mapURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed.Scheme != "https" || parsed.Host != "maps.googleapis.com" || parsed.Path != "/maps/api/staticmap" {
+		t.Fatalf("unexpected static map endpoint: %s", mapURL)
+	}
+	return parsed.Query()
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
 }

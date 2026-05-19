@@ -25,6 +25,7 @@ type DinerStore interface {
 	Visit(context.Context, uuid.UUID) (*model.Visit, error)
 	Visits(context.Context, int) ([]model.Visit, error)
 	RestaurantVisits(context.Context, uuid.UUID) ([]model.Visit, error)
+	VisitedRestaurantMapPoints(context.Context) ([]model.RestaurantMapPoint, error)
 	CreateVisit(context.Context, model.VisitInput) (*uuid.UUID, error)
 	UpdateVisit(context.Context, uuid.UUID, model.VisitInput) error
 	UpdateRestaurantGoogleMetadata(context.Context, uuid.UUID, model.GoogleRestaurantMetadata) error
@@ -156,6 +157,31 @@ func (s *Store) RestaurantVisits(ctx context.Context, restaurantID uuid.UUID) ([
 	}
 	defer rows.Close()
 	return s.scanVisits(ctx, rows)
+}
+
+func (s *Store) VisitedRestaurantMapPoints(ctx context.Context) ([]model.RestaurantMapPoint, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT r.id, r.name, r.latitude, r.longitude, COUNT(v.id), MAX(v.visited_at)
+		FROM restaurants r
+		JOIN dining_visits v ON v.restaurant_id = r.id
+		WHERE r.latitude IS NOT NULL
+		  AND r.longitude IS NOT NULL
+		GROUP BY r.id, r.name, r.latitude, r.longitude
+		ORDER BY MAX(v.visited_at) DESC, r.name`)
+	if err != nil {
+		return nil, fmt.Errorf("visited restaurant map points: %w", err)
+	}
+	defer rows.Close()
+
+	var points []model.RestaurantMapPoint
+	for rows.Next() {
+		var point model.RestaurantMapPoint
+		if err := rows.Scan(&point.RestaurantID, &point.Name, &point.Latitude, &point.Longitude, &point.VisitCount, &point.LatestVisitedAt); err != nil {
+			return nil, fmt.Errorf("scan visited restaurant map point: %w", err)
+		}
+		points = append(points, point)
+	}
+	return points, rows.Err()
 }
 
 func (s *Store) CreateVisit(ctx context.Context, input model.VisitInput) (*uuid.UUID, error) {

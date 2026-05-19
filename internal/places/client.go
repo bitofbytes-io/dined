@@ -40,6 +40,16 @@ type Location struct {
 	Longitude float64 `json:"longitude"`
 }
 
+type StaticMapMarker struct {
+	Latitude  float64
+	Longitude float64
+}
+
+type StaticMapImage struct {
+	Data        []byte
+	ContentType string
+}
+
 type AddressComponent struct {
 	LongText  string   `json:"longText"`
 	ShortText string   `json:"shortText"`
@@ -52,6 +62,9 @@ type searchResponse struct {
 
 const searchFieldMask = "places.id,places.displayName,places.formattedAddress,places.addressComponents,places.location,places.nationalPhoneNumber,places.websiteUri,places.rating,places.priceLevel,places.types"
 const detailsFieldMask = "id,displayName,formattedAddress,addressComponents,location,nationalPhoneNumber,websiteUri,rating,priceLevel,types"
+const staticMapEndpoint = "https://maps.googleapis.com/maps/api/staticmap"
+const staticMapMaxBytes = 4 << 20
+const staticMapMaxMarkers = 100
 
 func NewClient(apiKey string) *Client {
 	return &Client{
@@ -63,7 +76,7 @@ func NewClient(apiKey string) *Client {
 }
 
 func (c *Client) Configured() bool {
-	return strings.TrimSpace(c.apiKey) != ""
+	return c != nil && strings.TrimSpace(c.apiKey) != ""
 }
 
 func (c *Client) TextSearch(ctx context.Context, query string) ([]Place, error) {
@@ -139,6 +152,94 @@ func (c *Client) Details(ctx context.Context, placeID string) (*Place, error) {
 		return nil, err
 	}
 	return &place, nil
+}
+
+func (c *Client) StaticMap(ctx context.Context, markers []StaticMapMarker) (*StaticMapImage, error) {
+	if c == nil {
+		return nil, fmt.Errorf("google places client is not configured")
+	}
+	mapURL, err := staticMapURL(c.apiKey, markers)
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, mapURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	httpClient := c.http
+	if httpClient == nil {
+		httpClient = &http.Client{Timeout: 8 * time.Second}
+	}
+	res, err := httpClient.Do(req)
+	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, fmt.Errorf("google static map request failed: %w", ctxErr)
+		}
+		return nil, fmt.Errorf("google static map request failed")
+	}
+	defer res.Body.Close()
+	if res.StatusCode >= 300 {
+		data, _ := io.ReadAll(io.LimitReader(res.Body, 2048))
+		return nil, fmt.Errorf("google static map status %d: %s", res.StatusCode, string(data))
+	}
+	data, err := io.ReadAll(io.LimitReader(res.Body, staticMapMaxBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) > staticMapMaxBytes {
+		return nil, fmt.Errorf("google static map response too large")
+	}
+	contentType := res.Header.Get("Content-Type")
+	if strings.TrimSpace(contentType) == "" {
+		contentType = "image/png"
+	}
+	return &StaticMapImage{Data: data, ContentType: contentType}, nil
+}
+
+func staticMapURL(apiKey string, markers []StaticMapMarker) (string, error) {
+	if strings.TrimSpace(apiKey) == "" {
+		return "", fmt.Errorf("google places api key is not configured")
+	}
+	if len(markers) == 0 {
+		return "", fmt.Errorf("static map requires at least one marker")
+	}
+	if len(markers) > staticMapMaxMarkers {
+		markers = markers[:staticMapMaxMarkers]
+	}
+
+	values := url.Values{}
+	values.Set("size", "640x360")
+	values.Set("scale", "2")
+	values.Set("maptype", "roadmap")
+	values.Set("key", apiKey)
+
+	markerValues := []string{"color:red"}
+	for _, marker := range markers {
+		coordinate, err := staticMapCoordinate(marker)
+		if err != nil {
+			return "", err
+		}
+		markerValues = append(markerValues, coordinate)
+	}
+	values.Add("markers", strings.Join(markerValues, "|"))
+
+	if len(markers) == 1 {
+		coordinate, err := staticMapCoordinate(markers[0])
+		if err != nil {
+			return "", err
+		}
+		values.Set("center", coordinate)
+		values.Set("zoom", "13")
+	}
+
+	return staticMapEndpoint + "?" + values.Encode(), nil
+}
+
+func staticMapCoordinate(marker StaticMapMarker) (string, error) {
+	if math.IsNaN(marker.Latitude) || math.IsInf(marker.Latitude, 0) || math.IsNaN(marker.Longitude) || math.IsInf(marker.Longitude, 0) {
+		return "", fmt.Errorf("invalid marker coordinate")
+	}
+	return fmt.Sprintf("%.6f,%.6f", marker.Latitude, marker.Longitude), nil
 }
 
 func (c *Client) postSearch(ctx context.Context, endpoint string, body any) ([]Place, error) {

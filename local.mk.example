@@ -2,6 +2,8 @@
 PORT := 4600
 APP_ENV := development
 DATA_STORE := memory
+# Used server-side for Google Places details/search and the trophy-case Static
+# Maps image. Enable both Places API and Maps Static API on this key.
 GOOGLE_PLACES_API_KEY :=
 SECURE_COOKIES := false
 

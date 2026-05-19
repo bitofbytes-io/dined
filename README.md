@@ -49,6 +49,10 @@ Set `DATABASE_URL` in `local.mk` or the environment before running Postgres-back
 Credentials in `DATABASE_URL` must already be URL-encoded before passing it to
 `make`.
 
+The same `GOOGLE_PLACES_API_KEY` is also used server-side for the trophy-case
+map image. Enable both Places API and Maps Static API on that Google Cloud key;
+the map key is never rendered into browser HTML.
+
 ## CSS Assets
 
 `tailwind/styles.css` is the canonical stylesheet to edit. `static/styles.css`

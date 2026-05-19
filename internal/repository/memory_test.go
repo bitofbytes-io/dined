@@ -50,6 +50,37 @@ func TestMemoryStoreVisitsNewestFirstUsesCreatedAtTieBreaker(t *testing.T) {
 	}
 }
 
+func TestMemoryStoreVisitedRestaurantMapPointsDistinctVisitedRestaurants(t *testing.T) {
+	store := NewMemoryStore()
+	now := time.Date(2026, 5, 18, 20, 0, 0, 0, time.UTC)
+	hanks := store.restaurants[0]
+	patio := store.restaurants[1]
+	noCoordinates := model.Restaurant{ID: uuid.New(), Name: "Mystery Counter"}
+	store.visits = []model.Visit{
+		demoVisit(hanks, store.people[0], now.Add(-2*time.Hour), 2, "", nil, nil),
+		demoVisit(patio, store.people[1], now.Add(-1*time.Hour), 2, "", nil, nil),
+		demoVisit(hanks, store.people[2], now, 2, "", nil, nil),
+		demoVisit(noCoordinates, store.people[3], now.Add(time.Hour), 2, "", nil, nil),
+	}
+
+	points, err := store.VisitedRestaurantMapPoints(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(points) != 2 {
+		t.Fatalf("points len = %d, want 2: %#v", len(points), points)
+	}
+	if points[0].RestaurantID != hanks.ID || points[0].VisitCount != 2 || !points[0].LatestVisitedAt.Equal(now) {
+		t.Fatalf("first point = %#v, want deduped latest Hanks", points[0])
+	}
+	if points[0].Latitude != *hanks.Latitude || points[0].Longitude != *hanks.Longitude {
+		t.Fatalf("first coordinates = %f/%f, want %f/%f", points[0].Latitude, points[0].Longitude, *hanks.Latitude, *hanks.Longitude)
+	}
+	if points[1].RestaurantID != patio.ID || points[1].VisitCount != 1 {
+		t.Fatalf("second point = %#v, want Patio", points[1])
+	}
+}
+
 func TestMemoryStorePickerTurnNoVisitsStartsWithDaniel(t *testing.T) {
 	store := NewMemoryStore()
 	store.visits = nil

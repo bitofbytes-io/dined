@@ -81,6 +81,7 @@ func isPublicReadRequest(r *http.Request) bool {
 	return path == "/" ||
 		path == "/dines" ||
 		path == "/trophy-case" ||
+		path == "/trophy-case/map.png" ||
 		path == "/health" ||
 		path == "/site.webmanifest" ||
 		path == "/favicon.ico" ||
