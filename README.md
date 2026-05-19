@@ -49,6 +49,18 @@ Set `DATABASE_URL` in `local.mk` or the environment before running Postgres-back
 Credentials in `DATABASE_URL` must already be URL-encoded before passing it to
 `make`.
 
+## CSS Assets
+
+`tailwind/styles.css` is the canonical stylesheet to edit. `static/styles.css`
+is generated output served by the app. After UI CSS changes, run:
+
+```bash
+make tail-prod
+```
+
+`make test` and CI run `make check-css` to fail when the generated stylesheet is
+out of sync.
+
 Run tests:
 
 ```bash

@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help dev run run-postgres build test migrate migrate-down migrate-status tail-prod docker-build docker-buildx clean
+.PHONY: help dev run run-postgres build test check-css migrate migrate-down migrate-status tail-prod docker-build docker-buildx clean
 
 BIN_DIR ?= bin
 PORT ?= 4600
@@ -37,6 +37,9 @@ build: tail-prod ## Build the production binary
 tail-prod: ## Build static CSS
 	cp tailwind/styles.css static/styles.css
 
+check-css: ## Check generated static CSS is current
+	@cmp -s tailwind/styles.css static/styles.css || (echo "static/styles.css is out of sync with tailwind/styles.css; run make tail-prod" >&2; exit 1)
+
 migrate: ## Apply database migrations
 	@test -n '$(DATABASE_URL)' || (echo "DATABASE_URL must be set in local.mk or the environment" >&2; exit 1)
 	goose -dir migrations postgres '$(DATABASE_URL)' up
@@ -49,7 +52,7 @@ migrate-status: ## Show migration status
 	@test -n '$(DATABASE_URL)' || (echo "DATABASE_URL must be set in local.mk or the environment" >&2; exit 1)
 	goose -dir migrations postgres '$(DATABASE_URL)' status
 
-test: ## Run Go tests
+test: check-css ## Run Go tests
 	go test -v ./...
 
 docker-build: tail-prod ## Build the Docker image locally
