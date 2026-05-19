@@ -172,6 +172,26 @@ func TestStaticMapURLOmitsCenterAndZoomForMultipleMarkers(t *testing.T) {
 	}
 }
 
+func TestStaticMapURLCapsMarkers(t *testing.T) {
+	markers := make([]StaticMapMarker, staticMapMaxMarkers+25)
+	for i := range markers {
+		markers[i] = StaticMapMarker{Latitude: 35 + float64(i)*0.001, Longitude: -78 - float64(i)*0.001}
+	}
+
+	mapURL, err := staticMapURL("api-key", markers)
+	if err != nil {
+		t.Fatal(err)
+	}
+	values := staticMapQuery(t, mapURL)
+	parts := strings.Split(values.Get("markers"), "|")
+	if len(parts) != staticMapMaxMarkers+1 {
+		t.Fatalf("markers parts len = %d, want color plus %d markers", len(parts), staticMapMaxMarkers)
+	}
+	if len(mapURL) >= 16384 {
+		t.Fatalf("map URL length = %d, want under Google Static Maps limit", len(mapURL))
+	}
+}
+
 func TestStaticMapRedactsRequestErrors(t *testing.T) {
 	client := &Client{
 		apiKey: "secret-key",

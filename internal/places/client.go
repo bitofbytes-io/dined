@@ -64,6 +64,7 @@ const searchFieldMask = "places.id,places.displayName,places.formattedAddress,pl
 const detailsFieldMask = "id,displayName,formattedAddress,addressComponents,location,nationalPhoneNumber,websiteUri,rating,priceLevel,types"
 const staticMapEndpoint = "https://maps.googleapis.com/maps/api/staticmap"
 const staticMapMaxBytes = 4 << 20
+const staticMapMaxMarkers = 100
 
 func NewClient(apiKey string) *Client {
 	return &Client{
@@ -201,6 +202,9 @@ func staticMapURL(apiKey string, markers []StaticMapMarker) (string, error) {
 	}
 	if len(markers) == 0 {
 		return "", fmt.Errorf("static map requires at least one marker")
+	}
+	if len(markers) > staticMapMaxMarkers {
+		markers = markers[:staticMapMaxMarkers]
 	}
 
 	values := url.Values{}
