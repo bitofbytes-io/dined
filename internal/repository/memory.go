@@ -161,6 +161,21 @@ func (m *MemoryStore) RestaurantVisits(_ context.Context, restaurantID uuid.UUID
 	return visits, nil
 }
 
+func (m *MemoryStore) RestaurantVisitSummaries(_ context.Context, restaurantID uuid.UUID) ([]model.Visit, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	var visits []model.Visit
+	for _, visit := range m.visits {
+		if visit.Restaurant.ID == restaurantID {
+			summary := visit
+			summary.Photos = nil
+			visits = append(visits, summary)
+		}
+	}
+	sortVisitsNewestFirst(visits)
+	return visits, nil
+}
+
 func (m *MemoryStore) VisitedRestaurantMapPoints(context.Context) ([]model.RestaurantMapPoint, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -247,6 +262,7 @@ func (m *MemoryStore) CreateVisit(_ context.Context, input model.VisitInput) (*u
 		UpdatedAt:  time.Now(),
 	}
 	visit.Ratings = m.ratingsFromInput(input)
+	visit.Photos = photosFromInput(visit.ID, input.Photos, 0)
 	for _, tagID := range input.TagIDs {
 		if tag, ok := m.tagByID(tagID); ok {
 			visit.Tags = append(visit.Tags, tag)
@@ -317,6 +333,10 @@ func (m *MemoryStore) UpdateVisit(_ context.Context, id uuid.UUID, input model.V
 			tags = append(tags, tag)
 		}
 	}
+	photos, err := m.reconciledVisitPhotos(m.visits[visitIndex], input)
+	if err != nil {
+		return err
+	}
 
 	m.visits[visitIndex].Restaurant = restaurant
 	m.visits[visitIndex].VisitedAt = input.VisitedAt
@@ -325,6 +345,7 @@ func (m *MemoryStore) UpdateVisit(_ context.Context, id uuid.UUID, input model.V
 	m.visits[visitIndex].Notes = strPtrOrNil(input.Notes)
 	m.visits[visitIndex].Ratings = ratings
 	m.visits[visitIndex].Tags = tags
+	m.visits[visitIndex].Photos = photos
 	m.visits[visitIndex].UpdatedAt = time.Now()
 	return nil
 }
@@ -658,6 +679,42 @@ func (m *MemoryStore) ratingsFromInput(input model.VisitInput) []model.Rating {
 		ratings = append(ratings, model.Rating{Person: m.personByID(personID), Score: score})
 	}
 	return ratings
+}
+
+func (m *MemoryStore) reconciledVisitPhotos(visit model.Visit, input model.VisitInput) ([]model.VisitPhoto, error) {
+	existingByID := map[uuid.UUID]model.VisitPhoto{}
+	for _, photo := range visit.Photos {
+		existingByID[photo.ID] = photo
+	}
+
+	photos := make([]model.VisitPhoto, 0, len(input.KeepPhotoIDs)+len(input.Photos))
+	for order, id := range input.KeepPhotoIDs {
+		photo, ok := existingByID[id]
+		if !ok {
+			return nil, errors.New("photo not found")
+		}
+		photo.SortOrder = order
+		photos = append(photos, photo)
+	}
+	photos = append(photos, photosFromInput(visit.ID, input.Photos, len(photos))...)
+	return photos, nil
+}
+
+func photosFromInput(visitID uuid.UUID, inputs []model.VisitPhotoInput, startOrder int) []model.VisitPhoto {
+	photos := make([]model.VisitPhoto, 0, len(inputs))
+	for i, input := range inputs {
+		byteCount, _ := model.ValidateVisitPhotoDataURI(input.DataURI)
+		photos = append(photos, model.VisitPhoto{
+			ID:          uuid.New(),
+			VisitID:     visitID,
+			DataURI:     strings.TrimSpace(input.DataURI),
+			ContentType: "image/jpeg",
+			ByteCount:   byteCount,
+			SortOrder:   startOrder + i,
+			CreatedAt:   time.Now(),
+		})
+	}
+	return photos
 }
 
 func (m *MemoryStore) tagByID(id uuid.UUID) (model.Tag, bool) {

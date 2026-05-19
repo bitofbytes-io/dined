@@ -57,8 +57,19 @@ type Visit struct {
 	Notes      *string
 	Ratings    []Rating
 	Tags       []Tag
+	Photos     []VisitPhoto
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
+}
+
+type VisitPhoto struct {
+	ID          uuid.UUID
+	VisitID     uuid.UUID
+	DataURI     string
+	ContentType string
+	ByteCount   int
+	SortOrder   int
+	CreatedAt   time.Time
 }
 
 type Rating struct {
@@ -87,6 +98,12 @@ type VisitInput struct {
 	Ratings        map[uuid.UUID]float64
 	TagIDs         []uuid.UUID
 	NewTag         string
+	KeepPhotoIDs   []uuid.UUID
+	Photos         []VisitPhotoInput
+}
+
+type VisitPhotoInput struct {
+	DataURI string
 }
 
 type RestaurantInput struct {

@@ -10,6 +10,8 @@ import (
 	"github.com/google/uuid"
 )
 
+const testVisitPhotoDataURI = "data:image/jpeg;base64,aGVsbG8="
+
 func TestMemoryStoreVisitsZeroReturnsAllVisits(t *testing.T) {
 	store := NewMemoryStore()
 
@@ -184,6 +186,67 @@ func TestMemoryStoreCreateVisitDoesNotReuseNameOnlyMatch(t *testing.T) {
 	}
 	if created.Restaurant.Address == nil || *created.Restaurant.Address != "202 Other Street" {
 		t.Fatalf("expected a distinct restaurant location, got %#v", created.Restaurant.Address)
+	}
+}
+
+func TestMemoryStoreCreateVisitStoresPhotos(t *testing.T) {
+	store := NewMemoryStore()
+	people, err := store.People(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := model.VisitInput{
+		RestaurantName: "Photo Counter",
+		VisitedAt:      time.Now(),
+		PickerID:       people[0].ID,
+		PriceLevel:     2,
+		Ratings:        map[uuid.UUID]float64{people[0].ID: 8},
+		Photos: []model.VisitPhotoInput{
+			{DataURI: testVisitPhotoDataURI},
+			{DataURI: "data:image/jpeg;base64,dGFjbw=="},
+		},
+	}
+
+	visitID, err := store.CreateVisit(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	created := visitByID(t, store, *visitID)
+	if len(created.Photos) != 2 {
+		t.Fatalf("photos len = %d, want 2", len(created.Photos))
+	}
+	if created.Photos[0].DataURI != testVisitPhotoDataURI || created.Photos[0].ContentType != "image/jpeg" || created.Photos[0].ByteCount != 5 || created.Photos[0].SortOrder != 0 {
+		t.Fatalf("first photo = %#v", created.Photos[0])
+	}
+	if created.Photos[1].SortOrder != 1 {
+		t.Fatalf("second photo sort order = %d, want 1", created.Photos[1].SortOrder)
+	}
+}
+
+func TestMemoryStoreRestaurantVisitSummariesOmitPhotos(t *testing.T) {
+	store := NewMemoryStore()
+	visit := store.visits[0]
+	visit.Photos = photosFromInput(visit.ID, []model.VisitPhotoInput{{DataURI: testVisitPhotoDataURI}}, 0)
+	store.visits[0] = visit
+
+	summaries, err := store.RestaurantVisitSummaries(context.Background(), visit.Restaurant.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(summaries) == 0 {
+		t.Fatal("expected restaurant visit summaries")
+	}
+	if len(summaries[0].Photos) != 0 {
+		t.Fatalf("summary photos len = %d, want 0", len(summaries[0].Photos))
+	}
+
+	fullVisits, err := store.RestaurantVisits(context.Background(), visit.Restaurant.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fullVisits) == 0 || len(fullVisits[0].Photos) != 1 {
+		t.Fatalf("full restaurant visits should still include photos: %#v", fullVisits)
 	}
 }
 
@@ -423,6 +486,42 @@ func TestMemoryStoreUpdateVisitReplacesRatingsTagsAndNotes(t *testing.T) {
 	}
 	if len(updated.Tags) != 1 || updated.Tags[0].Name != "Great Service" {
 		t.Fatalf("tags = %#v, want Great Service", updated.Tags)
+	}
+}
+
+func TestMemoryStoreUpdateVisitReconcilesPhotos(t *testing.T) {
+	store := NewMemoryStore()
+	visit := store.visits[0]
+	visit.Photos = photosFromInput(visit.ID, []model.VisitPhotoInput{
+		{DataURI: testVisitPhotoDataURI},
+		{DataURI: "data:image/jpeg;base64,dGFibGU="},
+	}, 0)
+	store.visits[0] = visit
+	restaurantID := visit.Restaurant.ID
+
+	input := model.VisitInput{
+		RestaurantID: &restaurantID,
+		VisitedAt:    visit.VisitedAt,
+		PickerID:     visit.Picker.ID,
+		PriceLevel:   visit.PriceLevel,
+		Ratings:      map[uuid.UUID]float64{store.people[0].ID: 9},
+		KeepPhotoIDs: []uuid.UUID{visit.Photos[1].ID},
+		Photos:       []model.VisitPhotoInput{{DataURI: "data:image/jpeg;base64,bmV3"}},
+	}
+
+	if err := store.UpdateVisit(context.Background(), visit.ID, input); err != nil {
+		t.Fatal(err)
+	}
+
+	updated := visitByID(t, store, visit.ID)
+	if len(updated.Photos) != 2 {
+		t.Fatalf("photos len = %d, want 2", len(updated.Photos))
+	}
+	if updated.Photos[0].ID != visit.Photos[1].ID || updated.Photos[0].SortOrder != 0 {
+		t.Fatalf("kept photo = %#v, want original second photo first", updated.Photos[0])
+	}
+	if updated.Photos[1].ID == visit.Photos[0].ID || updated.Photos[1].DataURI != "data:image/jpeg;base64,bmV3" || updated.Photos[1].SortOrder != 1 {
+		t.Fatalf("new photo = %#v", updated.Photos[1])
 	}
 }
 

@@ -12,6 +12,8 @@ import (
 	"github.com/google/uuid"
 )
 
+const testPhotoDataURI = "data:image/jpeg;base64,aGVsbG8="
+
 func TestAssetAppendsStaticFileVersion(t *testing.T) {
 	withWorkingDir(t)
 	if err := os.Mkdir("static", 0o755); err != nil {
@@ -403,6 +405,29 @@ func TestRenderLogShowsRatingRequirementWhenNoRating(t *testing.T) {
 	}
 }
 
+func TestRenderLogIncludesPhotoUploadAndPrefilledPhotos(t *testing.T) {
+	var out strings.Builder
+	err := Render(&out, "log", PageData{
+		PrefillPhotoDataURIs: []string{testPhotoDataURI},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered := out.String()
+	for _, fragment := range []string{
+		`data-photo-uploader data-photo-limit="4"`,
+		`Food, fun, memories. Up to 4.`,
+		`name="photo_data_uri" value="` + testPhotoDataURI + `"`,
+		`type="file" accept="image/*" multiple data-photo-input`,
+		`id="photo-preview-modal"`,
+		`dinedCompressPhoto`,
+	} {
+		if !strings.Contains(rendered, fragment) {
+			t.Fatalf("rendered log missing %q:\n%s", fragment, rendered)
+		}
+	}
+}
+
 func TestRenderAuthenticatedDinesUsesEditLinkAndDeleteConfirmationModal(t *testing.T) {
 	visitID := uuid.New()
 	restaurantID := uuid.New()
@@ -442,12 +467,54 @@ func TestRenderAuthenticatedDinesUsesEditLinkAndDeleteConfirmationModal(t *testi
 	}
 }
 
+func TestRenderDinesShowsPhotoStripAndPreviewHooks(t *testing.T) {
+	visitID := uuid.New()
+	restaurantID := uuid.New()
+	var out strings.Builder
+	err := Render(&out, "dines", PageData{
+		Visits: []model.Visit{{
+			ID:         visitID,
+			Restaurant: model.Restaurant{ID: restaurantID, Name: "Hank's"},
+			VisitedAt:  time.Date(2026, 5, 16, 12, 0, 0, 0, time.UTC),
+			Picker:     model.Person{Name: "Daniel"},
+			PriceLevel: 2,
+			Ratings:    []model.Rating{{Person: model.Person{Name: "Daniel"}, Score: 8}},
+			Photos: []model.VisitPhoto{
+				{ID: uuid.New(), DataURI: testPhotoDataURI},
+				{ID: uuid.New(), DataURI: "data:image/jpeg;base64,dHdv"},
+				{ID: uuid.New(), DataURI: "data:image/jpeg;base64,dGhyZWU="},
+				{ID: uuid.New(), DataURI: "data:image/jpeg;base64,Zm91cg=="},
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered := out.String()
+	for _, fragment := range []string{
+		`class="visit-photo-strip" data-photo-strip`,
+		`data-photo-preview data-photo-src="` + testPhotoDataURI + `"`,
+		`data-photo-preview data-photo-src="data:image/jpeg;base64,Zm91cg=="`,
+		`id="photo-preview-image"`,
+		`id="photo-preview-prev"`,
+		`id="photo-preview-next"`,
+	} {
+		if !strings.Contains(rendered, fragment) {
+			t.Fatalf("rendered dines missing %q:\n%s", fragment, rendered)
+		}
+	}
+	if strings.Contains(rendered, `photo-more`) || strings.Contains(rendered, `>+1</button>`) {
+		t.Fatalf("rendered dines should show all four photos instead of a more tile:\n%s", rendered)
+	}
+}
+
 func TestRenderVisitEditPrefillsRatingsTagsAndNotes(t *testing.T) {
 	danielID := uuid.New()
 	jenID := uuid.New()
 	tagID := uuid.New()
 	visitID := uuid.New()
 	restaurantID := uuid.New()
+	photoID := uuid.New()
 	visitedAt := time.Date(2026, 5, 16, 19, 30, 0, 0, apptime.EasternLocation())
 	note := "Updated score after dessert."
 	var out strings.Builder
@@ -461,6 +528,7 @@ func TestRenderVisitEditPrefillsRatingsTagsAndNotes(t *testing.T) {
 			Notes:      &note,
 			Ratings:    []model.Rating{{Person: model.Person{ID: danielID, Name: "Daniel"}, Score: 8.5}},
 			Tags:       []model.Tag{{ID: tagID, Name: "Would Return"}},
+			Photos:     []model.VisitPhoto{{ID: photoID, DataURI: testPhotoDataURI, ContentType: "image/jpeg", ByteCount: 5}},
 		},
 		People: []model.Person{{ID: danielID, Name: "Daniel"}, {ID: jenID, Name: "Jen"}},
 		Tags:   []model.Tag{{ID: tagID, Name: "Would Return"}},
@@ -477,6 +545,8 @@ func TestRenderVisitEditPrefillsRatingsTagsAndNotes(t *testing.T) {
 		`name="rating_` + danielID.String() + `" type="number" min="0" max="10" step="0.5" inputmode="decimal" placeholder="0-10" value="8.5"`,
 		`value="` + tagID.String() + `" checked>`,
 		`href="/restaurants/` + restaurantID.String() + `/edit?return_visit_id=` + visitID.String() + `"`,
+		`name="keep_photo_id" value="` + photoID.String() + `"`,
+		`data-photo-preview data-photo-src="` + testPhotoDataURI + `"`,
 		note,
 	} {
 		if !strings.Contains(rendered, fragment) {
