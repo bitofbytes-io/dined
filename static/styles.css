@@ -498,7 +498,7 @@ a:focus-visible, button:focus-visible {
 .booth-recent {
   position: absolute;
   left: 50%;
-  top: 13.9rem;
+  top: 14.4rem;
   z-index: 1;
   width: min(62rem, 88%);
   transform: translateX(-50%);
@@ -883,6 +883,13 @@ fieldset {
   background: var(--aqua-dark);
   box-shadow: inset 0 -4px 0 rgba(0, 0, 0, .18), 0 5px 0 rgba(6, 21, 22, .35);
 }
+.log-form-incomplete [data-log-submit]:hover,
+.log-form-incomplete [data-log-submit]:focus-visible {
+  color: var(--milk);
+  background: var(--aqua-dark);
+  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, .18), 0 5px 0 rgba(6, 21, 22, .35);
+  transform: none;
+}
 .rating-card {
   min-height: 8.6rem;
   padding: .85rem;
@@ -996,6 +1003,12 @@ fieldset {
 }
 .details {
   margin: 1rem 0;
+}
+.detail-item {
+  display: grid;
+  gap: .18rem;
+  align-content: start;
+  min-width: 0;
 }
 .inline-form {
   margin: 1rem 0 1.45rem;
