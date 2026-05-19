@@ -1,8 +1,11 @@
 package places
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"math"
+	"net/http"
 	"net/url"
 	"strings"
 	"testing"
@@ -169,6 +172,29 @@ func TestStaticMapURLOmitsCenterAndZoomForMultipleMarkers(t *testing.T) {
 	}
 }
 
+func TestStaticMapRedactsRequestErrors(t *testing.T) {
+	client := &Client{
+		apiKey: "secret-key",
+		http: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return nil, &url.Error{Op: "Get", URL: req.URL.String(), Err: errors.New("network down")}
+		})},
+	}
+
+	_, err := client.StaticMap(context.Background(), []StaticMapMarker{{Latitude: 35.7796, Longitude: -78.6382}})
+	if err == nil {
+		t.Fatal("expected request error")
+	}
+	message := err.Error()
+	for _, leaked := range []string{"secret-key", "key=", "maps.googleapis.com"} {
+		if strings.Contains(message, leaked) {
+			t.Fatalf("static map error leaked %q: %q", leaked, message)
+		}
+	}
+	if !strings.Contains(message, "google static map request failed") {
+		t.Fatalf("static map error = %q", message)
+	}
+}
+
 func staticMapQuery(t *testing.T, mapURL string) url.Values {
 	t.Helper()
 	parsed, err := url.Parse(mapURL)
@@ -179,4 +205,10 @@ func staticMapQuery(t *testing.T, mapURL string) url.Values {
 		t.Fatalf("unexpected static map endpoint: %s", mapURL)
 	}
 	return parsed.Query()
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
 }

@@ -171,7 +171,10 @@ func (c *Client) StaticMap(ctx context.Context, markers []StaticMapMarker) (*Sta
 	}
 	res, err := httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, fmt.Errorf("google static map request failed: %w", ctxErr)
+		}
+		return nil, fmt.Errorf("google static map request failed")
 	}
 	defer res.Body.Close()
 	if res.StatusCode >= 300 {
