@@ -224,6 +224,32 @@ func TestMemoryStoreCreateVisitStoresPhotos(t *testing.T) {
 	}
 }
 
+func TestMemoryStoreRestaurantVisitSummariesOmitPhotos(t *testing.T) {
+	store := NewMemoryStore()
+	visit := store.visits[0]
+	visit.Photos = photosFromInput(visit.ID, []model.VisitPhotoInput{{DataURI: testVisitPhotoDataURI}}, 0)
+	store.visits[0] = visit
+
+	summaries, err := store.RestaurantVisitSummaries(context.Background(), visit.Restaurant.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(summaries) == 0 {
+		t.Fatal("expected restaurant visit summaries")
+	}
+	if len(summaries[0].Photos) != 0 {
+		t.Fatalf("summary photos len = %d, want 0", len(summaries[0].Photos))
+	}
+
+	fullVisits, err := store.RestaurantVisits(context.Background(), visit.Restaurant.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fullVisits) == 0 || len(fullVisits[0].Photos) != 1 {
+		t.Fatalf("full restaurant visits should still include photos: %#v", fullVisits)
+	}
+}
+
 func TestMemoryStoreCreateVisitReusesNameAddressWithPlaceID(t *testing.T) {
 	store := NewMemoryStore()
 	people, err := store.People(context.Background())

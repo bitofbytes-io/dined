@@ -25,6 +25,7 @@ type DinerStore interface {
 	Visit(context.Context, uuid.UUID) (*model.Visit, error)
 	Visits(context.Context, int) ([]model.Visit, error)
 	RestaurantVisits(context.Context, uuid.UUID) ([]model.Visit, error)
+	RestaurantVisitSummaries(context.Context, uuid.UUID) ([]model.Visit, error)
 	VisitedRestaurantMapPoints(context.Context) ([]model.RestaurantMapPoint, error)
 	CreateVisit(context.Context, model.VisitInput) (*uuid.UUID, error)
 	UpdateVisit(context.Context, uuid.UUID, model.VisitInput) error
@@ -125,7 +126,7 @@ func (s *Store) Visit(ctx context.Context, id uuid.UUID) (*model.Visit, error) {
 	}
 	defer rows.Close()
 
-	visits, err := s.scanVisits(ctx, rows)
+	visits, err := s.scanVisits(ctx, rows, true)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +148,7 @@ func (s *Store) Visits(ctx context.Context, limit int) ([]model.Visit, error) {
 		return nil, fmt.Errorf("list visits: %w", err)
 	}
 	defer rows.Close()
-	return s.scanVisits(ctx, rows)
+	return s.scanVisits(ctx, rows, true)
 }
 
 func (s *Store) RestaurantVisits(ctx context.Context, restaurantID uuid.UUID) ([]model.Visit, error) {
@@ -156,7 +157,16 @@ func (s *Store) RestaurantVisits(ctx context.Context, restaurantID uuid.UUID) ([
 		return nil, fmt.Errorf("list restaurant visits: %w", err)
 	}
 	defer rows.Close()
-	return s.scanVisits(ctx, rows)
+	return s.scanVisits(ctx, rows, true)
+}
+
+func (s *Store) RestaurantVisitSummaries(ctx context.Context, restaurantID uuid.UUID) ([]model.Visit, error) {
+	rows, err := s.pool.Query(ctx, visitSelectSQL()+` WHERE v.restaurant_id = $1 ORDER BY v.visited_at DESC, v.created_at DESC`, restaurantID)
+	if err != nil {
+		return nil, fmt.Errorf("list restaurant visit summaries: %w", err)
+	}
+	defer rows.Close()
+	return s.scanVisits(ctx, rows, false)
 }
 
 func (s *Store) VisitedRestaurantMapPoints(ctx context.Context) ([]model.RestaurantMapPoint, error) {
@@ -726,7 +736,7 @@ func (s *Store) PickerTurn(ctx context.Context) (model.PickerTurn, error) {
 	return model.PickerTurn{LastPicker: last, NextPicker: next}, nil
 }
 
-func (s *Store) scanVisits(ctx context.Context, rows pgx.Rows) ([]model.Visit, error) {
+func (s *Store) scanVisits(ctx context.Context, rows pgx.Rows, includePhotos bool) ([]model.Visit, error) {
 	var visits []model.Visit
 	for rows.Next() {
 		var visit model.Visit
@@ -767,9 +777,11 @@ func (s *Store) scanVisits(ctx context.Context, rows pgx.Rows) ([]model.Visit, e
 		if err != nil {
 			return nil, err
 		}
-		visit.Photos, err = s.visitPhotos(ctx, visit.ID)
-		if err != nil {
-			return nil, err
+		if includePhotos {
+			visit.Photos, err = s.visitPhotos(ctx, visit.ID)
+			if err != nil {
+				return nil, err
+			}
 		}
 		visits = append(visits, visit)
 	}

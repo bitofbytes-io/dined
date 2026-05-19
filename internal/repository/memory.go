@@ -161,6 +161,21 @@ func (m *MemoryStore) RestaurantVisits(_ context.Context, restaurantID uuid.UUID
 	return visits, nil
 }
 
+func (m *MemoryStore) RestaurantVisitSummaries(_ context.Context, restaurantID uuid.UUID) ([]model.Visit, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	var visits []model.Visit
+	for _, visit := range m.visits {
+		if visit.Restaurant.ID == restaurantID {
+			summary := visit
+			summary.Photos = nil
+			visits = append(visits, summary)
+		}
+	}
+	sortVisitsNewestFirst(visits)
+	return visits, nil
+}
+
 func (m *MemoryStore) VisitedRestaurantMapPoints(context.Context) ([]model.RestaurantMapPoint, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

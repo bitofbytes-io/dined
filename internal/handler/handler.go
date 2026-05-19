@@ -906,7 +906,7 @@ func optionalInt(value, label string) (*int, error) {
 func (h *Handler) searchResults(r *http.Request, restaurants []model.Restaurant) ([]ui.RestaurantResult, error) {
 	results := make([]ui.RestaurantResult, 0, len(restaurants))
 	for _, restaurant := range restaurants {
-		visits, err := h.store.RestaurantVisits(r.Context(), restaurant.ID)
+		visits, err := h.store.RestaurantVisitSummaries(r.Context(), restaurant.ID)
 		if err != nil {
 			return nil, err
 		}
