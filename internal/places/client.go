@@ -168,7 +168,7 @@ func (c *Client) StaticMap(ctx context.Context, markers []StaticMapMarker) (*Sta
 	}
 	httpClient := c.http
 	if httpClient == nil {
-		httpClient = http.DefaultClient
+		httpClient = &http.Client{Timeout: 8 * time.Second}
 	}
 	res, err := httpClient.Do(req)
 	if err != nil {

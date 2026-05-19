@@ -75,7 +75,7 @@ func TestTrophyMapUsesStoredCoordinatesOnly(t *testing.T) {
 		},
 	}
 	handler := New(nil, store, fakePlaces, nil, nil)
-	req := httptest.NewRequest(http.MethodGet, "/trophy-case/map.png?latitude=1&longitude=2", nil)
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/trophy-case/map.png?latitude=1&longitude=2", nil)
 	rec := httptest.NewRecorder()
 
 	handler.TrophyMap(rec, req)
@@ -106,7 +106,7 @@ func TestTrophyMapUsesStoredCoordinatesOnly(t *testing.T) {
 	}
 
 	second := httptest.NewRecorder()
-	handler.TrophyMap(second, httptest.NewRequest(http.MethodGet, "/trophy-case/map.png", nil))
+	handler.TrophyMap(second, httptest.NewRequestWithContext(ctx, http.MethodGet, "/trophy-case/map.png", nil))
 	if second.Code != http.StatusOK {
 		t.Fatalf("second status = %d, want %d: %s", second.Code, http.StatusOK, second.Body.String())
 	}
