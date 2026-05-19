@@ -78,10 +78,10 @@ func (h *Handler) Restaurant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.render(w, "restaurant", r, ui.PageData{
-		Title:      restaurant.Name,
-		Restaurant: restaurant,
-		Visits:     visits,
-		Notice:     googleRefreshNotice(r.URL.Query().Get("google_refresh")),
+		Title:          restaurant.Name,
+		Restaurant:     restaurant,
+		Visits:         visits,
+		ReadOnlyVisits: true,
 	})
 }
 
@@ -235,6 +235,11 @@ func (h *Handler) UpdateRestaurant(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid form", http.StatusBadRequest)
 		return
 	}
+	returnVisitID, err := h.restaurantReturnVisitID(r, id)
+	if err != nil {
+		h.error(w, "restaurant return visit", err)
+		return
+	}
 	input, err := h.restaurantInput(r)
 	if err != nil {
 		h.renderRestaurantEditError(w, r, id, err.Error())
@@ -242,6 +247,10 @@ func (h *Handler) UpdateRestaurant(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := h.store.UpdateRestaurant(r.Context(), id, input); err != nil {
 		h.renderRestaurantEditError(w, r, id, err.Error())
+		return
+	}
+	if returnVisitID != "" {
+		http.Redirect(w, r, "/visits/"+returnVisitID+"/edit", http.StatusSeeOther)
 		return
 	}
 	http.Redirect(w, r, "/restaurants/"+id.String(), http.StatusSeeOther)
@@ -276,33 +285,42 @@ func (h *Handler) RefreshRestaurantGoogle(w http.ResponseWriter, r *http.Request
 		http.NotFound(w, r)
 		return
 	}
+	returnVisitID, err := h.restaurantReturnVisitID(r, id)
+	if err != nil {
+		h.error(w, "restaurant google refresh return visit", err)
+		return
+	}
 	if h.places == nil || !h.places.Configured() {
-		redirectRestaurantGoogleRefresh(w, r, id, "unconfigured")
+		redirectRestaurantGoogleRefresh(w, r, id, "unconfigured", returnVisitID)
 		return
 	}
 	if restaurant.GooglePlaceID == nil || strings.TrimSpace(*restaurant.GooglePlaceID) == "" {
-		redirectRestaurantGoogleRefresh(w, r, id, "missing-place-id")
+		redirectRestaurantGoogleRefresh(w, r, id, "missing-place-id", returnVisitID)
 		return
 	}
 	place, err := h.places.Details(r.Context(), *restaurant.GooglePlaceID)
 	if err != nil {
 		slog.Warn("places details refresh failed", "restaurant_id", id, "place_id", *restaurant.GooglePlaceID, "error", err)
-		redirectRestaurantGoogleRefresh(w, r, id, "failed")
+		redirectRestaurantGoogleRefresh(w, r, id, "failed", returnVisitID)
 		return
 	}
 	if place == nil {
-		redirectRestaurantGoogleRefresh(w, r, id, "failed")
+		redirectRestaurantGoogleRefresh(w, r, id, "failed", returnVisitID)
 		return
 	}
 	if err := h.store.UpdateRestaurantGoogleMetadata(r.Context(), id, placesync.MetadataFromPlace(*place)); err != nil {
 		h.error(w, "refresh restaurant google metadata", err)
 		return
 	}
-	redirectRestaurantGoogleRefresh(w, r, id, "updated")
+	redirectRestaurantGoogleRefresh(w, r, id, "updated", returnVisitID)
 }
 
-func redirectRestaurantGoogleRefresh(w http.ResponseWriter, r *http.Request, id uuid.UUID, status string) {
-	http.Redirect(w, r, "/restaurants/"+id.String()+"?google_refresh="+status, http.StatusSeeOther)
+func redirectRestaurantGoogleRefresh(w http.ResponseWriter, r *http.Request, id uuid.UUID, status string, returnVisitID string) {
+	query := url.Values{"google_refresh": {status}}
+	if returnVisitID != "" {
+		query.Set("return_visit_id", returnVisitID)
+	}
+	http.Redirect(w, r, "/restaurants/"+id.String()+"/edit?"+query.Encode(), http.StatusSeeOther)
 }
 
 func googleRefreshNotice(status string) string {
@@ -652,7 +670,39 @@ func (h *Handler) restaurantEditData(r *http.Request, id uuid.UUID) (ui.PageData
 	if restaurant == nil {
 		return ui.PageData{}, nil
 	}
-	return ui.PageData{Title: "Edit " + restaurant.Name, Restaurant: restaurant}, nil
+	returnVisitID, err := h.restaurantReturnVisitID(r, id)
+	if err != nil {
+		return ui.PageData{}, err
+	}
+	return ui.PageData{
+		Title:         "Edit " + restaurant.Name,
+		Restaurant:    restaurant,
+		Notice:        googleRefreshNotice(r.URL.Query().Get("google_refresh")),
+		ReturnVisitID: returnVisitID,
+	}, nil
+}
+
+func (h *Handler) restaurantReturnVisitID(r *http.Request, restaurantID uuid.UUID) (string, error) {
+	return h.validRestaurantReturnVisitID(r, restaurantID, r.FormValue("return_visit_id"))
+}
+
+func (h *Handler) validRestaurantReturnVisitID(r *http.Request, restaurantID uuid.UUID, value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", nil
+	}
+	visitID, err := uuid.Parse(value)
+	if err != nil {
+		return "", nil
+	}
+	visit, err := h.store.Visit(r.Context(), visitID)
+	if err != nil {
+		return "", err
+	}
+	if visit == nil || visit.Restaurant.ID != restaurantID {
+		return "", nil
+	}
+	return visitID.String(), nil
 }
 
 func (h *Handler) renderVisitEditError(w http.ResponseWriter, r *http.Request, id uuid.UUID, message string) {

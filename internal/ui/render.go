@@ -24,6 +24,7 @@ type PageData struct {
 	Error                   string
 	Notice                  string
 	Visits                  []model.Visit
+	ReadOnlyVisits          bool
 	Visit                   *model.Visit
 	People                  []model.Person
 	Tags                    []model.Tag
@@ -59,6 +60,7 @@ type PageData struct {
 	PrefillIsChain          bool
 	PrefillRatings          map[string]string
 	PrefillTagIDs           map[string]bool
+	ReturnVisitID           string
 }
 
 type RestaurantResult struct {
@@ -589,7 +591,7 @@ const templates = `
       <div class="ratings">{{range .Ratings}}<span>{{.Person.Name}} {{score .Score}}</span>{{end}}</div>
       {{if .Tags}}<div class="tags">{{range .Tags}}<span>{{.Name}}</span>{{end}}</div>{{end}}
       {{if .Notes}}<p class="note">{{.Notes}}</p>{{end}}
-      {{if $.Authenticated}}<div class="visit-actions"><a class="secondary-button" href="/visits/{{.ID}}/edit">Edit</a><form method="post" action="/visits/{{.ID}}/delete" hx-boost="false" data-delete-dine-form data-delete-title="Delete this dine?" data-delete-message="This removes the dine and its ratings from the ledger." data-delete-confirm="Delete" onsubmit="return dinedConfirmDelete(event, this)"><button class="danger">Delete</button></form></div>{{end}}
+      {{if and $.Authenticated (not $.ReadOnlyVisits)}}<div class="visit-actions"><a class="secondary-button" href="/visits/{{.ID}}/edit">Edit</a><form method="post" action="/visits/{{.ID}}/delete" hx-boost="false" data-delete-dine-form data-delete-title="Delete this dine?" data-delete-message="This removes the dine and its ratings from the ledger." data-delete-confirm="Delete" onsubmit="return dinedConfirmDelete(event, this)"><button class="danger">Delete</button></form></div>{{end}}
     </article>
   {{end}}
   </div>
@@ -700,7 +702,7 @@ const templates = `
     <fieldset class="ratings-field score-console"><legend>Rate Your Experience</legend>{{range $.People}}<label class="rating-card">{{if avatar .Name}}<img class="avatar-face" src="{{avatar .Name}}" alt="">{{else}}<span class="avatar-dot">{{slice .Name 0 1}}</span>{{end}}<span>{{.Name}}</span><input name="rating_{{.ID}}" type="number" min="0" max="10" step="0.5" inputmode="decimal" placeholder="0-10" value="{{ratingValue $visit .}}" data-half-step-rating></label>{{end}}</fieldset>
     <fieldset class="tags-field chip-field"><legend>Tags</legend>{{range $.Tags}}<label><input type="checkbox" name="tag_id" value="{{.ID}}" {{if hasVisitTag $visit .}}checked{{end}}> <span>{{.Name}}</span></label>{{end}}<label class="new-tag">New tag<input name="new_tag" placeholder="Great fries"></label></fieldset>
     <label class="notes-field">Notes<textarea name="notes" rows="4" placeholder="What should we remember next time?">{{str .Notes}}</textarea></label>
-    <div class="form-actions console-actions"><a class="secondary-button" href="/restaurants/{{.Restaurant.ID}}/edit">Edit Restaurant Details</a><button class="primary-button">Save Changes</button></div>
+    <div class="form-actions console-actions"><a class="secondary-button" href="/restaurants/{{.Restaurant.ID}}/edit?return_visit_id={{.ID}}">Edit Restaurant Details</a><button class="primary-button">Save Changes</button></div>
   </form>
   {{end}}
 </main>
@@ -712,9 +714,8 @@ const templates = `
 <main class="page-band ledger-page">
   <section class="wide-ticket ledger-panel">
     {{with .Restaurant}}
-    <div class="section-head"><div><h1>{{.Name}} {{if .IsChain}}<span class="badge">Chain</span>{{end}}</h1>{{if .Address}}<p>{{.Address}}</p>{{end}}</div>{{if $.Authenticated}}<div class="section-actions"><a class="secondary-button" href="/restaurants/{{.ID}}/edit">Edit Details</a><a class="small-cta" href="/log?restaurant_id={{.ID}}&restaurant_name={{query .Name}}{{if .Address}}&address={{query .Address}}{{end}}{{if .City}}&city={{query .City}}{{end}}{{if .GooglePlaceID}}&google_place_id={{query .GooglePlaceID}}{{end}}{{if .Category}}&category={{query .Category}}{{end}}">Log Another Dine</a>{{if .GooglePlaceID}}<form method="post" action="/restaurants/{{.ID}}/google-refresh"><button class="secondary-button">Refresh Google Info</button></form>{{end}}</div>{{end}}</div>
+    <div class="section-head"><div><h1>{{.Name}} {{if .IsChain}}<span class="badge">Chain</span>{{end}}</h1>{{if .Address}}<p>{{.Address}}</p>{{end}}</div></div>
     <dl class="details"><div class="detail-item"><dt>Category</dt><dd>{{if .Category}}{{.Category}}{{else}}-{{end}}</dd></div><div class="detail-item"><dt>Address</dt><dd>{{if .Address}}{{.Address}}{{else}}-{{end}}</dd></div><div class="detail-item"><dt>City</dt><dd>{{if .City}}{{.City}}{{else}}-{{end}}</dd></div><div class="detail-item"><dt>Phone</dt><dd>{{if .Phone}}{{.Phone}}{{else}}-{{end}}</dd></div><div class="detail-item"><dt>Website</dt><dd>{{if .Website}}<a href="{{.Website}}">{{.Website}}</a>{{else}}-{{end}}</dd></div><div class="detail-item"><dt>Google rating</dt><dd>{{if .GoogleRating}}{{floatInput .GoogleRating}}{{else}}-{{end}}</dd></div><div class="detail-item"><dt>Google price</dt><dd>{{if .GooglePriceLevel}}{{dollars (intValue .GooglePriceLevel)}}{{else}}-{{end}}</dd></div></dl>
-    {{if $.Authenticated}}<form method="post" action="/restaurants/{{.ID}}/chain" class="inline-form"><input type="hidden" name="is_chain" value="{{if .IsChain}}false{{else}}true{{end}}"><button class="small-cta">{{if .IsChain}}Clear Chain Badge{{else}}Mark Chain{{end}}</button></form>{{end}}
     {{end}}
     {{template "visit-list" .}}
   </section>
@@ -726,11 +727,13 @@ const templates = `
 {{template "top" .}}
 <main class="page-band order-page">
   {{with .Restaurant}}
+  {{if .GooglePlaceID}}<form id="restaurant-google-refresh-form" method="post" action="/restaurants/{{.ID}}/google-refresh">{{with $.ReturnVisitID}}<input type="hidden" name="return_visit_id" value="{{.}}">{{end}}</form>{{end}}
   <form class="wide-ticket log-form order-pad console-pad" method="post" action="/restaurants/{{.ID}}">
     <div class="section-head console-head">
       <div><h1>Edit Restaurant</h1>{{if .GooglePlaceID}}<p>Google place: {{str .GooglePlaceID}}</p>{{end}}</div>
       <a class="secondary-button" href="/restaurants/{{.ID}}">Cancel</a>
     </div>
+    {{with $.ReturnVisitID}}<input type="hidden" name="return_visit_id" value="{{.}}">{{end}}
     <section class="form-section restaurant-console">
       <div class="form-grid restaurant-edit-grid">
         <label>Restaurant<input name="restaurant_name" value="{{.Name}}" required></label>
@@ -743,7 +746,10 @@ const templates = `
         <label>Google Price<select name="google_price_level"><option></option><option value="1" {{if eq (intValue .GooglePriceLevel) 1}}selected{{end}}>$</option><option value="2" {{if eq (intValue .GooglePriceLevel) 2}}selected{{end}}>$$</option><option value="3" {{if eq (intValue .GooglePriceLevel) 3}}selected{{end}}>$$$</option><option value="4" {{if eq (intValue .GooglePriceLevel) 4}}selected{{end}}>$$$$</option></select></label>
       </div>
     </section>
-    <div class="form-actions console-actions"><label class="inline-check"><input type="checkbox" name="is_chain" value="true" {{if .IsChain}}checked{{end}}> Mark as chain</label><button class="primary-button">Save Restaurant</button></div>
+    <div class="form-actions console-actions">
+      <div>{{with $.ReturnVisitID}}<a class="secondary-button" href="/visits/{{.}}/edit">Return to Edit Dine</a>{{end}}</div>
+      <div class="section-actions"><label class="inline-check"><input type="checkbox" name="is_chain" value="true" {{if .IsChain}}checked{{end}}> Mark as chain</label>{{if .GooglePlaceID}}<button class="secondary-button" type="submit" form="restaurant-google-refresh-form">Refresh Google Info</button>{{end}}<button class="primary-button">Save Restaurant</button></div>
+    </div>
   </form>
   {{end}}
 </main>
