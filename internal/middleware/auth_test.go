@@ -21,6 +21,18 @@ func TestAuthAllowsPublicReadonlyHome(t *testing.T) {
 	}
 }
 
+func TestAuthAllowsPublicTrophyMapImage(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/trophy-case/map.png", nil)
+	rec := httptest.NewRecorder()
+	called := false
+	Auth(testAuthService(t), false)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+	})).ServeHTTP(rec, req)
+	if !called {
+		t.Fatal("handler was not called")
+	}
+}
+
 func TestAuthBlocksMutationsWithoutSession(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/visits", nil)
 	rec := httptest.NewRecorder()

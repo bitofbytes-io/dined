@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"context"
+	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
@@ -8,6 +10,8 @@ import (
 	"time"
 
 	"github.com/bitofbytes-io/dined/internal/apptime"
+	"github.com/bitofbytes-io/dined/internal/places"
+	"github.com/bitofbytes-io/dined/internal/repository"
 	"github.com/google/uuid"
 )
 
@@ -50,6 +54,52 @@ func TestGoogleRefreshNotice(t *testing.T) {
 				t.Fatalf("got %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestTrophyMapUsesStoredCoordinatesOnly(t *testing.T) {
+	ctx := context.Background()
+	store := repository.NewMemoryStore()
+	expected, err := store.VisitedRestaurantMapPoints(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(expected) == 0 {
+		t.Fatal("expected memory store to have demo map points")
+	}
+	fakePlaces := &fakeGooglePlacesClient{
+		configured: true,
+		staticMapImage: &places.StaticMapImage{
+			Data:        []byte("png"),
+			ContentType: "image/png",
+		},
+	}
+	handler := New(nil, store, fakePlaces, nil, nil)
+	req := httptest.NewRequest(http.MethodGet, "/trophy-case/map.png?latitude=1&longitude=2", nil)
+	rec := httptest.NewRecorder()
+
+	handler.TrophyMap(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if rec.Body.String() != "png" {
+		t.Fatalf("body = %q, want static map image bytes", rec.Body.String())
+	}
+	if rec.Header().Get("Content-Type") != "image/png" {
+		t.Fatalf("content type = %q", rec.Header().Get("Content-Type"))
+	}
+	if len(fakePlaces.staticMapMarkers) != len(expected) {
+		t.Fatalf("markers len = %d, want %d", len(fakePlaces.staticMapMarkers), len(expected))
+	}
+	for i, point := range expected {
+		marker := fakePlaces.staticMapMarkers[i]
+		if marker.Latitude != point.Latitude || marker.Longitude != point.Longitude {
+			t.Fatalf("marker %d = %#v, want coordinates from %#v", i, marker, point)
+		}
+		if marker.Latitude == 1 || marker.Longitude == 2 {
+			t.Fatalf("marker %d used request query coordinates: %#v", i, marker)
+		}
 	}
 }
 
@@ -111,4 +161,42 @@ func TestRestaurantInputValidatesGoogleRating(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected validation error")
 	}
+}
+
+type fakeGooglePlacesClient struct {
+	configured       bool
+	staticMapImage   *places.StaticMapImage
+	staticMapErr     error
+	staticMapMarkers []places.StaticMapMarker
+}
+
+func (f *fakeGooglePlacesClient) Configured() bool {
+	return f.configured
+}
+
+func (f *fakeGooglePlacesClient) TextSearch(context.Context, string) ([]places.Place, error) {
+	return nil, nil
+}
+
+func (f *fakeGooglePlacesClient) TextSearchNear(context.Context, string, float64, float64) ([]places.Place, error) {
+	return nil, nil
+}
+
+func (f *fakeGooglePlacesClient) Nearby(context.Context, float64, float64) ([]places.Place, error) {
+	return nil, nil
+}
+
+func (f *fakeGooglePlacesClient) Details(context.Context, string) (*places.Place, error) {
+	return nil, nil
+}
+
+func (f *fakeGooglePlacesClient) StaticMap(_ context.Context, markers []places.StaticMapMarker) (*places.StaticMapImage, error) {
+	f.staticMapMarkers = append([]places.StaticMapMarker(nil), markers...)
+	if f.staticMapErr != nil {
+		return nil, f.staticMapErr
+	}
+	if f.staticMapImage != nil {
+		return f.staticMapImage, nil
+	}
+	return &places.StaticMapImage{Data: []byte("png"), ContentType: "image/png"}, nil
 }

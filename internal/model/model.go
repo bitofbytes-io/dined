@@ -30,6 +30,15 @@ type Restaurant struct {
 	UpdatedAt        time.Time
 }
 
+type RestaurantMapPoint struct {
+	RestaurantID    uuid.UUID
+	Name            string
+	Latitude        float64
+	Longitude       float64
+	VisitCount      int
+	LatestVisitedAt time.Time
+}
+
 type GoogleRestaurantMetadata struct {
 	Latitude         *float64
 	Longitude        *float64

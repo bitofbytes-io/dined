@@ -33,6 +33,9 @@ type PageData struct {
 	Restaurant              *model.Restaurant
 	Stats                   model.Stats
 	PickerTurn              model.PickerTurn
+	TrophyMapPoints         []model.RestaurantMapPoint
+	TrophyMapReady          bool
+	TrophyMapFallback       string
 	Places                  []places.Place
 	Query                   string
 	LocationQuery           string
@@ -772,6 +775,10 @@ const templates = `
       <div class="record"><span class="record-value record-name">{{default .PickerTurn.NextPicker.Name "Waiting"}}</span><p>Next Up</p><small>Picker turn</small></div>
       <div class="record"><span class="record-value">{{.Stats.NewPlaces}}</span><p>New Places</p></div>
       <div class="record"><span class="record-value">{{.Stats.CitiesExplored}}</span><p>Cities Explored</p></div>
+    </div>
+    <div class="dined-map-panel">
+      <div class="dined-map-heading"><p>Places We've Dined</p>{{if .TrophyMapPoints}}<span>{{len .TrophyMapPoints}} pinned</span>{{end}}</div>
+      {{if .TrophyMapReady}}<img src="/trophy-case/map.png" alt="Map of places where the family has dined" width="640" height="360" loading="lazy">{{else}}<div class="dined-map-empty">{{default .TrophyMapFallback "No mapped dines yet"}}</div>{{end}}
     </div>
     <div class="track-list">
       <h2>All-Time Top Restaurants</h2>

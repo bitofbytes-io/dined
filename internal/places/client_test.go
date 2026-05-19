@@ -3,6 +3,7 @@ package places
 import (
 	"encoding/json"
 	"math"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -121,4 +122,61 @@ func TestDistanceMiles(t *testing.T) {
 	if got := DistanceMiles(35.7327, -78.8503, place); math.Abs(got-0.691) > 0.01 {
 		t.Fatalf("got %f miles", got)
 	}
+}
+
+func TestStaticMapURLRequiresMarkers(t *testing.T) {
+	if _, err := staticMapURL("api-key", nil); err == nil {
+		t.Fatal("expected marker validation error")
+	}
+}
+
+func TestStaticMapURLCentersSingleMarker(t *testing.T) {
+	mapURL, err := staticMapURL("api-key", []StaticMapMarker{{Latitude: 35.7796, Longitude: -78.6382}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	values := staticMapQuery(t, mapURL)
+
+	if values.Get("size") != "640x360" || values.Get("scale") != "2" || values.Get("maptype") != "roadmap" {
+		t.Fatalf("unexpected static map basics: %s", values.Encode())
+	}
+	if values.Get("key") != "api-key" {
+		t.Fatalf("key = %q", values.Get("key"))
+	}
+	if values.Get("center") != "35.779600,-78.638200" || values.Get("zoom") != "13" {
+		t.Fatalf("single marker center/zoom = %q/%q", values.Get("center"), values.Get("zoom"))
+	}
+	if got := values.Get("markers"); got != "color:red|35.779600,-78.638200" {
+		t.Fatalf("markers = %q", got)
+	}
+}
+
+func TestStaticMapURLOmitsCenterAndZoomForMultipleMarkers(t *testing.T) {
+	mapURL, err := staticMapURL("api-key", []StaticMapMarker{
+		{Latitude: 35.7796, Longitude: -78.6382},
+		{Latitude: 35.7327, Longitude: -78.8503},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	values := staticMapQuery(t, mapURL)
+
+	if values.Has("center") || values.Has("zoom") {
+		t.Fatalf("multiple markers should rely on implicit positioning, got %s", values.Encode())
+	}
+	if got := values.Get("markers"); got != "color:red|35.779600,-78.638200|35.732700,-78.850300" {
+		t.Fatalf("markers = %q", got)
+	}
+}
+
+func staticMapQuery(t *testing.T, mapURL string) url.Values {
+	t.Helper()
+	parsed, err := url.Parse(mapURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed.Scheme != "https" || parsed.Host != "maps.googleapis.com" || parsed.Path != "/maps/api/staticmap" {
+		t.Fatalf("unexpected static map endpoint: %s", mapURL)
+	}
+	return parsed.Query()
 }

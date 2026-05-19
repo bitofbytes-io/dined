@@ -41,6 +41,8 @@ func NewMemoryStore() *MemoryStore {
 			Name:          "Hank's Downtown Diner",
 			Address:       strPtr("101 Main Street"),
 			City:          strPtr("Raleigh"),
+			Latitude:      floatPtr(35.7796),
+			Longitude:     floatPtr(-78.6382),
 			GoogleRating:  floatPtr(4.3),
 			Category:      strPtr("American"),
 			IsChain:       false,
@@ -53,6 +55,8 @@ func NewMemoryStore() *MemoryStore {
 			Name:          "El Patio Verde",
 			Address:       strPtr("42 Garden Avenue"),
 			City:          strPtr("Apex"),
+			Latitude:      floatPtr(35.7327),
+			Longitude:     floatPtr(-78.8503),
 			GoogleRating:  floatPtr(4.6),
 			Category:      strPtr("Mexican"),
 			IsChain:       false,
@@ -65,6 +69,8 @@ func NewMemoryStore() *MemoryStore {
 			Name:          "Saffron Counter",
 			Address:       strPtr("8 Market Lane"),
 			City:          strPtr("Cary"),
+			Latitude:      floatPtr(35.7915),
+			Longitude:     floatPtr(-78.7811),
 			GoogleRating:  floatPtr(4.1),
 			Category:      strPtr("Indian"),
 			IsChain:       true,
@@ -153,6 +159,44 @@ func (m *MemoryStore) RestaurantVisits(_ context.Context, restaurantID uuid.UUID
 	}
 	sortVisitsNewestFirst(visits)
 	return visits, nil
+}
+
+func (m *MemoryStore) VisitedRestaurantMapPoints(context.Context) ([]model.RestaurantMapPoint, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	byRestaurant := map[uuid.UUID]model.RestaurantMapPoint{}
+	for _, visit := range m.visits {
+		if visit.Restaurant.Latitude == nil || visit.Restaurant.Longitude == nil {
+			continue
+		}
+		point := byRestaurant[visit.Restaurant.ID]
+		if point.RestaurantID == uuid.Nil {
+			point = model.RestaurantMapPoint{
+				RestaurantID: visit.Restaurant.ID,
+				Name:         visit.Restaurant.Name,
+				Latitude:     *visit.Restaurant.Latitude,
+				Longitude:    *visit.Restaurant.Longitude,
+			}
+		}
+		point.VisitCount++
+		if visit.VisitedAt.After(point.LatestVisitedAt) {
+			point.LatestVisitedAt = visit.VisitedAt
+		}
+		byRestaurant[visit.Restaurant.ID] = point
+	}
+
+	points := make([]model.RestaurantMapPoint, 0, len(byRestaurant))
+	for _, point := range byRestaurant {
+		points = append(points, point)
+	}
+	sort.Slice(points, func(i, j int) bool {
+		if !points[i].LatestVisitedAt.Equal(points[j].LatestVisitedAt) {
+			return points[i].LatestVisitedAt.After(points[j].LatestVisitedAt)
+		}
+		return points[i].Name < points[j].Name
+	})
+	return points, nil
 }
 
 func (m *MemoryStore) CreateVisit(_ context.Context, input model.VisitInput) (*uuid.UUID, error) {

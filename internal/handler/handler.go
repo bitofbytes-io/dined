@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -22,16 +23,29 @@ import (
 	"github.com/google/uuid"
 )
 
+type googlePlacesClient interface {
+	Configured() bool
+	TextSearch(context.Context, string) ([]places.Place, error)
+	TextSearchNear(context.Context, string, float64, float64) ([]places.Place, error)
+	Nearby(context.Context, float64, float64) ([]places.Place, error)
+	Details(context.Context, string) (*places.Place, error)
+	StaticMap(context.Context, []places.StaticMapMarker) (*places.StaticMapImage, error)
+}
+
 type Handler struct {
 	cfg         *config.Config
 	store       repository.DinerStore
-	places      *places.Client
+	places      googlePlacesClient
 	authService *auth.Service
 	googleAuth  googleAuthenticator
 }
 
-func New(cfg *config.Config, store repository.DinerStore, placesClient *places.Client, authService *auth.Service, googleAuth googleAuthenticator) *Handler {
+func New(cfg *config.Config, store repository.DinerStore, placesClient googlePlacesClient, authService *auth.Service, googleAuth googleAuthenticator) *Handler {
 	return &Handler{cfg: cfg, store: store, places: placesClient, authService: authService, googleAuth: googleAuth}
+}
+
+func (h *Handler) placesConfigured() bool {
+	return h.places != nil && h.places.Configured()
 }
 
 func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
@@ -114,7 +128,68 @@ func (h *Handler) Trophy(w http.ResponseWriter, r *http.Request) {
 		h.error(w, "picker turn", err)
 		return
 	}
-	h.render(w, "trophy", r, ui.PageData{Title: "Trophy Case", Stats: stats, PickerTurn: pickerTurn})
+	mapPoints, err := h.store.VisitedRestaurantMapPoints(r.Context())
+	if err != nil {
+		h.error(w, "visited restaurant map points", err)
+		return
+	}
+	data := ui.PageData{Title: "Trophy Case", Stats: stats, PickerTurn: pickerTurn, TrophyMapPoints: mapPoints}
+	switch {
+	case len(mapPoints) == 0:
+		data.TrophyMapFallback = "No mapped dines yet"
+	case !h.placesConfigured():
+		data.TrophyMapFallback = "Map unavailable until Google Places is configured"
+	default:
+		data.TrophyMapReady = true
+	}
+	h.render(w, "trophy", r, data)
+}
+
+func (h *Handler) TrophyMap(w http.ResponseWriter, r *http.Request) {
+	mapPoints, err := h.store.VisitedRestaurantMapPoints(r.Context())
+	if err != nil {
+		h.error(w, "visited restaurant map points", err)
+		return
+	}
+	if len(mapPoints) == 0 {
+		http.NotFound(w, r)
+		return
+	}
+	if !h.placesConfigured() {
+		http.Error(w, "Map service is not configured", http.StatusServiceUnavailable)
+		return
+	}
+	image, err := h.places.StaticMap(r.Context(), staticMapMarkers(mapPoints))
+	if err != nil {
+		slog.Warn("static map failed", "error", err)
+		http.Error(w, "Map unavailable", http.StatusBadGateway)
+		return
+	}
+	if image == nil || len(image.Data) == 0 {
+		slog.Warn("static map returned empty image")
+		http.Error(w, "Map unavailable", http.StatusBadGateway)
+		return
+	}
+	contentType := strings.TrimSpace(image.ContentType)
+	if contentType == "" {
+		contentType = "image/png"
+	}
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Cache-Control", "private, max-age=300")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(image.Data)
+}
+
+func staticMapMarkers(points []model.RestaurantMapPoint) []places.StaticMapMarker {
+	markers := make([]places.StaticMapMarker, 0, len(points))
+	for _, point := range points {
+		markers = append(markers, places.StaticMapMarker{
+			Latitude:  point.Latitude,
+			Longitude: point.Longitude,
+		})
+	}
+	return markers
 }
 
 func (h *Handler) LogPage(w http.ResponseWriter, r *http.Request) {
@@ -290,7 +365,7 @@ func (h *Handler) RefreshRestaurantGoogle(w http.ResponseWriter, r *http.Request
 		h.error(w, "restaurant google refresh return visit", err)
 		return
 	}
-	if h.places == nil || !h.places.Configured() {
+	if !h.placesConfigured() {
 		redirectRestaurantGoogleRefresh(w, r, id, "unconfigured", returnVisitID)
 		return
 	}
@@ -358,7 +433,7 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var found []places.Place
-	if q != "" && h.places.Configured() {
+	if q != "" && h.placesConfigured() {
 		found, err = h.places.TextSearch(r.Context(), q)
 		if err != nil {
 			slog.Warn("places search failed", "error", err)
@@ -375,7 +450,7 @@ func (h *Handler) Nearby(w http.ResponseWriter, r *http.Request) {
 	lat, latErr := strconv.ParseFloat(r.URL.Query().Get("lat"), 64)
 	lng, lngErr := strconv.ParseFloat(r.URL.Query().Get("lng"), 64)
 	searched := (latErr == nil && lngErr == nil) || q != "" || near != ""
-	if h.places.Configured() && latErr == nil && lngErr == nil {
+	if h.placesConfigured() && latErr == nil && lngErr == nil {
 		var foundPlaces []places.Place
 		var err error
 		if q == "" {
@@ -389,7 +464,7 @@ func (h *Handler) Nearby(w http.ResponseWriter, r *http.Request) {
 		} else {
 			found = foundPlaces
 		}
-	} else if h.places.Configured() && (q != "" || near != "") {
+	} else if h.placesConfigured() && (q != "" || near != "") {
 		places, err := h.places.TextSearch(r.Context(), nearbyTextQuery(q, near))
 		if err != nil {
 			slog.Warn("nearby places search failed", "error", err)
@@ -397,10 +472,10 @@ func (h *Handler) Nearby(w http.ResponseWriter, r *http.Request) {
 		} else {
 			found = places
 		}
-	} else if searched && !h.places.Configured() {
+	} else if searched && !h.placesConfigured() {
 		locationStatus = "Google Places is not configured for this environment, so nearby restaurant results cannot load."
 	}
-	if searched && h.places.Configured() && locationStatus == "" && len(found) == 0 {
+	if searched && h.placesConfigured() && locationStatus == "" && len(found) == 0 {
 		locationStatus = "No nearby restaurants found. Try a restaurant/cuisine search or a wider city/address search."
 	}
 	data := ui.PageData{
