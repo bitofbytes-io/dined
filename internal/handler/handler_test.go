@@ -161,6 +161,39 @@ func TestVisitInputParsesGoogleMetadata(t *testing.T) {
 	}
 }
 
+func TestVisitInputParsesPhotos(t *testing.T) {
+	personID := uuid.New()
+	keptPhotoID := uuid.New()
+	form := url.Values{
+		"restaurant_name":             {"Photo Diner"},
+		"visited_at":                  {apptime.FormatDatetimeLocal(time.Now())},
+		"picker_id":                   {personID.String()},
+		"price_level":                 {"2"},
+		"rating_" + personID.String(): {"8"},
+		"keep_photo_id":               {keptPhotoID.String()},
+		"photo_data_uri": {
+			"data:image/jpeg;base64,aGVsbG8=",
+			"data:image/jpeg;base64,dGFjbw==",
+		},
+	}
+	req := httptest.NewRequest("POST", "/visits", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if err := req.ParseForm(); err != nil {
+		t.Fatal(err)
+	}
+
+	input, err := (&Handler{}).visitInput(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(input.KeepPhotoIDs) != 1 || input.KeepPhotoIDs[0] != keptPhotoID {
+		t.Fatalf("kept photo ids = %#v", input.KeepPhotoIDs)
+	}
+	if len(input.Photos) != 2 || input.Photos[0].DataURI != "data:image/jpeg;base64,aGVsbG8=" || input.Photos[1].DataURI != "data:image/jpeg;base64,dGFjbw==" {
+		t.Fatalf("photos = %#v", input.Photos)
+	}
+}
+
 func TestRestaurantInputValidatesGoogleRating(t *testing.T) {
 	form := url.Values{
 		"restaurant_name": {"Hank's"},

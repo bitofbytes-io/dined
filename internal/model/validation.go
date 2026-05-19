@@ -1,9 +1,17 @@
 package model
 
 import (
+	"encoding/base64"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
+)
+
+const (
+	MaxVisitPhotos     = 4
+	MaxVisitPhotoBytes = 500 * 1024
+	visitPhotoPrefix   = "data:image/jpeg;base64,"
 )
 
 func (in VisitInput) Validate() error {
@@ -32,7 +40,44 @@ func (in VisitInput) Validate() error {
 	if validRatings == 0 {
 		return errors.New("at least one rating is required")
 	}
+	if len(in.KeepPhotoIDs)+len(in.Photos) > MaxVisitPhotos {
+		return fmt.Errorf("dine photos must be %d or fewer", MaxVisitPhotos)
+	}
+	seenPhotoIDs := map[string]bool{}
+	for _, id := range in.KeepPhotoIDs {
+		if id.String() == "00000000-0000-0000-0000-000000000000" {
+			return errors.New("photo id is required")
+		}
+		if seenPhotoIDs[id.String()] {
+			return errors.New("photo ids must be unique")
+		}
+		seenPhotoIDs[id.String()] = true
+	}
+	for _, photo := range in.Photos {
+		if _, err := ValidateVisitPhotoDataURI(photo.DataURI); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+func ValidateVisitPhotoDataURI(raw string) (int, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return 0, errors.New("photo data is required")
+	}
+	if !strings.HasPrefix(strings.ToLower(trimmed), visitPhotoPrefix) {
+		return 0, errors.New("dine photos must be JPEG images")
+	}
+	encoded := trimmed[len(visitPhotoPrefix):]
+	decoded, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return 0, errors.New("dine photos must contain valid base64 image data")
+	}
+	if len(decoded) > MaxVisitPhotoBytes {
+		return 0, fmt.Errorf("dine photos must be smaller than %dKB", MaxVisitPhotoBytes/1024)
+	}
+	return len(decoded), nil
 }
 
 func (in RestaurantInput) Validate() error {

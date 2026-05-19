@@ -371,6 +371,10 @@ func (s *Store) CreateVisit(ctx context.Context, input model.VisitInput) (*uuid.
 		}
 	}
 
+	if err := insertVisitPhotos(ctx, tx, visitID, input.Photos, 0); err != nil {
+		return nil, fmt.Errorf("create visit photos: %w", err)
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit create visit: %w", err)
 	}
@@ -462,6 +466,10 @@ func (s *Store) UpdateVisit(ctx context.Context, id uuid.UUID, input model.Visit
 		if err != nil {
 			return fmt.Errorf("update visit tag: %w", err)
 		}
+	}
+
+	if err := reconcileVisitPhotos(ctx, tx, id, input); err != nil {
+		return fmt.Errorf("update visit photos: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -759,9 +767,84 @@ func (s *Store) scanVisits(ctx context.Context, rows pgx.Rows) ([]model.Visit, e
 		if err != nil {
 			return nil, err
 		}
+		visit.Photos, err = s.visitPhotos(ctx, visit.ID)
+		if err != nil {
+			return nil, err
+		}
 		visits = append(visits, visit)
 	}
 	return visits, rows.Err()
+}
+
+func insertVisitPhotos(ctx context.Context, tx pgx.Tx, visitID uuid.UUID, photos []model.VisitPhotoInput, startOrder int) error {
+	for i, photo := range photos {
+		byteCount, err := model.ValidateVisitPhotoDataURI(photo.DataURI)
+		if err != nil {
+			return err
+		}
+		_, err = tx.Exec(ctx, `
+			INSERT INTO visit_photos (visit_id, data_uri, content_type, byte_count, sort_order)
+			VALUES ($1, $2, $3, $4, $5)`,
+			visitID,
+			strings.TrimSpace(photo.DataURI),
+			"image/jpeg",
+			byteCount,
+			startOrder+i,
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func reconcileVisitPhotos(ctx context.Context, tx pgx.Tx, visitID uuid.UUID, input model.VisitInput) error {
+	existingPhotos, err := visitPhotosForTx(ctx, tx, visitID)
+	if err != nil {
+		return err
+	}
+	existingByID := map[uuid.UUID]model.VisitPhoto{}
+	for _, photo := range existingPhotos {
+		existingByID[photo.ID] = photo
+	}
+
+	if _, err := tx.Exec(ctx, `DELETE FROM visit_photos WHERE visit_id = $1`, visitID); err != nil {
+		return err
+	}
+	for order, id := range input.KeepPhotoIDs {
+		photo, ok := existingByID[id]
+		if !ok {
+			return errors.New("photo not found")
+		}
+		_, err := tx.Exec(ctx, `
+			INSERT INTO visit_photos (id, visit_id, data_uri, content_type, byte_count, sort_order, created_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+			photo.ID,
+			visitID,
+			photo.DataURI,
+			photo.ContentType,
+			photo.ByteCount,
+			order,
+			photo.CreatedAt,
+		)
+		if err != nil {
+			return err
+		}
+	}
+	return insertVisitPhotos(ctx, tx, visitID, input.Photos, len(input.KeepPhotoIDs))
+}
+
+func visitPhotosForTx(ctx context.Context, tx pgx.Tx, visitID uuid.UUID) ([]model.VisitPhoto, error) {
+	rows, err := tx.Query(ctx, `
+		SELECT id, visit_id, data_uri, content_type, byte_count, sort_order, created_at
+		FROM visit_photos
+		WHERE visit_id = $1
+		ORDER BY sort_order, created_at, id`, visitID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanVisitPhotos(rows)
 }
 
 func (s *Store) visitRatings(ctx context.Context, visitID uuid.UUID) ([]model.Rating, error) {
@@ -808,6 +891,39 @@ func (s *Store) visitTags(ctx context.Context, visitID uuid.UUID) ([]model.Tag, 
 		tags = append(tags, tag)
 	}
 	return tags, rows.Err()
+}
+
+func (s *Store) visitPhotos(ctx context.Context, visitID uuid.UUID) ([]model.VisitPhoto, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, visit_id, data_uri, content_type, byte_count, sort_order, created_at
+		FROM visit_photos
+		WHERE visit_id = $1
+		ORDER BY sort_order, created_at, id`, visitID)
+	if err != nil {
+		return nil, fmt.Errorf("list visit photos: %w", err)
+	}
+	defer rows.Close()
+	return scanVisitPhotos(rows)
+}
+
+func scanVisitPhotos(rows pgx.Rows) ([]model.VisitPhoto, error) {
+	var photos []model.VisitPhoto
+	for rows.Next() {
+		var photo model.VisitPhoto
+		if err := rows.Scan(
+			&photo.ID,
+			&photo.VisitID,
+			&photo.DataURI,
+			&photo.ContentType,
+			&photo.ByteCount,
+			&photo.SortOrder,
+			&photo.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		photos = append(photos, photo)
+	}
+	return photos, rows.Err()
 }
 
 type restaurantScanner interface {

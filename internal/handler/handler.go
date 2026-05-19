@@ -691,6 +691,19 @@ func (h *Handler) visitInput(r *http.Request) (model.VisitInput, error) {
 		}
 		input.TagIDs = append(input.TagIDs, tagID)
 	}
+	for _, value := range r.PostForm["keep_photo_id"] {
+		photoID, err := uuid.Parse(value)
+		if err != nil {
+			return model.VisitInput{}, err
+		}
+		input.KeepPhotoIDs = append(input.KeepPhotoIDs, photoID)
+	}
+	for _, value := range r.PostForm["photo_data_uri"] {
+		if strings.TrimSpace(value) == "" {
+			continue
+		}
+		input.Photos = append(input.Photos, model.VisitPhotoInput{DataURI: value})
+	}
 	return input, nil
 }
 
@@ -765,6 +778,7 @@ func overlayLogPostForm(data *ui.PageData, r *http.Request) {
 	for _, tagID := range r.PostForm["tag_id"] {
 		data.PrefillTagIDs[tagID] = true
 	}
+	data.PrefillPhotoDataURIs = append([]string(nil), r.PostForm["photo_data_uri"]...)
 }
 
 func (h *Handler) visitEditData(r *http.Request, id uuid.UUID) (ui.PageData, error) {

@@ -63,6 +63,7 @@ type PageData struct {
 	PrefillIsChain          bool
 	PrefillRatings          map[string]string
 	PrefillTagIDs           map[string]bool
+	PrefillPhotoDataURIs    []string
 	ReturnVisitID           string
 }
 
@@ -174,6 +175,13 @@ func funcs() template.FuncMap {
 		"query": func(value string) template.URL {
 			return template.URL(strings.ReplaceAll(url.QueryEscape(value), "+", "%20"))
 		},
+		"imageSrc": func(value string) template.URL {
+			trimmed := strings.TrimSpace(value)
+			if !strings.HasPrefix(strings.ToLower(trimmed), "data:image/jpeg;base64,") {
+				return ""
+			}
+			return template.URL(trimmed)
+		},
 		"asset": asset,
 		"price": places.PriceLevelNumber,
 		"distance": func(lat, lng float64, place places.Place) string {
@@ -194,6 +202,12 @@ func funcs() template.FuncMap {
 		"prefillHasRating":   prefillHasRating,
 		"add1": func(value int) int {
 			return value + 1
+		},
+		"maxVisitPhotos": func() int {
+			return model.MaxVisitPhotos
+		},
+		"maxVisitPhotoBytes": func() int {
+			return model.MaxVisitPhotoBytes
 		},
 	}
 }
@@ -304,8 +318,12 @@ const templates = `
 {{define "bottom"}}
 	  </div>
 	  {{if .Authenticated}}{{template "delete-confirm-modal" .}}{{end}}
+	  {{template "photo-preview-modal" .}}
 	  <script>
 	    var dinedPendingDeleteForm = null;
+	    var dinedPreviewPhotos = [];
+	    var dinedPreviewIndex = 0;
+	    var dinedPhotoMaxBytes = {{maxVisitPhotoBytes}};
 
 	    function dinedRestaurantOptions(value) {
 	      var options = document.querySelectorAll("#restaurant-options option");
@@ -359,26 +377,6 @@ const templates = `
 	      if (place && !place.value) place.value = option.dataset.googlePlaceId || "";
 	      if (category && !category.value) category.value = option.dataset.category || "";
 	    }
-
-		    document.addEventListener("input", function (event) {
-		      if (event.target.name === "restaurant_name" || event.target.name === "address") {
-		        dinedSyncRestaurantSelection(event.target.form);
-		      }
-		      if (event.target.matches("[data-half-step-rating]")) {
-		        dinedValidateHalfStepRating(event.target);
-		      }
-		      var logForm = event.target.closest ? event.target.closest("[data-log-form]") : null;
-		      if (logForm) {
-		        dinedUpdateLogValidation(logForm);
-		      }
-		    });
-
-		    document.addEventListener("change", function (event) {
-		      var logForm = event.target.closest ? event.target.closest("[data-log-form]") : null;
-		      if (logForm) {
-		        dinedUpdateLogValidation(logForm);
-		      }
-		    });
 
 		    function dinedValidateHalfStepRating(input) {
 		      if (!input || input.value === "") {
@@ -439,14 +437,270 @@ const templates = `
 		      }
 		    }
 
-		    if (document.readyState === "loading") {
-		      document.addEventListener("DOMContentLoaded", dinedInitializeLogValidation);
-		    } else {
-		      dinedInitializeLogValidation();
-		    }
-		    document.addEventListener("htmx:load", dinedInitializeLogValidation);
+	    function dinedPhotoLimit(uploader) {
+	      var limit = uploader ? Number(uploader.dataset.photoLimit) : 0;
+	      return Number.isFinite(limit) && limit > 0 ? limit : 4;
+	    }
 
-	    document.addEventListener("click", function (event) {
+	    function dinedPhotoCount(uploader) {
+	      return uploader ? uploader.querySelectorAll("[data-photo-item]").length : 0;
+	    }
+
+	    function dinedSetPhotoError(uploader, message) {
+	      var error = uploader ? uploader.querySelector("[data-photo-error]") : null;
+	      if (!error) return;
+	      error.textContent = message || "";
+	      error.hidden = !message;
+	    }
+
+	    function dinedUpdatePhotoUploader(uploader) {
+	      if (!uploader) return;
+	      var addTile = uploader.querySelector("[data-photo-add]");
+	      var input = uploader.querySelector("[data-photo-input]");
+	      var count = dinedPhotoCount(uploader);
+	      var atLimit = count >= dinedPhotoLimit(uploader);
+	      if (addTile) addTile.hidden = atLimit;
+	      if (input) input.disabled = atLimit;
+	    }
+
+	    function dinedInitializePhotoUploaders() {
+	      var uploaders = document.querySelectorAll("[data-photo-uploader]");
+	      for (var i = 0; i < uploaders.length; i += 1) {
+	        dinedUpdatePhotoUploader(uploaders[i]);
+	      }
+	    }
+
+	    function dinedDataURIByteCount(dataURI) {
+	      var encoded = (dataURI.split(",", 2)[1] || "").trim();
+	      var padding = 0;
+	      if (encoded.endsWith("==")) padding = 2;
+	      else if (encoded.endsWith("=")) padding = 1;
+	      return Math.floor((encoded.length * 3) / 4) - padding;
+	    }
+
+	    function dinedDrawPhotoDataURI(image, maxDimension, quality) {
+	      var width = image.naturalWidth || image.width;
+	      var height = image.naturalHeight || image.height;
+	      var scale = Math.min(1, maxDimension / Math.max(width, height));
+	      var canvas = document.createElement("canvas");
+	      canvas.width = Math.max(1, Math.round(width * scale));
+	      canvas.height = Math.max(1, Math.round(height * scale));
+	      var ctx = canvas.getContext("2d");
+	      ctx.fillStyle = "#fffdf4";
+	      ctx.fillRect(0, 0, canvas.width, canvas.height);
+	      ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+	      return canvas.toDataURL("image/jpeg", quality);
+	    }
+
+	    function dinedCompressPhoto(file) {
+	      return new Promise(function (resolve, reject) {
+	        if (!file || (file.type && file.type.indexOf("image/") !== 0)) {
+	          reject(new Error("Only image files can be added."));
+	          return;
+	        }
+	        var image = new Image();
+	        var url = URL.createObjectURL(file);
+	        image.onload = function () {
+	          URL.revokeObjectURL(url);
+	          var attempts = [
+	            { dimension: 1280, quality: .72 },
+	            { dimension: 1120, quality: .68 },
+	            { dimension: 960, quality: .64 },
+	            { dimension: 800, quality: .6 }
+	          ];
+	          for (var i = 0; i < attempts.length; i += 1) {
+	            var dataURI = dinedDrawPhotoDataURI(image, attempts[i].dimension, attempts[i].quality);
+	            if (dinedDataURIByteCount(dataURI) <= dinedPhotoMaxBytes) {
+	              resolve(dataURI);
+	              return;
+	            }
+	          }
+	          reject(new Error("That photo is too large to save here. Try a smaller image."));
+	        };
+	        image.onerror = function () {
+	          URL.revokeObjectURL(url);
+	          reject(new Error("That photo could not be read."));
+	        };
+	        image.src = url;
+	      });
+	    }
+
+	    function dinedAddPhotoTile(uploader, dataURI) {
+	      var list = uploader.querySelector("[data-photo-upload-list]");
+	      var addTile = uploader.querySelector("[data-photo-add]");
+	      if (!list || !addTile) return;
+
+	      var tile = document.createElement("div");
+	      tile.className = "photo-upload-tile";
+	      tile.setAttribute("data-photo-item", "");
+
+	      var preview = document.createElement("button");
+	      preview.type = "button";
+	      preview.className = "photo-thumb photo-upload-preview";
+	      preview.setAttribute("data-photo-preview", "");
+	      preview.setAttribute("data-photo-src", dataURI);
+	      preview.setAttribute("data-photo-alt", "New dine photo");
+
+	      var img = document.createElement("img");
+	      img.src = dataURI;
+	      img.alt = "";
+	      preview.appendChild(img);
+
+	      var hidden = document.createElement("input");
+	      hidden.type = "hidden";
+	      hidden.name = "photo_data_uri";
+	      hidden.value = dataURI;
+
+	      var remove = document.createElement("button");
+	      remove.type = "button";
+	      remove.className = "photo-remove-button";
+	      remove.setAttribute("data-photo-remove", "");
+	      remove.setAttribute("aria-label", "Remove photo");
+	      remove.textContent = "Remove";
+
+	      tile.appendChild(preview);
+	      tile.appendChild(hidden);
+	      tile.appendChild(remove);
+	      list.insertBefore(tile, addTile);
+	      dinedUpdatePhotoUploader(uploader);
+	    }
+
+	    function dinedHandlePhotoInput(input) {
+	      var uploader = input.closest("[data-photo-uploader]");
+	      if (!uploader) return;
+	      dinedSetPhotoError(uploader, "");
+	      var files = Array.prototype.slice.call(input.files || []);
+	      var slots = dinedPhotoLimit(uploader) - dinedPhotoCount(uploader);
+	      if (slots <= 0) {
+	        dinedSetPhotoError(uploader, "Remove a photo before adding another.");
+	        input.value = "";
+	        return;
+	      }
+	      if (files.length > slots) {
+	        dinedSetPhotoError(uploader, "Only " + dinedPhotoLimit(uploader) + " photos can be saved for one dine.");
+	        files = files.slice(0, slots);
+	      }
+	      if (!files.length) return;
+
+	      var index = 0;
+	      function next() {
+	        if (index >= files.length) {
+	          input.value = "";
+	          dinedUpdatePhotoUploader(uploader);
+	          return;
+	        }
+	        dinedCompressPhoto(files[index]).then(function (dataURI) {
+	          dinedAddPhotoTile(uploader, dataURI);
+	          index += 1;
+	          next();
+	        }).catch(function (error) {
+	          dinedSetPhotoError(uploader, error.message || "Photo could not be added.");
+	          index += 1;
+	          next();
+	        });
+	      }
+	      next();
+	    }
+
+	    function dinedRemovePhoto(button) {
+	      var tile = button.closest("[data-photo-item]");
+	      var uploader = button.closest("[data-photo-uploader]");
+	      if (tile) tile.remove();
+	      dinedSetPhotoError(uploader, "");
+	      dinedUpdatePhotoUploader(uploader);
+	    }
+
+	    function dinedOpenPhotoPreview(button) {
+	      var source = button.dataset.photoSrc;
+	      if (!source) return;
+	      var scope = button.closest("[data-photo-strip], [data-photo-uploader]");
+	      var buttons = scope ? Array.prototype.slice.call(scope.querySelectorAll("[data-photo-preview]")) : [button];
+	      dinedPreviewPhotos = buttons.map(function (item) {
+	        return { src: item.dataset.photoSrc || "", alt: item.dataset.photoAlt || "Dine photo" };
+	      }).filter(function (item) { return item.src; });
+	      dinedPreviewIndex = Math.max(0, buttons.indexOf(button));
+	      if (!dinedPreviewPhotos.length) return;
+	      var modal = document.getElementById("photo-preview-modal");
+	      if (!modal || typeof modal.showModal !== "function") {
+	        window.open(source, "_blank", "noopener");
+	        return;
+	      }
+	      dinedRenderPhotoPreview();
+	      if (!modal.open) modal.showModal();
+	      if (typeof modal.focus === "function") {
+	        modal.focus({ preventScroll: true });
+	      }
+	    }
+
+	    function dinedRenderPhotoPreview() {
+	      if (!dinedPreviewPhotos.length) return;
+	      if (dinedPreviewIndex < 0) dinedPreviewIndex = dinedPreviewPhotos.length - 1;
+	      if (dinedPreviewIndex >= dinedPreviewPhotos.length) dinedPreviewIndex = 0;
+	      var photo = dinedPreviewPhotos[dinedPreviewIndex];
+	      var image = document.getElementById("photo-preview-image");
+	      var count = document.getElementById("photo-preview-count");
+	      var prev = document.getElementById("photo-preview-prev");
+	      var next = document.getElementById("photo-preview-next");
+	      if (image) {
+	        image.src = photo.src;
+	        image.alt = photo.alt;
+	      }
+	      if (count) count.textContent = (dinedPreviewIndex + 1) + " / " + dinedPreviewPhotos.length;
+	      if (prev) prev.disabled = dinedPreviewPhotos.length < 2;
+	      if (next) next.disabled = dinedPreviewPhotos.length < 2;
+	    }
+
+	    function dinedShiftPhotoPreview(delta) {
+	      if (!dinedPreviewPhotos.length) return;
+	      dinedPreviewIndex += delta;
+	      dinedRenderPhotoPreview();
+	    }
+
+	    function dinedClosePhotoPreview() {
+	      var modal = document.getElementById("photo-preview-modal");
+	      if (modal && modal.open) modal.close();
+	    }
+
+	    function dinedHandleInput(event) {
+	      if (event.target.name === "restaurant_name" || event.target.name === "address") {
+	        dinedSyncRestaurantSelection(event.target.form);
+	      }
+	      if (event.target.matches("[data-half-step-rating]")) {
+	        dinedValidateHalfStepRating(event.target);
+	      }
+	      var logForm = event.target.closest ? event.target.closest("[data-log-form]") : null;
+	      if (logForm) {
+	        dinedUpdateLogValidation(logForm);
+	      }
+	    }
+
+	    function dinedHandleChange(event) {
+	      if (event.target.matches("[data-photo-input]")) {
+	        dinedHandlePhotoInput(event.target);
+	      }
+	      var logForm = event.target.closest ? event.target.closest("[data-log-form]") : null;
+	      if (logForm) {
+	        dinedUpdateLogValidation(logForm);
+	      }
+	    }
+
+	    function dinedHandleClick(event) {
+	      if (event.target && event.target.id === "photo-preview-modal") {
+	        dinedClosePhotoPreview();
+	        return;
+	      }
+	      var previewButton = event.target.closest ? event.target.closest("[data-photo-preview]") : null;
+	      if (previewButton) {
+	        event.preventDefault();
+	        dinedOpenPhotoPreview(previewButton);
+	        return;
+	      }
+	      var removeButton = event.target.closest ? event.target.closest("[data-photo-remove]") : null;
+	      if (removeButton) {
+	        event.preventDefault();
+	        dinedRemovePhoto(removeButton);
+	        return;
+	      }
 	      if (event.target.id !== "use-location") return;
 	      var button = event.target;
 	      var form = document.getElementById("nearby-form");
@@ -490,21 +744,21 @@ const templates = `
 	      } else {
 	        requestBrowserLocation();
 	      }
-	    });
+	    }
 
-		    document.addEventListener("submit", function (event) {
-		      var form = event.target;
-		      if (form && form.matches("[data-log-form]")) {
-		        dinedSyncRestaurantSelection(form);
-		        if (!dinedUpdateLogValidation(form)) {
-		          event.preventDefault();
-		          if (typeof form.reportValidity === "function") {
-		            form.reportValidity();
-		          }
-		        }
-		        return;
-		      }
-		      if (!form || form.id !== "nearby-form") return;
+	    function dinedHandleSubmit(event) {
+	      var form = event.target;
+	      if (form && form.matches("[data-log-form]")) {
+	        dinedSyncRestaurantSelection(form);
+	        if (!dinedUpdateLogValidation(form)) {
+	          event.preventDefault();
+	          if (typeof form.reportValidity === "function") {
+	            form.reportValidity();
+	          }
+	        }
+	        return;
+	      }
+	      if (!form || form.id !== "nearby-form") return;
 	      var lat = form.querySelector("input[name='lat']");
 	      var lng = form.querySelector("input[name='lng']");
 	      var near = form.querySelector("input[name='near']");
@@ -512,7 +766,7 @@ const templates = `
 	      event.preventDefault();
 	      var useLocation = document.getElementById("use-location");
 	      if (useLocation) useLocation.click();
-	    });
+	    }
 
 	    function dinedConfirmDelete(event, form) {
 	      if (event) event.preventDefault();
@@ -562,6 +816,29 @@ const templates = `
 	        dinedPendingDeleteForm = null;
 	      });
 	    }());
+
+	    function dinedHandleKeydown(event) {
+	      var modal = document.getElementById("photo-preview-modal");
+	      if (!modal || !modal.open) return;
+	      if (event.key === "ArrowLeft") dinedShiftPhotoPreview(-1);
+	      if (event.key === "ArrowRight") dinedShiftPhotoPreview(1);
+	    }
+
+	    function dinedInitializePage() {
+	      dinedInitializeLogValidation();
+	      dinedInitializePhotoUploaders();
+	    }
+
+	    if (!window.dinedListenersBound) {
+	      window.dinedListenersBound = true;
+	      document.addEventListener("input", dinedHandleInput);
+	      document.addEventListener("change", dinedHandleChange);
+	      document.addEventListener("click", dinedHandleClick);
+	      document.addEventListener("submit", dinedHandleSubmit);
+	      document.addEventListener("keydown", dinedHandleKeydown);
+	      document.addEventListener("htmx:load", dinedInitializePage);
+	    }
+	    dinedInitializePage();
 	  </script>
 	</body>
 	</html>
@@ -580,11 +857,30 @@ const templates = `
   </dialog>
 {{end}}
 
+{{define "photo-preview-modal"}}
+  <dialog class="photo-preview-modal" id="photo-preview-modal" aria-labelledby="photo-preview-title" tabindex="-1">
+    <div class="photo-preview-card">
+      <div class="photo-preview-head">
+        <h2 id="photo-preview-title">Dine Photo</h2>
+        <button type="button" class="secondary-button photo-preview-close" onclick="dinedClosePhotoPreview()">Close</button>
+      </div>
+      <div class="photo-preview-stage">
+        <img id="photo-preview-image" alt="Dine photo">
+      </div>
+      <div class="photo-preview-actions">
+        <button type="button" class="secondary-button" id="photo-preview-prev" onclick="dinedShiftPhotoPreview(-1)">Previous</button>
+        <span id="photo-preview-count">1 / 1</span>
+        <button type="button" class="secondary-button" id="photo-preview-next" onclick="dinedShiftPhotoPreview(1)">Next</button>
+      </div>
+    </div>
+  </dialog>
+{{end}}
+
 {{define "visit-list"}}
 {{if .Visits}}
   <div class="visit-list">
   {{range .Visits}}
-    <article class="visit-card" id="{{.ID}}">
+    {{$visit := .}}<article class="visit-card" id="{{.ID}}">
       <div class="visit-main">
         <h3><a href="/restaurants/{{.Restaurant.ID}}">{{.Restaurant.Name}}</a>{{if .Restaurant.IsChain}} <span class="badge">Chain</span>{{end}}</h3>
         <p class="visit-meta">{{date .VisitedAt}} · Picked by {{.Picker.Name}} · {{dollars .PriceLevel}}</p>
@@ -594,6 +890,7 @@ const templates = `
       <div class="ratings">{{range .Ratings}}<span>{{.Person.Name}} {{score .Score}}</span>{{end}}</div>
       {{if .Tags}}<div class="tags">{{range .Tags}}<span>{{.Name}}</span>{{end}}</div>{{end}}
       {{if .Notes}}<p class="note">{{.Notes}}</p>{{end}}
+      {{if .Photos}}<div class="visit-photo-strip" data-photo-strip>{{range $index, $photo := .Photos}}<button type="button" class="photo-thumb" data-photo-preview data-photo-src="{{imageSrc $photo.DataURI}}" data-photo-alt="{{$visit.Restaurant.Name}} photo {{add1 $index}}"><img src="{{imageSrc $photo.DataURI}}" alt=""></button>{{end}}</div>{{end}}
       {{if and $.Authenticated (not $.ReadOnlyVisits)}}<div class="visit-actions"><a class="secondary-button" href="/visits/{{.ID}}/edit">Edit</a><form method="post" action="/visits/{{.ID}}/delete" hx-boost="false" data-delete-dine-form data-delete-title="Delete this dine?" data-delete-message="This removes the dine and its ratings from the ledger." data-delete-confirm="Delete" onsubmit="return dinedConfirmDelete(event, this)"><button class="danger">Delete</button></form></div>{{end}}
     </article>
   {{end}}
@@ -679,6 +976,14 @@ const templates = `
 		    <fieldset class="ratings-field score-console" aria-describedby="rating-requirement"><legend>Rate Your Experience</legend><p class="rating-requirement" id="rating-requirement" data-rating-message aria-live="polite"{{if prefillHasRating .PrefillRatings}} hidden{{end}}>At least one rating is required before saving.</p>{{range .People}}<label class="rating-card">{{if avatar .Name}}<img class="avatar-face" src="{{avatar .Name}}" alt="">{{else}}<span class="avatar-dot">{{slice .Name 0 1}}</span>{{end}}<span>{{.Name}}</span><input name="rating_{{.ID}}" type="number" min="0" max="10" step="0.5" inputmode="decimal" placeholder="0-10" value="{{prefillRatingValue $.PrefillRatings .ID}}" data-half-step-rating></label>{{end}}</fieldset>
 		    <fieldset class="tags-field chip-field"><legend>Tags</legend>{{range .Tags}}<label><input type="checkbox" name="tag_id" value="{{.ID}}" {{if prefillTagChecked $.PrefillTagIDs .ID}}checked{{end}}> <span>{{.Name}}</span></label>{{end}}<label class="new-tag">New tag<input name="new_tag" placeholder="Great fries" value="{{.PrefillNewTag}}"></label></fieldset>
 	    <label class="notes-field">Notes<textarea name="notes" rows="4" placeholder="What should we remember next time?">{{.PrefillNotes}}</textarea></label>
+	    <section class="form-section photo-console" data-photo-uploader data-photo-limit="{{maxVisitPhotos}}">
+	      <div class="photo-console-head"><div><h2>Photos</h2><p>Food, fun, memories. Up to {{maxVisitPhotos}}.</p></div></div>
+	      <div class="photo-upload-strip" data-photo-upload-list data-photo-strip>
+	        {{range .PrefillPhotoDataURIs}}<div class="photo-upload-tile" data-photo-item><button type="button" class="photo-thumb photo-upload-preview" data-photo-preview data-photo-src="{{imageSrc .}}" data-photo-alt="New dine photo"><img src="{{imageSrc .}}" alt=""></button><input type="hidden" name="photo_data_uri" value="{{.}}"><button type="button" class="photo-remove-button" data-photo-remove aria-label="Remove photo">Remove</button></div>{{end}}
+	        <label class="photo-add-tile" data-photo-add><span class="photo-add-mark">+</span><span>Add Photos</span><input type="file" accept="image/*" multiple data-photo-input hidden></label>
+	      </div>
+	      <p class="photo-error" data-photo-error hidden></p>
+	    </section>
 	    <div class="form-actions console-actions"><label class="inline-check"><input type="checkbox" name="is_chain" value="true" {{if .PrefillIsChain}}checked{{end}}> Mark new restaurant as chain</label><button class="primary-button" data-log-submit>Save Dine</button></div>
   </form>
 </main>
@@ -705,6 +1010,14 @@ const templates = `
     <fieldset class="ratings-field score-console"><legend>Rate Your Experience</legend>{{range $.People}}<label class="rating-card">{{if avatar .Name}}<img class="avatar-face" src="{{avatar .Name}}" alt="">{{else}}<span class="avatar-dot">{{slice .Name 0 1}}</span>{{end}}<span>{{.Name}}</span><input name="rating_{{.ID}}" type="number" min="0" max="10" step="0.5" inputmode="decimal" placeholder="0-10" value="{{ratingValue $visit .}}" data-half-step-rating></label>{{end}}</fieldset>
     <fieldset class="tags-field chip-field"><legend>Tags</legend>{{range $.Tags}}<label><input type="checkbox" name="tag_id" value="{{.ID}}" {{if hasVisitTag $visit .}}checked{{end}}> <span>{{.Name}}</span></label>{{end}}<label class="new-tag">New tag<input name="new_tag" placeholder="Great fries"></label></fieldset>
     <label class="notes-field">Notes<textarea name="notes" rows="4" placeholder="What should we remember next time?">{{str .Notes}}</textarea></label>
+    <section class="form-section photo-console" data-photo-uploader data-photo-limit="{{maxVisitPhotos}}">
+      <div class="photo-console-head"><div><h2>Photos</h2><p>Food, fun, memories. Up to {{maxVisitPhotos}}.</p></div></div>
+      <div class="photo-upload-strip" data-photo-upload-list data-photo-strip>
+        {{range $index, $photo := .Photos}}<div class="photo-upload-tile" data-photo-item><button type="button" class="photo-thumb photo-upload-preview" data-photo-preview data-photo-src="{{imageSrc $photo.DataURI}}" data-photo-alt="{{$visit.Restaurant.Name}} photo {{add1 $index}}"><img src="{{imageSrc $photo.DataURI}}" alt=""></button><input type="hidden" name="keep_photo_id" value="{{$photo.ID}}"><button type="button" class="photo-remove-button" data-photo-remove aria-label="Remove photo">Remove</button></div>{{end}}
+        <label class="photo-add-tile" data-photo-add><span class="photo-add-mark">+</span><span>Add Photos</span><input type="file" accept="image/*" multiple data-photo-input hidden></label>
+      </div>
+      <p class="photo-error" data-photo-error hidden></p>
+    </section>
     <div class="form-actions console-actions"><a class="secondary-button" href="/restaurants/{{.Restaurant.ID}}/edit?return_visit_id={{.ID}}">Edit Restaurant Details</a><button class="primary-button">Save Changes</button></div>
   </form>
   {{end}}

@@ -976,6 +976,205 @@ fieldset {
 .notes-field {
   margin-top: 1rem;
 }
+.photo-console {
+  margin-top: 1rem;
+}
+.photo-console-head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: .7rem;
+}
+.photo-console-head p {
+  margin: .18rem 0 0;
+  color: var(--ink-soft);
+  font-family: var(--body);
+  font-size: .95rem;
+  font-weight: 700;
+  text-transform: none;
+}
+.photo-upload-strip,
+.visit-photo-strip {
+  display: flex;
+  align-items: stretch;
+  gap: .65rem;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: .15rem .15rem .5rem;
+  scrollbar-width: thin;
+}
+.visit-photo-strip {
+  grid-column: 1 / -1;
+  padding-top: .72rem;
+  border-top: 3px solid rgba(6, 21, 22, .12);
+}
+.photo-upload-tile {
+  position: relative;
+  flex: 0 0 auto;
+}
+.photo-thumb,
+.photo-add-tile {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 6.6rem;
+  aspect-ratio: 4 / 3;
+  min-height: 0;
+  padding: 0;
+  overflow: hidden;
+  color: var(--night);
+  background: var(--tile);
+  border: 3px solid var(--night);
+  border-radius: var(--radius);
+  box-shadow: 4px 4px 0 rgba(6, 21, 22, .16);
+  cursor: pointer;
+  transition: transform .16s ease, box-shadow .16s ease;
+}
+.visit-photo-strip .photo-thumb {
+  width: 5.7rem;
+}
+.photo-thumb:hover,
+.photo-thumb:focus-visible {
+  color: var(--night);
+  background: var(--tile);
+  transform: translateY(-2px);
+  box-shadow: 6px 6px 0 rgba(6, 21, 22, .22);
+}
+.photo-add-tile:hover {
+  transform: translateY(-2px);
+  box-shadow: 6px 6px 0 rgba(6, 21, 22, .22);
+}
+.photo-thumb img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.photo-add-tile {
+  gap: .18rem;
+  border-style: dashed;
+  background:
+    linear-gradient(135deg, rgba(229, 167, 47, .2), rgba(13, 111, 111, .14)),
+    #fffdf4;
+  font-family: var(--condensed);
+  font-weight: 900;
+  text-align: center;
+  text-transform: uppercase;
+}
+.photo-add-tile[hidden] {
+  display: none;
+}
+.photo-add-mark {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  color: var(--milk);
+  background: var(--red);
+  border: 2px solid var(--night);
+  border-radius: 50%;
+  font-size: 1.35rem;
+  line-height: 1;
+}
+.photo-remove-button {
+  position: absolute;
+  right: .28rem;
+  bottom: .28rem;
+  min-height: 1.65rem;
+  padding: .18rem .45rem;
+  color: var(--milk);
+  background: var(--red);
+  border: 2px solid var(--night);
+  border-radius: 999px;
+  box-shadow: 2px 2px 0 rgba(6, 21, 22, .22);
+  font-family: var(--condensed);
+  font-size: .72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.photo-error {
+  margin: .25rem 0 0;
+  padding: .55rem .7rem;
+  color: var(--red-dark);
+  background: #f8ead0;
+  border: 2px solid var(--mustard);
+  border-radius: var(--radius);
+  font-family: var(--condensed);
+  font-size: .9rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.photo-error[hidden] {
+  display: none;
+}
+.photo-preview-modal {
+  width: min(calc(100% - 1.5rem), 52rem);
+  padding: 0;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+}
+.photo-preview-modal::backdrop {
+  background: rgba(6, 21, 22, .76);
+}
+.photo-preview-modal:focus {
+  outline: none;
+}
+.photo-preview-card {
+  display: grid;
+  gap: .85rem;
+  padding: 1rem;
+  background: #fff8e5;
+  border: 4px solid var(--night);
+  border-radius: var(--radius);
+  box-shadow: 9px 9px 0 rgba(6, 21, 22, .34);
+}
+.photo-preview-head,
+.photo-preview-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+}
+.photo-preview-head h2 {
+  margin: 0;
+  color: var(--red-dark);
+  font-family: var(--condensed);
+  font-size: 1rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.photo-preview-stage {
+  display: grid;
+  place-items: center;
+  min-height: min(62vh, 34rem);
+  background:
+    linear-gradient(45deg, rgba(13, 111, 111, .16) 25%, transparent 25% 50%, rgba(13, 111, 111, .16) 50% 75%, transparent 75%),
+    #fffdf4;
+  background-size: 22px 22px;
+  border: 3px solid var(--night);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.photo-preview-stage img {
+  display: block;
+  max-width: 100%;
+  max-height: min(62vh, 34rem);
+  object-fit: contain;
+}
+.photo-preview-actions span {
+  color: var(--aqua-dark);
+  font-family: var(--condensed);
+  font-weight: 900;
+}
+.photo-preview-actions button:disabled {
+  opacity: .45;
+  cursor: default;
+  transform: none;
+}
 .console-actions {
   padding-top: .9rem;
   border-top: 4px solid var(--night);

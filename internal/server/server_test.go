@@ -367,3 +367,46 @@ func TestRouterCreateVisitAcceptsZeroRating(t *testing.T) {
 		t.Fatalf("newest ratings = %#v, want one zero rating", after[0].Ratings)
 	}
 }
+
+func TestRouterCreateVisitStoresPhotos(t *testing.T) {
+	ctx := context.Background()
+	store := repository.NewMemoryStore()
+	people, err := store.People(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	form := url.Values{}
+	form.Set("restaurant_name", "Snapshot Diner")
+	form.Set("visited_at", "2026-05-17T20:50")
+	form.Set("picker_id", people[0].ID.String())
+	form.Set("price_level", "2")
+	form.Set("rating_"+people[0].ID.String(), "8")
+	form.Add("photo_data_uri", "data:image/jpeg;base64,aGVsbG8=")
+	form.Add("photo_data_uri", "data:image/jpeg;base64,dGFjbw==")
+
+	router, token := newAuthenticatedTestRouter(t, store)
+	req := httptest.NewRequest(http.MethodPost, "/visits", strings.NewReader(form.Encode()))
+	req.AddCookie(&http.Cookie{Name: middleware.CookieName, Value: token})
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("got status %d, want %d: %s", rec.Code, http.StatusSeeOther, rec.Body.String())
+	}
+	visits, err := store.Visits(ctx, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if visits[0].Restaurant.Name != "Snapshot Diner" {
+		t.Fatalf("newest restaurant = %q, want Snapshot Diner", visits[0].Restaurant.Name)
+	}
+	if len(visits[0].Photos) != 2 {
+		t.Fatalf("photo len = %d, want 2: %#v", len(visits[0].Photos), visits[0].Photos)
+	}
+	if visits[0].Photos[0].ContentType != "image/jpeg" || visits[0].Photos[0].ByteCount != 5 {
+		t.Fatalf("first photo = %#v", visits[0].Photos[0])
+	}
+}
