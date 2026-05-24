@@ -38,7 +38,7 @@ func TestNearbyTextQuery(t *testing.T) {
 
 func TestSearchRejectsOverlongQuery(t *testing.T) {
 	handler := New(nil, nil, nil, nil, nil)
-	req := httptest.NewRequest(http.MethodGet, "/search?q="+strings.Repeat("a", maxPlacesQueryLength+1), nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/search?q="+strings.Repeat("a", maxPlacesQueryLength+1), nil)
 	rec := httptest.NewRecorder()
 
 	handler.Search(rec, req)
@@ -50,7 +50,7 @@ func TestSearchRejectsOverlongQuery(t *testing.T) {
 
 func TestNearbyRejectsOverlongNearQuery(t *testing.T) {
 	handler := New(nil, nil, nil, nil, nil)
-	req := httptest.NewRequest(http.MethodGet, "/nearby?near="+strings.Repeat("a", maxPlacesQueryLength+1), nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/nearby?near="+strings.Repeat("a", maxPlacesQueryLength+1), nil)
 	rec := httptest.NewRecorder()
 
 	handler.Nearby(rec, req)
@@ -62,7 +62,7 @@ func TestNearbyRejectsOverlongNearQuery(t *testing.T) {
 
 func TestNearbyRejectsInvalidCoordinates(t *testing.T) {
 	handler := New(nil, nil, nil, nil, nil)
-	req := httptest.NewRequest(http.MethodGet, "/nearby?lat=91&lng=-78.638200", nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/nearby?lat=91&lng=-78.638200", nil)
 	rec := httptest.NewRecorder()
 
 	handler.Nearby(rec, req)

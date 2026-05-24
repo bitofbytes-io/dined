@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -89,6 +90,35 @@ func TestSameOriginAllowsForwardedHTTPSOrigin(t *testing.T) {
 	req.Host = "dined.example"
 	req.Header.Set("X-Forwarded-Proto", "https")
 	req.Header.Set("Origin", "https://dined.example")
+	rec := httptest.NewRecorder()
+
+	SameOrigin(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("got status %d", rec.Code)
+	}
+}
+
+func TestSameOriginAllowsRefererFallback(t *testing.T) {
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "http://dined.example/visits", nil)
+	req.Header.Set("Referer", "http://dined.example/log")
+	rec := httptest.NewRecorder()
+
+	SameOrigin(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("got status %d", rec.Code)
+	}
+}
+
+func TestSameOriginIgnoresInvalidForwardedProto(t *testing.T) {
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "http://dined.example/visits", nil)
+	req.Header.Set("X-Forwarded-Proto", "gopher")
+	req.Header.Set("Origin", "http://dined.example")
 	rec := httptest.NewRecorder()
 
 	SameOrigin(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
