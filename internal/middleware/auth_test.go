@@ -58,6 +58,62 @@ func TestAuthAllowsSessionCookie(t *testing.T) {
 	}
 }
 
+func TestSameOriginAllowsSafeMethodsWithoutOrigin(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "http://dined.example/dines", nil)
+	rec := httptest.NewRecorder()
+
+	SameOrigin(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("got status %d", rec.Code)
+	}
+}
+
+func TestSameOriginRejectsUnsafeMethodWithoutOrigin(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "http://dined.example/visits", nil)
+	rec := httptest.NewRecorder()
+
+	SameOrigin(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("got status %d", rec.Code)
+	}
+}
+
+func TestSameOriginAllowsForwardedHTTPSOrigin(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "http://dined.example/visits", nil)
+	req.Host = "dined.example"
+	req.Header.Set("X-Forwarded-Proto", "https")
+	req.Header.Set("Origin", "https://dined.example")
+	rec := httptest.NewRecorder()
+
+	SameOrigin(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("got status %d", rec.Code)
+	}
+}
+
+func TestSameOriginRejectsCrossSiteOrigin(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "http://dined.example/visits", nil)
+	req.Header.Set("Origin", "https://evil.example")
+	rec := httptest.NewRecorder()
+
+	SameOrigin(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("got status %d", rec.Code)
+	}
+}
+
 func testAuthService(t *testing.T) *auth.Service {
 	t.Helper()
 	return auth.NewService(auth.NewMemoryRepository(), time.Hour)

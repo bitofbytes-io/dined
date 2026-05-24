@@ -31,3 +31,7 @@ func newAuthenticatedTestRouter(t *testing.T, store repository.DinerStore) (http
 	cfg := &config.Config{SecureCookies: false, AuthSessionTTL: time.Hour}
 	return New(cfg, store, places.NewClient(""), authService, nil).Router(), token
 }
+
+func setSameOrigin(req *http.Request) {
+	req.Header.Set("Origin", "http://example.com")
+}

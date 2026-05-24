@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/url"
 	"sort"
@@ -50,7 +51,10 @@ type trophyMapCacheEntry struct {
 	expiresAt time.Time
 }
 
-const trophyMapCacheTTL = 5 * time.Minute
+const (
+	trophyMapCacheTTL    = 5 * time.Minute
+	maxPlacesQueryLength = 160
+)
 
 func New(cfg *config.Config, store repository.DinerStore, placesClient googlePlacesClient, authService *auth.Service, googleAuth googleAuthenticator) *Handler {
 	return &Handler{cfg: cfg, store: store, places: placesClient, authService: authService, googleAuth: googleAuth}
@@ -470,7 +474,10 @@ func searchRedirect(q string) string {
 }
 
 func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query().Get("q")
+	q, ok := boundedSearchParam(w, r.URL.Query().Get("q"), "query")
+	if !ok {
+		return
+	}
 	restaurants, err := h.store.Restaurants(r.Context(), q)
 	if err != nil {
 		h.error(w, "search restaurants", err)
@@ -494,12 +501,20 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Nearby(w http.ResponseWriter, r *http.Request) {
 	var found []places.Place
 	var locationStatus string
-	q := strings.TrimSpace(r.URL.Query().Get("q"))
-	near := strings.TrimSpace(r.URL.Query().Get("near"))
-	lat, latErr := strconv.ParseFloat(r.URL.Query().Get("lat"), 64)
-	lng, lngErr := strconv.ParseFloat(r.URL.Query().Get("lng"), 64)
-	searched := (latErr == nil && lngErr == nil) || q != "" || near != ""
-	if h.placesConfigured() && latErr == nil && lngErr == nil {
+	q, ok := boundedSearchParam(w, r.URL.Query().Get("q"), "query")
+	if !ok {
+		return
+	}
+	near, ok := boundedSearchParam(w, r.URL.Query().Get("near"), "near")
+	if !ok {
+		return
+	}
+	lat, lng, hasCoordinates, ok := coordinatesFromQuery(w, r)
+	if !ok {
+		return
+	}
+	searched := hasCoordinates || q != "" || near != ""
+	if h.placesConfigured() && hasCoordinates {
 		var foundPlaces []places.Place
 		var err error
 		if q == "" {
@@ -534,7 +549,7 @@ func (h *Handler) Nearby(w http.ResponseWriter, r *http.Request) {
 		LocationQuery:  near,
 		LocationStatus: locationStatus,
 	}
-	if latErr == nil && lngErr == nil {
+	if hasCoordinates {
 		data.HasLocation = true
 		data.OriginLatitude = lat
 		data.OriginLongitude = lng
@@ -551,6 +566,40 @@ func nearbyTextQuery(query, near string) string {
 	default:
 		return query
 	}
+}
+
+func boundedSearchParam(w http.ResponseWriter, value string, label string) (string, bool) {
+	value = strings.TrimSpace(value)
+	if len(value) > maxPlacesQueryLength {
+		http.Error(w, label+" is too long", http.StatusBadRequest)
+		return "", false
+	}
+	return value, true
+}
+
+func coordinatesFromQuery(w http.ResponseWriter, r *http.Request) (float64, float64, bool, bool) {
+	latValue := strings.TrimSpace(r.URL.Query().Get("lat"))
+	lngValue := strings.TrimSpace(r.URL.Query().Get("lng"))
+	if latValue == "" && lngValue == "" {
+		return 0, 0, false, true
+	}
+	if latValue == "" || lngValue == "" {
+		http.Error(w, "latitude and longitude are required together", http.StatusBadRequest)
+		return 0, 0, false, false
+	}
+
+	latitude, err := parseCoordinate(latValue, "latitude", -90, 90)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return 0, 0, false, false
+	}
+	longitude, err := parseCoordinate(lngValue, "longitude", -180, 180)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return 0, 0, false, false
+	}
+
+	return latitude, longitude, true, true
 }
 
 func (h *Handler) LoginPage(w http.ResponseWriter, r *http.Request) {
@@ -625,11 +674,11 @@ func (h *Handler) visitInput(r *http.Request) (model.VisitInput, error) {
 		return model.VisitInput{}, err
 	}
 	priceLevel, _ := strconv.Atoi(r.FormValue("price_level"))
-	latitude, err := optionalFloat(r.FormValue("latitude"), "latitude")
+	latitude, err := optionalCoordinate(r.FormValue("latitude"), "latitude", -90, 90)
 	if err != nil {
 		return model.VisitInput{}, err
 	}
-	longitude, err := optionalFloat(r.FormValue("longitude"), "longitude")
+	longitude, err := optionalCoordinate(r.FormValue("longitude"), "longitude", -180, 180)
 	if err != nil {
 		return model.VisitInput{}, err
 	}
@@ -889,6 +938,32 @@ func optionalFloat(value, label string) (*float64, error) {
 		return nil, fmt.Errorf("%s must be a number", label)
 	}
 	return &parsed, nil
+}
+
+func optionalCoordinate(value, label string, min float64, max float64) (*float64, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil, nil
+	}
+	parsed, err := parseCoordinate(value, label, min, max)
+	if err != nil {
+		return nil, err
+	}
+	return &parsed, nil
+}
+
+func parseCoordinate(value, label string, min float64, max float64) (float64, error) {
+	parsed, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return 0, fmt.Errorf("%s must be a number", label)
+	}
+	if math.IsNaN(parsed) || math.IsInf(parsed, 0) {
+		return 0, fmt.Errorf("%s must be a finite number", label)
+	}
+	if parsed < min || parsed > max {
+		return 0, fmt.Errorf("%s must be between %.0f and %.0f", label, min, max)
+	}
+	return parsed, nil
 }
 
 func optionalInt(value, label string) (*int, error) {
