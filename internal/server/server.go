@@ -30,6 +30,7 @@ func (s *Server) Router() http.Handler {
 	r.Use(chimw.RequestID)
 	r.Use(chimw.RealIP)
 	r.Use(chimw.Recoverer)
+	r.Use(middleware.SameOrigin)
 
 	static := http.FileServer(http.Dir("static"))
 	r.Handle("/static/*", http.StripPrefix("/static/", static))

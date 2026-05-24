@@ -36,6 +36,42 @@ func TestNearbyTextQuery(t *testing.T) {
 	}
 }
 
+func TestSearchRejectsOverlongQuery(t *testing.T) {
+	handler := New(nil, nil, nil, nil, nil)
+	req := httptest.NewRequest(http.MethodGet, "/search?q="+strings.Repeat("a", maxPlacesQueryLength+1), nil)
+	rec := httptest.NewRecorder()
+
+	handler.Search(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+}
+
+func TestNearbyRejectsOverlongNearQuery(t *testing.T) {
+	handler := New(nil, nil, nil, nil, nil)
+	req := httptest.NewRequest(http.MethodGet, "/nearby?near="+strings.Repeat("a", maxPlacesQueryLength+1), nil)
+	rec := httptest.NewRecorder()
+
+	handler.Nearby(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+}
+
+func TestNearbyRejectsInvalidCoordinates(t *testing.T) {
+	handler := New(nil, nil, nil, nil, nil)
+	req := httptest.NewRequest(http.MethodGet, "/nearby?lat=91&lng=-78.638200", nil)
+	rec := httptest.NewRecorder()
+
+	handler.Nearby(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusBadRequest)
+	}
+}
+
 func TestGoogleRefreshNotice(t *testing.T) {
 	tests := []struct {
 		status string
@@ -158,6 +194,29 @@ func TestVisitInputParsesGoogleMetadata(t *testing.T) {
 	}
 	if input.GoogleMetadata.GooglePriceLevel == nil || *input.GoogleMetadata.GooglePriceLevel != 3 {
 		t.Fatalf("google price level = %#v", input.GoogleMetadata.GooglePriceLevel)
+	}
+}
+
+func TestVisitInputRejectsOutOfRangeCoordinates(t *testing.T) {
+	personID := uuid.New()
+	form := url.Values{
+		"restaurant_name":             {"Far Away Grill"},
+		"latitude":                    {"35.779600"},
+		"longitude":                   {"181"},
+		"visited_at":                  {apptime.FormatDatetimeLocal(time.Now())},
+		"picker_id":                   {personID.String()},
+		"price_level":                 {"2"},
+		"rating_" + personID.String(): {"8"},
+	}
+	req := httptest.NewRequest("POST", "/visits", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if err := req.ParseForm(); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := (&Handler{}).visitInput(req)
+	if err == nil || !strings.Contains(err.Error(), "longitude must be between -180 and 180") {
+		t.Fatalf("error = %v, want longitude range error", err)
 	}
 }
 

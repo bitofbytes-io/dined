@@ -45,6 +45,7 @@ func TestRouterDeletesUnvisitedRestaurantAndPreservesSearch(t *testing.T) {
 
 	router, token := newAuthenticatedTestRouter(t, store)
 	req := httptest.NewRequest(http.MethodPost, "/restaurants/"+restaurants[0].ID.String()+"/delete", strings.NewReader("q=Amigos"))
+	setSameOrigin(req)
 	req.AddCookie(&http.Cookie{Name: middleware.CookieName, Value: token})
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
@@ -79,6 +80,7 @@ func TestRouterRefusesVisitedRestaurantDelete(t *testing.T) {
 
 	router, token := newAuthenticatedTestRouter(t, store)
 	req := httptest.NewRequest(http.MethodPost, "/restaurants/"+restaurants[0].ID.String()+"/delete", strings.NewReader("q=Hank"))
+	setSameOrigin(req)
 	req.AddCookie(&http.Cookie{Name: middleware.CookieName, Value: token})
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
@@ -128,6 +130,7 @@ func TestRouterUpdateRestaurantReturnsToEditDine(t *testing.T) {
 
 	router, token := newAuthenticatedTestRouter(t, store)
 	req := httptest.NewRequest(http.MethodPost, "/restaurants/"+visit.Restaurant.ID.String(), strings.NewReader(form.Encode()))
+	setSameOrigin(req)
 	req.AddCookie(&http.Cookie{Name: middleware.CookieName, Value: token})
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
@@ -191,6 +194,7 @@ func TestRouterUpdateRestaurantIgnoresMismatchedReturnVisitID(t *testing.T) {
 
 	router, token := newAuthenticatedTestRouter(t, store)
 	req := httptest.NewRequest(http.MethodPost, "/restaurants/"+firstVisit.Restaurant.ID.String(), strings.NewReader(form.Encode()))
+	setSameOrigin(req)
 	req.AddCookie(&http.Cookie{Name: middleware.CookieName, Value: token})
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
@@ -237,6 +241,7 @@ func TestRouterGoogleRefreshRedirectsToEditWithReturnVisitIDWhenUnconfigured(t *
 
 	router, token := newAuthenticatedTestRouter(t, store)
 	req := httptest.NewRequest(http.MethodPost, "/restaurants/"+visit.Restaurant.ID.String()+"/google-refresh", strings.NewReader(form.Encode()))
+	setSameOrigin(req)
 	req.AddCookie(&http.Cookie{Name: middleware.CookieName, Value: token})
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
@@ -284,6 +289,7 @@ func TestRouterCreateVisitWithoutRatingPreservesPostedForm(t *testing.T) {
 
 	router, token := newAuthenticatedTestRouter(t, store)
 	req := httptest.NewRequest(http.MethodPost, "/visits", strings.NewReader(form.Encode()))
+	setSameOrigin(req)
 	req.AddCookie(&http.Cookie{Name: middleware.CookieName, Value: token})
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
@@ -344,6 +350,7 @@ func TestRouterCreateVisitAcceptsZeroRating(t *testing.T) {
 
 	router, token := newAuthenticatedTestRouter(t, store)
 	req := httptest.NewRequest(http.MethodPost, "/visits", strings.NewReader(form.Encode()))
+	setSameOrigin(req)
 	req.AddCookie(&http.Cookie{Name: middleware.CookieName, Value: token})
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
@@ -360,11 +367,12 @@ func TestRouterCreateVisitAcceptsZeroRating(t *testing.T) {
 	if len(after) != len(before)+1 {
 		t.Fatalf("visit count = %d, want %d", len(after), len(before)+1)
 	}
-	if after[0].Restaurant.Name != "Zero Star Diner" {
-		t.Fatalf("newest restaurant = %q, want Zero Star Diner", after[0].Restaurant.Name)
+	created := visitByRestaurantName(after, "Zero Star Diner")
+	if created == nil {
+		t.Fatalf("created visit not found in %#v", after)
 	}
-	if len(after[0].Ratings) != 1 || after[0].Ratings[0].Score != 0 {
-		t.Fatalf("newest ratings = %#v, want one zero rating", after[0].Ratings)
+	if len(created.Ratings) != 1 || created.Ratings[0].Score != 0 {
+		t.Fatalf("created ratings = %#v, want one zero rating", created.Ratings)
 	}
 }
 
@@ -387,6 +395,7 @@ func TestRouterCreateVisitStoresPhotos(t *testing.T) {
 
 	router, token := newAuthenticatedTestRouter(t, store)
 	req := httptest.NewRequest(http.MethodPost, "/visits", strings.NewReader(form.Encode()))
+	setSameOrigin(req)
 	req.AddCookie(&http.Cookie{Name: middleware.CookieName, Value: token})
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
@@ -400,13 +409,23 @@ func TestRouterCreateVisitStoresPhotos(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if visits[0].Restaurant.Name != "Snapshot Diner" {
-		t.Fatalf("newest restaurant = %q, want Snapshot Diner", visits[0].Restaurant.Name)
+	created := visitByRestaurantName(visits, "Snapshot Diner")
+	if created == nil {
+		t.Fatalf("created visit not found in %#v", visits)
 	}
-	if len(visits[0].Photos) != 2 {
-		t.Fatalf("photo len = %d, want 2: %#v", len(visits[0].Photos), visits[0].Photos)
+	if len(created.Photos) != 2 {
+		t.Fatalf("photo len = %d, want 2: %#v", len(created.Photos), created.Photos)
 	}
-	if visits[0].Photos[0].ContentType != "image/jpeg" || visits[0].Photos[0].ByteCount != 5 {
-		t.Fatalf("first photo = %#v", visits[0].Photos[0])
+	if created.Photos[0].ContentType != "image/jpeg" || created.Photos[0].ByteCount != 5 {
+		t.Fatalf("first photo = %#v", created.Photos[0])
 	}
+}
+
+func visitByRestaurantName(visits []model.Visit, name string) *model.Visit {
+	for i := range visits {
+		if visits[i].Restaurant.Name == name {
+			return &visits[i]
+		}
+	}
+	return nil
 }
