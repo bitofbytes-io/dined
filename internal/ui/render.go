@@ -298,6 +298,19 @@ const templates = `
   <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png?v=20260513">
   <link rel="stylesheet" href="{{asset "/static/styles.css"}}">
   <script src="{{asset "/static/htmx.min.js"}}" defer></script>
+  <script>
+    (function () {
+      if (window.location.hostname !== "dined.bitofbytes.io") {
+        return;
+      }
+
+      var script = document.createElement("script");
+      script.async = true;
+      script.dataset.websiteId = "95e29ad0-5e97-4375-849b-fa5d7633d5a8";
+      script.src = "https://dined.bitofbytes.io/umami/script.js";
+      document.head.appendChild(script);
+    })();
+  </script>
 </head>
 	<body hx-boost="true">
 	  <div class="app-shell">
