@@ -298,6 +298,7 @@ const templates = `
   <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png?v=20260513">
   <link rel="stylesheet" href="{{asset "/static/styles.css"}}">
   <script src="{{asset "/static/htmx.min.js"}}" defer></script>
+  <script async defer data-website-id="95e29ad0-5e97-4375-849b-fa5d7633d5a8" src="https://dined.bitofbytes.io/umami/script.js"></script>
 </head>
 	<body hx-boost="true">
 	  <div class="app-shell">
