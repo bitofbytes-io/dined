@@ -14,7 +14,7 @@ AUTH_GOOGLE_ALLOWED_DOMAINS ?=
 AUTH_SESSION_TTL ?= 2160h
 export DATABASE_URL
 
-REGISTRY ?= registry.bitofbytes.io
+REGISTRY ?= registry.tail209cfc.ts.net
 IMAGE_REPO ?= dined
 PLATFORMS ?= linux/arm64/v8
 TAG ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)

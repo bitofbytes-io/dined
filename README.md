@@ -75,7 +75,7 @@ make test
 
 The production deployment mirrors Dejaview:
 
-- Image: `registry.bitofbytes.io/dined:<shortsha>`
+- Image: `registry.tail209cfc.ts.net/dined:<shortsha>`
 - Service: `proxy_dined`
 - Host: `https://dined.bitofbytes.io`
 - Required Swarm secrets:
