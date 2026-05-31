@@ -426,6 +426,11 @@ func TestRenderLogIncludesPhotoUploadAndPrefilledPhotos(t *testing.T) {
 			t.Fatalf("rendered log missing %q:\n%s", fragment, rendered)
 		}
 	}
+	addIndex := strings.Index(rendered, `data-photo-add`)
+	photoIndex := strings.Index(rendered, `name="photo_data_uri" value="`+testPhotoDataURI+`"`)
+	if addIndex < 0 || photoIndex < 0 || addIndex > photoIndex {
+		t.Fatalf("rendered log should place add-photo tile before photo thumbnails:\n%s", rendered)
+	}
 }
 
 func TestRenderAuthenticatedDinesUsesEditLinkAndDeleteConfirmationModal(t *testing.T) {
@@ -552,6 +557,11 @@ func TestRenderVisitEditPrefillsRatingsTagsAndNotes(t *testing.T) {
 		if !strings.Contains(rendered, fragment) {
 			t.Fatalf("rendered visit edit missing %q:\n%s", fragment, rendered)
 		}
+	}
+	addIndex := strings.Index(rendered, `data-photo-add`)
+	photoIndex := strings.Index(rendered, `name="keep_photo_id" value="`+photoID.String()+`"`)
+	if addIndex < 0 || photoIndex < 0 || addIndex > photoIndex {
+		t.Fatalf("rendered visit edit should place add-photo tile before existing photos:\n%s", rendered)
 	}
 }
 

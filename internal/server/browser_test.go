@@ -116,6 +116,95 @@ func TestSearchRemoveCancelDoesNotDeleteRestaurant(t *testing.T) {
 	}
 }
 
+func TestEditVisitPhotoAddTileIsFirstAndFullSizeOnMobile(t *testing.T) {
+	chromePath := chromeExecutableForTest()
+	if chromePath == "" {
+		t.Skip("Chrome or Chromium executable not found")
+	}
+	t.Chdir(filepath.Join("..", ".."))
+
+	storeCtx := context.Background()
+	store := repository.NewMemoryStore()
+	people, err := store.People(storeCtx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	visitID, err := store.CreateVisit(storeCtx, model.VisitInput{
+		RestaurantName: "Long Wait",
+		VisitedAt:      time.Now(),
+		PickerID:       people[0].ID,
+		PriceLevel:     2,
+		Ratings:        map[uuid.UUID]float64{people[0].ID: 8},
+		Photos: []model.VisitPhotoInput{
+			{DataURI: "data:image/jpeg;base64,aGVsbG8="},
+			{DataURI: "data:image/jpeg;base64,dGFjbw=="},
+			{DataURI: "data:image/jpeg;base64,cmljZQ=="},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	router, token := newAuthenticatedTestRouter(t, store)
+	server := httptest.NewServer(router)
+	defer server.Close()
+
+	options := append(chromedp.DefaultExecAllocatorOptions[:],
+		chromedp.ExecPath(chromePath),
+		chromedp.Headless,
+		chromedp.NoFirstRun,
+		chromedp.NoDefaultBrowserCheck,
+		chromedp.DisableGPU,
+		chromedp.Flag("disable-dev-shm-usage", true),
+	)
+	allocCtx, cancelAlloc := chromedp.NewExecAllocator(context.Background(), options...)
+	defer cancelAlloc()
+
+	browserCtx, cancelBrowser := chromedp.NewContext(allocCtx, chromedp.WithLogf(func(string, ...any) {}))
+	defer cancelBrowser()
+	browserCtx, cancelTimeout := context.WithTimeout(browserCtx, 20*time.Second)
+	defer cancelTimeout()
+
+	var metrics struct {
+		AddLeft        float64 `json:"addLeft"`
+		AddWidth       float64 `json:"addWidth"`
+		AddHeight      float64 `json:"addHeight"`
+		FirstPhotoLeft float64 `json:"firstPhotoLeft"`
+	}
+	err = chromedp.Run(browserCtx,
+		network.Enable(),
+		chromedp.EmulateViewport(390, 844),
+		chromedp.Navigate(server.URL+"/health"),
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			return network.SetCookie(middleware.CookieName, token).
+				WithURL(server.URL).
+				WithPath("/").
+				Do(ctx)
+		}),
+		chromedp.Navigate(server.URL+"/visits/"+visitID.String()+"/edit"),
+		chromedp.WaitVisible(`[data-photo-add]`, chromedp.ByQuery),
+		chromedp.Evaluate(`(() => {
+			const add = document.querySelector("[data-photo-add]").getBoundingClientRect();
+			const firstPhoto = document.querySelector("[data-photo-item]").getBoundingClientRect();
+			return {
+				addLeft: add.left,
+				addWidth: add.width,
+				addHeight: add.height,
+				firstPhotoLeft: firstPhoto.left
+			};
+		})()`, &metrics),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if metrics.AddWidth < 90 || metrics.AddHeight < 65 {
+		t.Fatalf("add-photo tile too small on mobile: %.1fx%.1f", metrics.AddWidth, metrics.AddHeight)
+	}
+	if metrics.AddLeft >= metrics.FirstPhotoLeft {
+		t.Fatalf("add-photo tile should be before photos on mobile: add left %.1f, first photo left %.1f", metrics.AddLeft, metrics.FirstPhotoLeft)
+	}
+}
+
 func chromeExecutableForTest() string {
 	if path := os.Getenv("CHROME_BIN"); isExecutable(path) {
 		return path

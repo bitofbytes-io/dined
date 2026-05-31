@@ -1016,9 +1016,11 @@ fieldset {
 .photo-thumb,
 .photo-add-tile {
   position: relative;
+  flex: 0 0 6.6rem;
   display: grid;
   place-items: center;
   width: 6.6rem;
+  min-width: 6.6rem;
   aspect-ratio: 4 / 3;
   min-height: 0;
   padding: 0;
@@ -1032,7 +1034,9 @@ fieldset {
   transition: transform .16s ease, box-shadow .16s ease;
 }
 .visit-photo-strip .photo-thumb {
+  flex-basis: 5.7rem;
   width: 5.7rem;
+  min-width: 5.7rem;
 }
 .photo-thumb:hover,
 .photo-thumb:focus-visible {
