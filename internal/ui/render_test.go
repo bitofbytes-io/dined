@@ -208,7 +208,12 @@ func TestRenderTrophyShowsMapProxyImageWithoutGoogleKey(t *testing.T) {
 	for _, fragment := range []string{
 		"Places We've Dined",
 		"1 pinned",
+		`class="dined-map-preview" data-map-preview`,
+		`data-map-src="/trophy-case/map.png"`,
+		`data-map-alt="Map of places where the family has dined"`,
 		`src="/trophy-case/map.png"`,
+		`id="photo-preview-modal"`,
+		`dinedOpenMapPreview`,
 	} {
 		if !strings.Contains(rendered, fragment) {
 			t.Fatalf("rendered trophy missing %q:\n%s", fragment, rendered)

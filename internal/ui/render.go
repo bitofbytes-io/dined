@@ -638,11 +638,42 @@ const templates = `
 	        window.open(source, "_blank", "noopener");
 	        return;
 	      }
+	      dinedConfigurePreviewModal("Dine Photo", false);
 	      dinedRenderPhotoPreview();
 	      if (!modal.open) modal.showModal();
 	      if (typeof modal.focus === "function") {
 	        modal.focus({ preventScroll: true });
 	      }
+	    }
+
+	    function dinedOpenMapPreview(button) {
+	      var source = button.dataset.mapSrc;
+	      if (!source) return;
+	      var modal = document.getElementById("photo-preview-modal");
+	      if (!modal || typeof modal.showModal !== "function") {
+	        window.open(source, "_blank", "noopener");
+	        return;
+	      }
+	      dinedPreviewPhotos = [{
+	        src: source,
+	        alt: button.dataset.mapAlt || "Map of places where the family has dined"
+	      }];
+	      dinedPreviewIndex = 0;
+	      dinedConfigurePreviewModal(button.dataset.mapTitle || "Places We've Dined", true);
+	      dinedRenderPhotoPreview();
+	      if (!modal.open) modal.showModal();
+	      if (typeof modal.focus === "function") {
+	        modal.focus({ preventScroll: true });
+	      }
+	    }
+
+	    function dinedConfigurePreviewModal(title, isMap) {
+	      var modal = document.getElementById("photo-preview-modal");
+	      var titleNode = document.getElementById("photo-preview-title");
+	      var actions = modal ? modal.querySelector(".photo-preview-actions") : null;
+	      if (titleNode) titleNode.textContent = title;
+	      if (actions) actions.hidden = Boolean(isMap);
+	      if (modal) modal.classList.toggle("photo-preview-modal-map", Boolean(isMap));
 	    }
 
 	    function dinedRenderPhotoPreview() {
@@ -700,6 +731,12 @@ const templates = `
 	    function dinedHandleClick(event) {
 	      if (event.target && event.target.id === "photo-preview-modal") {
 	        dinedClosePhotoPreview();
+	        return;
+	      }
+	      var mapButton = event.target.closest ? event.target.closest("[data-map-preview]") : null;
+	      if (mapButton) {
+	        event.preventDefault();
+	        dinedOpenMapPreview(mapButton);
 	        return;
 	      }
 	      var previewButton = event.target.closest ? event.target.closest("[data-photo-preview]") : null;
@@ -1104,7 +1141,7 @@ const templates = `
     </div>
     <div class="dined-map-panel">
       <div class="dined-map-heading"><p>Places We've Dined</p>{{if .TrophyMapPoints}}<span>{{len .TrophyMapPoints}} pinned</span>{{end}}</div>
-      {{if .TrophyMapReady}}<img src="/trophy-case/map.png" alt="Map of places where the family has dined" width="640" height="360" loading="lazy">{{else}}<div class="dined-map-empty">{{default .TrophyMapFallback "No mapped dines yet"}}</div>{{end}}
+      {{if .TrophyMapReady}}<button type="button" class="dined-map-preview" data-map-preview data-map-src="/trophy-case/map.png" data-map-title="Places We've Dined" data-map-alt="Map of places where the family has dined" aria-label="Open larger map of places we've dined"><img src="/trophy-case/map.png" alt="Map of places where the family has dined" width="640" height="360" loading="lazy"></button>{{else}}<div class="dined-map-empty">{{default .TrophyMapFallback "No mapped dines yet"}}</div>{{end}}
     </div>
     <div class="track-list">
       <h2>All-Time Top Restaurants</h2>
