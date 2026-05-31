@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -338,14 +339,19 @@ func TestRenderLogCarriesGoogleMetadataPrefill(t *testing.T) {
 }
 
 func TestRenderLogIncludesKoreanCategoryOption(t *testing.T) {
-	var out strings.Builder
-	err := Render(&out, "log", PageData{PrefillCategory: "Korean"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	rendered := out.String()
-	if !strings.Contains(rendered, `<option selected>Korean</option>`) {
-		t.Fatalf("rendered log missing selected Korean category:\n%s", rendered)
+	for _, category := range []string{"Korean", "Cuban"} {
+		t.Run(category, func(t *testing.T) {
+			var out strings.Builder
+			err := Render(&out, "log", PageData{PrefillCategory: category})
+			if err != nil {
+				t.Fatal(err)
+			}
+			rendered := out.String()
+			want := fmt.Sprintf(`<option selected>%s</option>`, category)
+			if !strings.Contains(rendered, want) {
+				t.Fatalf("rendered log missing selected %s category:\n%s", category, rendered)
+			}
+		})
 	}
 }
 
