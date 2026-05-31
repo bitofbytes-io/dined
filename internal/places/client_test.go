@@ -92,6 +92,11 @@ func TestCategoryMapsRestaurantTypes(t *testing.T) {
 			types: []string{"korean_restaurant", "restaurant"},
 			want:  "Korean",
 		},
+		{
+			name:  "cuban",
+			types: []string{"cuban_restaurant", "restaurant"},
+			want:  "Cuban",
+		},
 	}
 
 	for _, test := range tests {

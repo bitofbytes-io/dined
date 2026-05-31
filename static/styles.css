@@ -350,9 +350,13 @@ a:focus-visible, button:focus-visible {
 }
 .booth-scene {
   position: relative;
+  display: grid;
+  align-content: start;
+  gap: .85rem;
   width: min(100%, 1180px);
   min-height: 760px;
   margin: 0 auto;
+  padding: 2rem 1.7rem 1.5rem 2rem;
   overflow: hidden;
   background: url("/static/assets/dined-booth-home-clean.jpg") center / cover no-repeat;
   border: 7px solid var(--chrome);
@@ -374,15 +378,12 @@ a:focus-visible, button:focus-visible {
   z-index: 1;
 }
 .booth-layer-action {
-  position: absolute;
-  top: 2rem;
-  left: 2rem;
-  right: 1.7rem;
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 1.1rem;
-  width: auto;
+  width: 100%;
   margin: 0;
 }
 .booth-search {
@@ -496,12 +497,10 @@ a:focus-visible, button:focus-visible {
   filter: drop-shadow(0 0 14px rgba(255, 212, 99, .86)) drop-shadow(7px 11px 0 rgba(6, 21, 22, .42));
 }
 .booth-recent {
-  position: absolute;
-  left: 50%;
-  top: 14.4rem;
+  position: relative;
   z-index: 1;
-  width: min(62rem, 88%);
-  transform: translateX(-50%);
+  width: min(62rem, 100%);
+  margin: .1rem auto 0;
 }
 .booth-recent .section-head {
   align-items: center;
@@ -1121,6 +1120,9 @@ fieldset {
   background: transparent;
   border: 0;
 }
+.photo-preview-modal-map {
+  width: min(calc(100% - 1.5rem), 74rem);
+}
 .photo-preview-modal::backdrop {
   background: rgba(6, 21, 22, .76);
 }
@@ -1142,6 +1144,9 @@ fieldset {
   align-items: center;
   justify-content: space-between;
   gap: .75rem;
+}
+.photo-preview-actions[hidden] {
+  display: none;
 }
 .photo-preview-head h2 {
   margin: 0;
@@ -1168,6 +1173,13 @@ fieldset {
   max-width: 100%;
   max-height: min(62vh, 34rem);
   object-fit: contain;
+}
+.photo-preview-modal-map .photo-preview-stage {
+  min-height: min(74vh, 42rem);
+}
+.photo-preview-modal-map .photo-preview-stage img {
+  width: 100%;
+  max-height: min(74vh, 42rem);
 }
 .photo-preview-actions span {
   color: var(--aqua-dark);
@@ -1596,19 +1608,28 @@ fieldset {
   font-size: .78rem;
   white-space: nowrap;
 }
-.dined-map-open {
+.dined-map-preview {
   display: block;
   width: 100%;
+  min-height: 0;
   padding: 0;
+  color: inherit;
   background: transparent;
   border: 0;
+  border-radius: calc(var(--radius) - 2px);
+  box-shadow: none;
   cursor: zoom-in;
+  overflow: hidden;
 }
-.dined-map-open:focus-visible {
-  outline: 3px solid var(--mustard);
-  outline-offset: 3px;
+.dined-map-preview:hover,
+.dined-map-preview:focus-visible {
+  color: inherit;
+  background: transparent;
+  box-shadow: 0 0 0 3px var(--butter);
+  outline: none;
+  transform: translateY(-1px);
 }
-.dined-map-panel img {
+.dined-map-preview img {
   display: block;
   width: 100%;
   height: auto;

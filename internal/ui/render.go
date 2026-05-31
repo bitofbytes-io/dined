@@ -646,11 +646,21 @@ const templates = `
 	        window.open(source, "_blank", "noopener");
 	        return;
 	      }
+	      dinedConfigurePreviewModal("Dine Photo", false);
 	      dinedRenderPhotoPreview();
 	      if (!modal.open) modal.showModal();
 	      if (typeof modal.focus === "function") {
 	        modal.focus({ preventScroll: true });
 	      }
+	    }
+
+	    function dinedConfigurePreviewModal(title, isMap) {
+	      var modal = document.getElementById("photo-preview-modal");
+	      var titleNode = document.getElementById("photo-preview-title");
+	      var actions = modal ? modal.querySelector(".photo-preview-actions") : null;
+	      if (titleNode) titleNode.textContent = title;
+	      if (actions) actions.hidden = Boolean(isMap);
+	      if (modal) modal.classList.toggle("photo-preview-modal-map", Boolean(isMap));
 	    }
 
 	    function dinedRenderPhotoPreview() {
@@ -1019,7 +1029,7 @@ const templates = `
 		          <label>Restaurant<input name="restaurant_name" list="restaurant-options" placeholder="Search or add restaurant" value="{{.PrefillName}}" required><datalist id="restaurant-options">{{range .Restaurants}}<option value="{{.Name}}" data-restaurant-id="{{.ID}}" data-address="{{if .Address}}{{.Address}}{{end}}" data-city="{{if .City}}{{.City}}{{end}}" data-google-place-id="{{if .GooglePlaceID}}{{.GooglePlaceID}}{{end}}" data-category="{{if .Category}}{{.Category}}{{end}}">{{if .Address}}{{.Address}}{{end}}</option>{{end}}</datalist></label>
 	          <label>Address<input name="address" placeholder="Optional" value="{{.PrefillAddress}}"></label>
           <label>Google Place ID<input name="google_place_id" placeholder="Optional" value="{{.PrefillPlaceID}}"></label>
-          <label>Category<select name="category"><option></option><option {{if eq .PrefillCategory "American"}}selected{{end}}>American</option><option {{if eq .PrefillCategory "Mexican"}}selected{{end}}>Mexican</option><option {{if eq .PrefillCategory "Italian"}}selected{{end}}>Italian</option><option {{if eq .PrefillCategory "Pizza"}}selected{{end}}>Pizza</option><option {{if eq .PrefillCategory "Burgers"}}selected{{end}}>Burgers</option><option {{if eq .PrefillCategory "Breakfast"}}selected{{end}}>Breakfast</option><option {{if eq .PrefillCategory "Chinese"}}selected{{end}}>Chinese</option><option {{if eq .PrefillCategory "Japanese"}}selected{{end}}>Japanese</option><option {{if eq .PrefillCategory "Korean"}}selected{{end}}>Korean</option><option {{if eq .PrefillCategory "Thai"}}selected{{end}}>Thai</option><option {{if eq .PrefillCategory "Indian"}}selected{{end}}>Indian</option><option {{if eq .PrefillCategory "BBQ"}}selected{{end}}>BBQ</option><option {{if eq .PrefillCategory "Seafood"}}selected{{end}}>Seafood</option><option {{if eq .PrefillCategory "Dessert"}}selected{{end}}>Dessert</option><option {{if eq .PrefillCategory "Coffee"}}selected{{end}}>Coffee</option><option {{if eq .PrefillCategory "Other"}}selected{{end}}>Other</option></select></label>
+          <label>Category<select name="category"><option></option><option {{if eq .PrefillCategory "American"}}selected{{end}}>American</option><option {{if eq .PrefillCategory "Mexican"}}selected{{end}}>Mexican</option><option {{if eq .PrefillCategory "Italian"}}selected{{end}}>Italian</option><option {{if eq .PrefillCategory "Pizza"}}selected{{end}}>Pizza</option><option {{if eq .PrefillCategory "Burgers"}}selected{{end}}>Burgers</option><option {{if eq .PrefillCategory "Breakfast"}}selected{{end}}>Breakfast</option><option {{if eq .PrefillCategory "Chinese"}}selected{{end}}>Chinese</option><option {{if eq .PrefillCategory "Cuban"}}selected{{end}}>Cuban</option><option {{if eq .PrefillCategory "Japanese"}}selected{{end}}>Japanese</option><option {{if eq .PrefillCategory "Korean"}}selected{{end}}>Korean</option><option {{if eq .PrefillCategory "Thai"}}selected{{end}}>Thai</option><option {{if eq .PrefillCategory "Indian"}}selected{{end}}>Indian</option><option {{if eq .PrefillCategory "BBQ"}}selected{{end}}>BBQ</option><option {{if eq .PrefillCategory "Seafood"}}selected{{end}}>Seafood</option><option {{if eq .PrefillCategory "Dessert"}}selected{{end}}>Dessert</option><option {{if eq .PrefillCategory "Coffee"}}selected{{end}}>Coffee</option><option {{if eq .PrefillCategory "Other"}}selected{{end}}>Other</option></select></label>
         </div>
       </section>
       <section class="form-section visit-console">
@@ -1148,7 +1158,7 @@ const templates = `
     </div>
     <div class="dined-map-panel">
       <div class="dined-map-heading"><p>Places We've Dined</p>{{if .TrophyMapPoints}}<span>{{len .TrophyMapPoints}} pinned</span>{{end}}</div>
-      {{if .TrophyMapReady}}<button type="button" class="dined-map-open" onclick="dinedOpenTrophyMap()" aria-haspopup="dialog" aria-controls="trophy-map-modal"><img src="/trophy-case/map.png" alt="Map of places where the family has dined" width="640" height="360" loading="lazy"></button>{{else}}<div class="dined-map-empty">{{default .TrophyMapFallback "No mapped dines yet"}}</div>{{end}}
+      {{if .TrophyMapReady}}<button type="button" class="dined-map-preview" onclick="dinedOpenTrophyMap()" aria-haspopup="dialog" aria-controls="trophy-map-modal" aria-label="Open larger map of places we've dined"><img src="/trophy-case/map.png" alt="Map of places where the family has dined" width="640" height="360" loading="lazy"></button>{{else}}<div class="dined-map-empty">{{default .TrophyMapFallback "No mapped dines yet"}}</div>{{end}}
     </div>
     <div class="track-list">
       <h2>All-Time Top Restaurants</h2>

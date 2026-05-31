@@ -329,6 +329,8 @@ func Category(place Place) string {
 			return "Breakfast"
 		case "chinese_restaurant":
 			return "Chinese"
+		case "cuban_restaurant":
+			return "Cuban"
 		case "japanese_restaurant":
 			return "Japanese"
 		case "korean_restaurant":

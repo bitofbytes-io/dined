@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -211,11 +212,15 @@ func TestRenderTrophyShowsMapProxyImageWithoutGoogleKey(t *testing.T) {
 	for _, fragment := range []string{
 		"Places We've Dined",
 		"1 pinned",
+		`class="dined-map-preview"`,
+		`aria-controls="trophy-map-modal"`,
+		`dinedOpenTrophyMap()`,
 		`id="trophy-map-modal"`,
 		`class="trophy-map-stage"`,
 		`class="trophy-map-label"`,
 		"Hank&#39;s Downto...",
 		`src="/trophy-case/map.png"`,
+		`id="photo-preview-modal"`,
 	} {
 		if !strings.Contains(rendered, fragment) {
 			t.Fatalf("rendered trophy missing %q:\n%s", fragment, rendered)
@@ -345,14 +350,19 @@ func TestRenderLogCarriesGoogleMetadataPrefill(t *testing.T) {
 }
 
 func TestRenderLogIncludesKoreanCategoryOption(t *testing.T) {
-	var out strings.Builder
-	err := Render(&out, "log", PageData{PrefillCategory: "Korean"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	rendered := out.String()
-	if !strings.Contains(rendered, `<option selected>Korean</option>`) {
-		t.Fatalf("rendered log missing selected Korean category:\n%s", rendered)
+	for _, category := range []string{"Korean", "Cuban"} {
+		t.Run(category, func(t *testing.T) {
+			var out strings.Builder
+			err := Render(&out, "log", PageData{PrefillCategory: category})
+			if err != nil {
+				t.Fatal(err)
+			}
+			rendered := out.String()
+			want := fmt.Sprintf(`<option selected>%s</option>`, category)
+			if !strings.Contains(rendered, want) {
+				t.Fatalf("rendered log missing selected %s category:\n%s", category, rendered)
+			}
+		})
 	}
 }
 
