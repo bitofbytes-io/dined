@@ -46,6 +46,7 @@ type GoogleRestaurantMetadata struct {
 	Website          string
 	GoogleRating     *float64
 	GooglePriceLevel *int
+	Category         string
 }
 
 type Visit struct {

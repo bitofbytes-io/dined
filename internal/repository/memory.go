@@ -649,6 +649,10 @@ func (m *MemoryStore) refreshGoogleMetadata(index int, metadata model.GoogleRest
 		m.restaurants[index].GooglePriceLevel = intPtr(*metadata.GooglePriceLevel)
 		m.restaurants[index].UpdatedAt = now
 	}
+	if category := strings.TrimSpace(metadata.Category); category != "" {
+		m.restaurants[index].Category = strPtr(category)
+		m.restaurants[index].UpdatedAt = now
+	}
 	m.syncRestaurant(m.restaurants[index])
 }
 

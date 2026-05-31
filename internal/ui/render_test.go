@@ -337,6 +337,18 @@ func TestRenderLogCarriesGoogleMetadataPrefill(t *testing.T) {
 	}
 }
 
+func TestRenderLogIncludesKoreanCategoryOption(t *testing.T) {
+	var out strings.Builder
+	err := Render(&out, "log", PageData{PrefillCategory: "Korean"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered := out.String()
+	if !strings.Contains(rendered, `<option selected>Korean</option>`) {
+		t.Fatalf("rendered log missing selected Korean category:\n%s", rendered)
+	}
+}
+
 func TestRenderLogValidationAndPreservedState(t *testing.T) {
 	personID := uuid.New()
 	tagID := uuid.New()
