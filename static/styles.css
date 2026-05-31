@@ -1622,11 +1622,9 @@ fieldset {
   text-transform: uppercase;
 }
 .track-list {
-  position: absolute;
-  left: 3rem;
-  right: 3rem;
-  top: calc(var(--record-grid-top) + var(--record-size) + var(--record-size) + var(--record-size) + var(--record-row-gap) + var(--record-row-gap) + var(--record-to-list-gap));
+  position: relative;
   z-index: 1;
+  margin: calc(var(--record-grid-top) + var(--record-size) + var(--record-size) + var(--record-size) + var(--record-row-gap) + var(--record-row-gap) + var(--record-to-list-gap)) 3rem 2rem;
   padding: .95rem 1rem;
   color: var(--milk);
   background: rgba(6, 21, 22, .92);
@@ -1773,7 +1771,7 @@ fieldset {
     margin: 1.2rem 0 .9rem;
   }
   .track-list {
-    margin-top: .9rem;
+    margin: .9rem 0 0;
   }
   .dined-map-panel {
     width: 100%;
