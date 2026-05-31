@@ -1121,6 +1121,9 @@ fieldset {
   background: transparent;
   border: 0;
 }
+.photo-preview-modal-map {
+  width: min(calc(100% - 1.5rem), 74rem);
+}
 .photo-preview-modal::backdrop {
   background: rgba(6, 21, 22, .76);
 }
@@ -1142,6 +1145,9 @@ fieldset {
   align-items: center;
   justify-content: space-between;
   gap: .75rem;
+}
+.photo-preview-actions[hidden] {
+  display: none;
 }
 .photo-preview-head h2 {
   margin: 0;
@@ -1168,6 +1174,13 @@ fieldset {
   max-width: 100%;
   max-height: min(62vh, 34rem);
   object-fit: contain;
+}
+.photo-preview-modal-map .photo-preview-stage {
+  min-height: min(74vh, 42rem);
+}
+.photo-preview-modal-map .photo-preview-stage img {
+  width: 100%;
+  max-height: min(74vh, 42rem);
 }
 .photo-preview-actions span {
   color: var(--aqua-dark);
@@ -1596,7 +1609,28 @@ fieldset {
   font-size: .78rem;
   white-space: nowrap;
 }
-.dined-map-panel img {
+.dined-map-preview {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-radius: calc(var(--radius) - 2px);
+  box-shadow: none;
+  cursor: zoom-in;
+  overflow: hidden;
+}
+.dined-map-preview:hover,
+.dined-map-preview:focus-visible {
+  color: inherit;
+  background: transparent;
+  box-shadow: 0 0 0 3px var(--butter);
+  outline: none;
+  transform: translateY(-1px);
+}
+.dined-map-preview img {
   display: block;
   width: 100%;
   height: auto;
