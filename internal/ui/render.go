@@ -574,7 +574,7 @@ const templates = `
 	      tile.appendChild(preview);
 	      tile.appendChild(hidden);
 	      tile.appendChild(remove);
-	      list.insertBefore(tile, addTile);
+	      list.appendChild(tile);
 	      dinedUpdatePhotoUploader(uploader);
 	    }
 
@@ -992,8 +992,8 @@ const templates = `
 	    <section class="form-section photo-console" data-photo-uploader data-photo-limit="{{maxVisitPhotos}}">
 	      <div class="photo-console-head"><div><h2>Photos</h2><p>Food, fun, memories. Up to {{maxVisitPhotos}}.</p></div></div>
 	      <div class="photo-upload-strip" data-photo-upload-list data-photo-strip>
-	        {{range .PrefillPhotoDataURIs}}<div class="photo-upload-tile" data-photo-item><button type="button" class="photo-thumb photo-upload-preview" data-photo-preview data-photo-src="{{imageSrc .}}" data-photo-alt="New dine photo"><img src="{{imageSrc .}}" alt=""></button><input type="hidden" name="photo_data_uri" value="{{.}}"><button type="button" class="photo-remove-button" data-photo-remove aria-label="Remove photo">Remove</button></div>{{end}}
 	        <label class="photo-add-tile" data-photo-add><span class="photo-add-mark">+</span><span>Add Photos</span><input type="file" accept="image/*" multiple data-photo-input hidden></label>
+	        {{range .PrefillPhotoDataURIs}}<div class="photo-upload-tile" data-photo-item><button type="button" class="photo-thumb photo-upload-preview" data-photo-preview data-photo-src="{{imageSrc .}}" data-photo-alt="New dine photo"><img src="{{imageSrc .}}" alt=""></button><input type="hidden" name="photo_data_uri" value="{{.}}"><button type="button" class="photo-remove-button" data-photo-remove aria-label="Remove photo">Remove</button></div>{{end}}
 	      </div>
 	      <p class="photo-error" data-photo-error hidden></p>
 	    </section>
@@ -1026,8 +1026,8 @@ const templates = `
     <section class="form-section photo-console" data-photo-uploader data-photo-limit="{{maxVisitPhotos}}">
       <div class="photo-console-head"><div><h2>Photos</h2><p>Food, fun, memories. Up to {{maxVisitPhotos}}.</p></div></div>
       <div class="photo-upload-strip" data-photo-upload-list data-photo-strip>
-        {{range $index, $photo := .Photos}}<div class="photo-upload-tile" data-photo-item><button type="button" class="photo-thumb photo-upload-preview" data-photo-preview data-photo-src="{{imageSrc $photo.DataURI}}" data-photo-alt="{{$visit.Restaurant.Name}} photo {{add1 $index}}"><img src="{{imageSrc $photo.DataURI}}" alt=""></button><input type="hidden" name="keep_photo_id" value="{{$photo.ID}}"><button type="button" class="photo-remove-button" data-photo-remove aria-label="Remove photo">Remove</button></div>{{end}}
         <label class="photo-add-tile" data-photo-add><span class="photo-add-mark">+</span><span>Add Photos</span><input type="file" accept="image/*" multiple data-photo-input hidden></label>
+        {{range $index, $photo := .Photos}}<div class="photo-upload-tile" data-photo-item><button type="button" class="photo-thumb photo-upload-preview" data-photo-preview data-photo-src="{{imageSrc $photo.DataURI}}" data-photo-alt="{{$visit.Restaurant.Name}} photo {{add1 $index}}"><img src="{{imageSrc $photo.DataURI}}" alt=""></button><input type="hidden" name="keep_photo_id" value="{{$photo.ID}}"><button type="button" class="photo-remove-button" data-photo-remove aria-label="Remove photo">Remove</button></div>{{end}}
       </div>
       <p class="photo-error" data-photo-error hidden></p>
     </section>
