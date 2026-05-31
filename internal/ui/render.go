@@ -34,6 +34,7 @@ type PageData struct {
 	Stats                   model.Stats
 	PickerTurn              model.PickerTurn
 	TrophyMapPoints         []model.RestaurantMapPoint
+	TrophyMapLabels         []TrophyMapLabel
 	TrophyMapReady          bool
 	TrophyMapFallback       string
 	Places                  []places.Place
@@ -73,6 +74,12 @@ type RestaurantResult struct {
 	VisitCount    int
 	AverageRating float64
 	Tags          []model.Tag
+}
+
+type TrophyMapLabel struct {
+	Name string
+	Left string
+	Top  string
 }
 
 func Render(w io.Writer, name string, data PageData) error {
@@ -332,6 +339,7 @@ const templates = `
 	  </div>
 	  {{if .Authenticated}}{{template "delete-confirm-modal" .}}{{end}}
 	  {{template "photo-preview-modal" .}}
+	  {{if .TrophyMapReady}}{{template "trophy-map-modal" .}}{{end}}
 	  <script>
 	    var dinedPendingDeleteForm = null;
 	    var dinedPreviewPhotos = [];
@@ -674,6 +682,23 @@ const templates = `
 	      if (modal && modal.open) modal.close();
 	    }
 
+	    function dinedOpenTrophyMap() {
+	      var modal = document.getElementById("trophy-map-modal");
+	      if (!modal || typeof modal.showModal !== "function") {
+	        window.open("/trophy-case/map.png", "_blank", "noopener");
+	        return;
+	      }
+	      if (!modal.open) modal.showModal();
+	      if (typeof modal.focus === "function") {
+	        modal.focus({ preventScroll: true });
+	      }
+	    }
+
+	    function dinedCloseTrophyMap() {
+	      var modal = document.getElementById("trophy-map-modal");
+	      if (modal && modal.open) modal.close();
+	    }
+
 	    function dinedHandleInput(event) {
 	      if (event.target.name === "restaurant_name" || event.target.name === "address") {
 	        dinedSyncRestaurantSelection(event.target.form);
@@ -700,6 +725,10 @@ const templates = `
 	    function dinedHandleClick(event) {
 	      if (event.target && event.target.id === "photo-preview-modal") {
 	        dinedClosePhotoPreview();
+	        return;
+	      }
+	      if (event.target && event.target.id === "trophy-map-modal") {
+	        dinedCloseTrophyMap();
 	        return;
 	      }
 	      var previewButton = event.target.closest ? event.target.closest("[data-photo-preview]") : null;
@@ -884,6 +913,21 @@ const templates = `
         <button type="button" class="secondary-button" id="photo-preview-prev" onclick="dinedShiftPhotoPreview(-1)">Previous</button>
         <span id="photo-preview-count">1 / 1</span>
         <button type="button" class="secondary-button" id="photo-preview-next" onclick="dinedShiftPhotoPreview(1)">Next</button>
+      </div>
+    </div>
+  </dialog>
+{{end}}
+
+{{define "trophy-map-modal"}}
+  <dialog class="trophy-map-modal" id="trophy-map-modal" aria-labelledby="trophy-map-title" tabindex="-1">
+    <div class="trophy-map-card">
+      <div class="trophy-map-head">
+        <h2 id="trophy-map-title">Places We've Dined</h2>
+        <button type="button" class="secondary-button trophy-map-close" onclick="dinedCloseTrophyMap()">Close</button>
+      </div>
+      <div class="trophy-map-stage">
+        <img src="/trophy-case/map.png" alt="Map of places where the family has dined" width="640" height="360">
+        {{range .TrophyMapLabels}}<span class="trophy-map-label" style="--map-label-left: {{.Left}}; --map-label-top: {{.Top}};">{{.Name}}</span>{{end}}
       </div>
     </div>
   </dialog>
@@ -1104,7 +1148,7 @@ const templates = `
     </div>
     <div class="dined-map-panel">
       <div class="dined-map-heading"><p>Places We've Dined</p>{{if .TrophyMapPoints}}<span>{{len .TrophyMapPoints}} pinned</span>{{end}}</div>
-      {{if .TrophyMapReady}}<img src="/trophy-case/map.png" alt="Map of places where the family has dined" width="640" height="360" loading="lazy">{{else}}<div class="dined-map-empty">{{default .TrophyMapFallback "No mapped dines yet"}}</div>{{end}}
+      {{if .TrophyMapReady}}<button type="button" class="dined-map-open" onclick="dinedOpenTrophyMap()" aria-haspopup="dialog" aria-controls="trophy-map-modal"><img src="/trophy-case/map.png" alt="Map of places where the family has dined" width="640" height="360" loading="lazy"></button>{{else}}<div class="dined-map-empty">{{default .TrophyMapFallback "No mapped dines yet"}}</div>{{end}}
     </div>
     <div class="track-list">
       <h2>All-Time Top Restaurants</h2>

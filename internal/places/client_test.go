@@ -148,13 +148,13 @@ func TestDistanceMiles(t *testing.T) {
 }
 
 func TestStaticMapURLRequiresMarkers(t *testing.T) {
-	if _, err := staticMapURL("api-key", nil); err == nil {
+	if _, err := staticMapURL("api-key", StaticMapRequest{}); err == nil {
 		t.Fatal("expected marker validation error")
 	}
 }
 
 func TestStaticMapURLCentersSingleMarker(t *testing.T) {
-	mapURL, err := staticMapURL("api-key", []StaticMapMarker{{Latitude: 35.7796, Longitude: -78.6382}})
+	mapURL, err := staticMapURL("api-key", StaticMapRequest{Markers: []StaticMapMarker{{Latitude: 35.7796, Longitude: -78.6382}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,10 +175,10 @@ func TestStaticMapURLCentersSingleMarker(t *testing.T) {
 }
 
 func TestStaticMapURLOmitsCenterAndZoomForMultipleMarkers(t *testing.T) {
-	mapURL, err := staticMapURL("api-key", []StaticMapMarker{
+	mapURL, err := staticMapURL("api-key", StaticMapRequest{Markers: []StaticMapMarker{
 		{Latitude: 35.7796, Longitude: -78.6382},
 		{Latitude: 35.7327, Longitude: -78.8503},
-	})
+	}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,13 +192,31 @@ func TestStaticMapURLOmitsCenterAndZoomForMultipleMarkers(t *testing.T) {
 	}
 }
 
+func TestStaticMapURLUsesDeterministicViewport(t *testing.T) {
+	mapURL, err := staticMapURL("api-key", StaticMapRequest{
+		Markers: []StaticMapMarker{
+			{Latitude: 35.7796, Longitude: -78.6382},
+			{Latitude: 35.7327, Longitude: -78.8503},
+		},
+		Viewport: &StaticMapViewport{Latitude: 35.756172, Longitude: -78.744450, Zoom: 11},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	values := staticMapQuery(t, mapURL)
+
+	if values.Get("center") != "35.756172,-78.744450" || values.Get("zoom") != "11" {
+		t.Fatalf("viewport center/zoom = %q/%q", values.Get("center"), values.Get("zoom"))
+	}
+}
+
 func TestStaticMapURLCapsMarkers(t *testing.T) {
 	markers := make([]StaticMapMarker, staticMapMaxMarkers+25)
 	for i := range markers {
 		markers[i] = StaticMapMarker{Latitude: 35 + float64(i)*0.001, Longitude: -78 - float64(i)*0.001}
 	}
 
-	mapURL, err := staticMapURL("api-key", markers)
+	mapURL, err := staticMapURL("api-key", StaticMapRequest{Markers: markers})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -220,7 +238,7 @@ func TestStaticMapRedactsRequestErrors(t *testing.T) {
 		})},
 	}
 
-	_, err := client.StaticMap(context.Background(), []StaticMapMarker{{Latitude: 35.7796, Longitude: -78.6382}})
+	_, err := client.StaticMap(context.Background(), StaticMapRequest{Markers: []StaticMapMarker{{Latitude: 35.7796, Longitude: -78.6382}}})
 	if err == nil {
 		t.Fatal("expected request error")
 	}

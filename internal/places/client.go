@@ -9,6 +9,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -43,6 +44,17 @@ type Location struct {
 type StaticMapMarker struct {
 	Latitude  float64
 	Longitude float64
+}
+
+type StaticMapViewport struct {
+	Latitude  float64
+	Longitude float64
+	Zoom      int
+}
+
+type StaticMapRequest struct {
+	Markers  []StaticMapMarker
+	Viewport *StaticMapViewport
 }
 
 type StaticMapImage struct {
@@ -154,11 +166,11 @@ func (c *Client) Details(ctx context.Context, placeID string) (*Place, error) {
 	return &place, nil
 }
 
-func (c *Client) StaticMap(ctx context.Context, markers []StaticMapMarker) (*StaticMapImage, error) {
+func (c *Client) StaticMap(ctx context.Context, request StaticMapRequest) (*StaticMapImage, error) {
 	if c == nil {
 		return nil, fmt.Errorf("google places client is not configured")
 	}
-	mapURL, err := staticMapURL(c.apiKey, markers)
+	mapURL, err := staticMapURL(c.apiKey, request)
 	if err != nil {
 		return nil, err
 	}
@@ -196,10 +208,11 @@ func (c *Client) StaticMap(ctx context.Context, markers []StaticMapMarker) (*Sta
 	return &StaticMapImage{Data: data, ContentType: contentType}, nil
 }
 
-func staticMapURL(apiKey string, markers []StaticMapMarker) (string, error) {
+func staticMapURL(apiKey string, request StaticMapRequest) (string, error) {
 	if strings.TrimSpace(apiKey) == "" {
 		return "", fmt.Errorf("google places api key is not configured")
 	}
+	markers := request.Markers
 	if len(markers) == 0 {
 		return "", fmt.Errorf("static map requires at least one marker")
 	}
@@ -223,7 +236,17 @@ func staticMapURL(apiKey string, markers []StaticMapMarker) (string, error) {
 	}
 	values.Add("markers", strings.Join(markerValues, "|"))
 
-	if len(markers) == 1 {
+	if request.Viewport != nil {
+		coordinate, err := staticMapCoordinate(StaticMapMarker{
+			Latitude:  request.Viewport.Latitude,
+			Longitude: request.Viewport.Longitude,
+		})
+		if err != nil {
+			return "", err
+		}
+		values.Set("center", coordinate)
+		values.Set("zoom", strconv.Itoa(request.Viewport.Zoom))
+	} else if len(markers) == 1 {
 		coordinate, err := staticMapCoordinate(markers[0])
 		if err != nil {
 			return "", err
