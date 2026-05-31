@@ -350,9 +350,13 @@ a:focus-visible, button:focus-visible {
 }
 .booth-scene {
   position: relative;
+  display: grid;
+  align-content: start;
+  gap: .85rem;
   width: min(100%, 1180px);
   min-height: 760px;
   margin: 0 auto;
+  padding: 2rem 1.7rem 1.5rem 2rem;
   overflow: hidden;
   background: url("/static/assets/dined-booth-home-clean.jpg") center / cover no-repeat;
   border: 7px solid var(--chrome);
@@ -374,15 +378,12 @@ a:focus-visible, button:focus-visible {
   z-index: 1;
 }
 .booth-layer-action {
-  position: absolute;
-  top: 2rem;
-  left: 2rem;
-  right: 1.7rem;
+  position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 1.1rem;
-  width: auto;
+  width: 100%;
   margin: 0;
 }
 .booth-search {
@@ -496,12 +497,10 @@ a:focus-visible, button:focus-visible {
   filter: drop-shadow(0 0 14px rgba(255, 212, 99, .86)) drop-shadow(7px 11px 0 rgba(6, 21, 22, .42));
 }
 .booth-recent {
-  position: absolute;
-  left: 50%;
-  top: 14.4rem;
+  position: relative;
   z-index: 1;
-  width: min(62rem, 88%);
-  transform: translateX(-50%);
+  width: min(62rem, 100%);
+  margin: .1rem auto 0;
 }
 .booth-recent .section-head {
   align-items: center;
