@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/bitofbytes-io/dined/internal/apptime"
+	"github.com/bitofbytes-io/dined/internal/model"
 	"github.com/bitofbytes-io/dined/internal/places"
 	"github.com/bitofbytes-io/dined/internal/repository"
 	"github.com/go-chi/chi/v5"
@@ -129,11 +131,11 @@ func TestTrophyMapUsesStoredCoordinatesOnly(t *testing.T) {
 	if fakePlaces.staticMapCalls != 1 {
 		t.Fatalf("static map calls = %d, want 1", fakePlaces.staticMapCalls)
 	}
-	if len(fakePlaces.staticMapMarkers) != len(expected) {
-		t.Fatalf("markers len = %d, want %d", len(fakePlaces.staticMapMarkers), len(expected))
+	if len(fakePlaces.staticMapRequest.Markers) != len(expected) {
+		t.Fatalf("markers len = %d, want %d", len(fakePlaces.staticMapRequest.Markers), len(expected))
 	}
 	for i, point := range expected {
-		marker := fakePlaces.staticMapMarkers[i]
+		marker := fakePlaces.staticMapRequest.Markers[i]
 		if marker.Latitude != point.Latitude || marker.Longitude != point.Longitude {
 			t.Fatalf("marker %d = %#v, want coordinates from %#v", i, marker, point)
 		}
@@ -152,6 +154,49 @@ func TestTrophyMapUsesStoredCoordinatesOnly(t *testing.T) {
 	}
 	if fakePlaces.staticMapCalls != 1 {
 		t.Fatalf("static map calls after cache hit = %d, want 1", fakePlaces.staticMapCalls)
+	}
+}
+
+func TestTrophyMapRequestUsesDeterministicViewport(t *testing.T) {
+	points := []model.RestaurantMapPoint{
+		{RestaurantID: uuid.New(), Name: "First", Latitude: 35.7796, Longitude: -78.6382},
+		{RestaurantID: uuid.New(), Name: "Second", Latitude: 35.7327, Longitude: -78.8503},
+	}
+
+	request := staticMapRequest(points)
+
+	if request.Viewport == nil {
+		t.Fatal("expected deterministic static map viewport")
+	}
+	if request.Viewport.Zoom != 11 {
+		t.Fatalf("zoom = %d, want 11", request.Viewport.Zoom)
+	}
+	if math.Abs(request.Viewport.Latitude-35.756153) > 0.000001 || math.Abs(request.Viewport.Longitude-(-78.74425)) > 0.000001 {
+		t.Fatalf("viewport = %#v", request.Viewport)
+	}
+}
+
+func TestTrophyMapLabelsTruncateAndCollapseWhitespace(t *testing.T) {
+	points := []model.RestaurantMapPoint{
+		{RestaurantID: uuid.New(), Name: "  Hank's   Downtown  Diner  ", Latitude: 35.7796, Longitude: -78.6382},
+		{RestaurantID: uuid.New(), Name: "Short Name", Latitude: 35.7327, Longitude: -78.8503},
+	}
+
+	labels := trophyMapLabels(points)
+
+	if len(labels) != 2 {
+		t.Fatalf("labels len = %d, want 2", len(labels))
+	}
+	if labels[0].Name != "Hank's Downto..." {
+		t.Fatalf("long label = %q", labels[0].Name)
+	}
+	if labels[1].Name != "Short Name" {
+		t.Fatalf("short label = %q", labels[1].Name)
+	}
+	for _, label := range labels {
+		if !strings.HasSuffix(label.Left, "%") || !strings.HasSuffix(label.Top, "%") {
+			t.Fatalf("label missing percent positions: %#v", label)
+		}
 	}
 }
 
@@ -315,7 +360,7 @@ type fakeGooglePlacesClient struct {
 	detailsPlace     *places.Place
 	staticMapImage   *places.StaticMapImage
 	staticMapErr     error
-	staticMapMarkers []places.StaticMapMarker
+	staticMapRequest places.StaticMapRequest
 	staticMapCalls   int
 }
 
@@ -339,9 +384,12 @@ func (f *fakeGooglePlacesClient) Details(_ context.Context, _ string) (*places.P
 	return f.detailsPlace, nil
 }
 
-func (f *fakeGooglePlacesClient) StaticMap(_ context.Context, markers []places.StaticMapMarker) (*places.StaticMapImage, error) {
+func (f *fakeGooglePlacesClient) StaticMap(_ context.Context, request places.StaticMapRequest) (*places.StaticMapImage, error) {
 	f.staticMapCalls++
-	f.staticMapMarkers = append([]places.StaticMapMarker(nil), markers...)
+	f.staticMapRequest = places.StaticMapRequest{
+		Markers:  append([]places.StaticMapMarker(nil), request.Markers...),
+		Viewport: request.Viewport,
+	}
 	if f.staticMapErr != nil {
 		return nil, f.staticMapErr
 	}

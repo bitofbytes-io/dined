@@ -32,7 +32,7 @@ type googlePlacesClient interface {
 	TextSearchNear(context.Context, string, float64, float64) ([]places.Place, error)
 	Nearby(context.Context, float64, float64) ([]places.Place, error)
 	Details(context.Context, string) (*places.Place, error)
-	StaticMap(context.Context, []places.StaticMapMarker) (*places.StaticMapImage, error)
+	StaticMap(context.Context, places.StaticMapRequest) (*places.StaticMapImage, error)
 }
 
 type Handler struct {
@@ -54,6 +54,13 @@ type trophyMapCacheEntry struct {
 const (
 	trophyMapCacheTTL    = 5 * time.Minute
 	maxPlacesQueryLength = 160
+	trophyMapWidth       = 640
+	trophyMapHeight      = 360
+	trophyMapPaddingX    = 58.0
+	trophyMapPaddingY    = 74.0
+	trophyMapMaxZoom     = 13
+	trophyMapMaxMarkers  = 100
+	trophyMapLabelMax    = 16
 )
 
 func New(cfg *config.Config, store repository.DinerStore, placesClient googlePlacesClient, authService *auth.Service, googleAuth googleAuthenticator) *Handler {
@@ -149,7 +156,13 @@ func (h *Handler) Trophy(w http.ResponseWriter, r *http.Request) {
 		h.error(w, "visited restaurant map points", err)
 		return
 	}
-	data := ui.PageData{Title: "Trophy Case", Stats: stats, PickerTurn: pickerTurn, TrophyMapPoints: mapPoints}
+	data := ui.PageData{
+		Title:           "Trophy Case",
+		Stats:           stats,
+		PickerTurn:      pickerTurn,
+		TrophyMapPoints: mapPoints,
+		TrophyMapLabels: trophyMapLabels(mapPoints),
+	}
 	switch {
 	case len(mapPoints) == 0:
 		data.TrophyMapFallback = "No mapped dines yet"
@@ -180,7 +193,7 @@ func (h *Handler) TrophyMap(w http.ResponseWriter, r *http.Request) {
 		writeStaticMapImage(w, image)
 		return
 	}
-	image, err := h.places.StaticMap(r.Context(), staticMapMarkers(mapPoints))
+	image, err := h.places.StaticMap(r.Context(), staticMapRequest(mapPoints))
 	if err != nil {
 		slog.Warn("static map failed", "error", err)
 		http.Error(w, "Map unavailable", http.StatusBadGateway)
@@ -234,15 +247,122 @@ func trophyMapCacheKey(points []model.RestaurantMapPoint) string {
 	return key.String()
 }
 
-func staticMapMarkers(points []model.RestaurantMapPoint) []places.StaticMapMarker {
-	markers := make([]places.StaticMapMarker, 0, len(points))
-	for _, point := range points {
+func staticMapRequest(points []model.RestaurantMapPoint) places.StaticMapRequest {
+	visiblePoints := trophyMapVisiblePoints(points)
+	markers := make([]places.StaticMapMarker, 0, len(visiblePoints))
+	for _, point := range visiblePoints {
 		markers = append(markers, places.StaticMapMarker{
 			Latitude:  point.Latitude,
 			Longitude: point.Longitude,
 		})
 	}
-	return markers
+	request := places.StaticMapRequest{Markers: markers}
+	if viewport, ok := trophyMapViewport(visiblePoints); ok {
+		request.Viewport = &viewport
+	}
+	return request
+}
+
+func trophyMapVisiblePoints(points []model.RestaurantMapPoint) []model.RestaurantMapPoint {
+	if len(points) > trophyMapMaxMarkers {
+		return points[:trophyMapMaxMarkers]
+	}
+	return points
+}
+
+func trophyMapLabels(points []model.RestaurantMapPoint) []ui.TrophyMapLabel {
+	visiblePoints := trophyMapVisiblePoints(points)
+	viewport, ok := trophyMapViewport(visiblePoints)
+	if !ok {
+		return nil
+	}
+	labels := make([]ui.TrophyMapLabel, 0, len(visiblePoints))
+	for _, point := range visiblePoints {
+		left, top := trophyMapPointPercent(point.Latitude, point.Longitude, viewport)
+		labels = append(labels, ui.TrophyMapLabel{
+			Name: truncateMapLabel(point.Name),
+			Left: fmt.Sprintf("%.3f%%", left),
+			Top:  fmt.Sprintf("%.3f%%", top),
+		})
+	}
+	return labels
+}
+
+func trophyMapViewport(points []model.RestaurantMapPoint) (places.StaticMapViewport, bool) {
+	if len(points) == 0 {
+		return places.StaticMapViewport{}, false
+	}
+	if len(points) == 1 {
+		return places.StaticMapViewport{
+			Latitude:  points[0].Latitude,
+			Longitude: points[0].Longitude,
+			Zoom:      trophyMapMaxZoom,
+		}, true
+	}
+
+	minX, maxX := math.MaxFloat64, -math.MaxFloat64
+	minY, maxY := math.MaxFloat64, -math.MaxFloat64
+	for _, point := range points {
+		x, y := mercatorUnit(point.Latitude, point.Longitude)
+		minX = math.Min(minX, x)
+		maxX = math.Max(maxX, x)
+		minY = math.Min(minY, y)
+		maxY = math.Max(maxY, y)
+	}
+
+	zoom := 0
+	for candidate := trophyMapMaxZoom; candidate >= 0; candidate-- {
+		worldSize := mercatorWorldSize(candidate)
+		if (maxX-minX)*worldSize <= trophyMapWidth-2*trophyMapPaddingX &&
+			(maxY-minY)*worldSize <= trophyMapHeight-2*trophyMapPaddingY {
+			zoom = candidate
+			break
+		}
+	}
+
+	latitude, longitude := mercatorLatLng((minX+maxX)/2, (minY+maxY)/2)
+	return places.StaticMapViewport{Latitude: latitude, Longitude: longitude, Zoom: zoom}, true
+}
+
+func trophyMapPointPercent(latitude, longitude float64, viewport places.StaticMapViewport) (float64, float64) {
+	centerX, centerY := mercatorPixel(viewport.Latitude, viewport.Longitude, viewport.Zoom)
+	pointX, pointY := mercatorPixel(latitude, longitude, viewport.Zoom)
+	left := ((pointX - centerX) + trophyMapWidth/2) / trophyMapWidth * 100
+	top := ((pointY - centerY) + trophyMapHeight/2) / trophyMapHeight * 100
+	return math.Max(0, math.Min(100, left)), math.Max(0, math.Min(100, top))
+}
+
+func mercatorPixel(latitude, longitude float64, zoom int) (float64, float64) {
+	x, y := mercatorUnit(latitude, longitude)
+	worldSize := mercatorWorldSize(zoom)
+	return x * worldSize, y * worldSize
+}
+
+func mercatorUnit(latitude, longitude float64) (float64, float64) {
+	sinLat := math.Sin(latitude * math.Pi / 180)
+	sinLat = math.Max(-0.9999, math.Min(0.9999, sinLat))
+	x := (longitude + 180) / 360
+	y := 0.5 - math.Log((1+sinLat)/(1-sinLat))/(4*math.Pi)
+	return x, y
+}
+
+func mercatorLatLng(x, y float64) (float64, float64) {
+	longitude := x*360 - 180
+	latitude := math.Atan(math.Sinh(math.Pi*(1-2*y))) * 180 / math.Pi
+	return latitude, longitude
+}
+
+func mercatorWorldSize(zoom int) float64 {
+	return 256 * math.Pow(2, float64(zoom))
+}
+
+func truncateMapLabel(value string) string {
+	label := strings.Join(strings.Fields(value), " ")
+	runes := []rune(label)
+	if len(runes) <= trophyMapLabelMax {
+		return label
+	}
+	return string(runes[:trophyMapLabelMax-3]) + "..."
 }
 
 func (h *Handler) LogPage(w http.ResponseWriter, r *http.Request) {

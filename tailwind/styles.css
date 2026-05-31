@@ -1654,6 +1654,83 @@ fieldset {
   text-align: center;
   text-transform: uppercase;
 }
+.trophy-map-modal {
+  width: min(calc(100% - 1.5rem), 72rem);
+  padding: 0;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+}
+.trophy-map-modal::backdrop {
+  background: rgba(6, 21, 22, .78);
+}
+.trophy-map-modal:focus {
+  outline: none;
+}
+.trophy-map-card {
+  display: grid;
+  gap: .85rem;
+  padding: 1rem;
+  background: #fff8e5;
+  border: 4px solid var(--night);
+  border-radius: var(--radius);
+  box-shadow: 9px 9px 0 rgba(6, 21, 22, .34);
+}
+.trophy-map-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+}
+.trophy-map-head h2 {
+  margin: 0;
+  color: var(--red-dark);
+  font-family: var(--condensed);
+  font-size: 1rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.trophy-map-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: var(--blacktop);
+  border: 3px solid var(--night);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.trophy-map-stage img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.trophy-map-label {
+  position: absolute;
+  left: clamp(3.5rem, var(--map-label-left), calc(100% - 3.5rem));
+  top: calc(var(--map-label-top) - 9.5%);
+  z-index: 1;
+  max-width: 7.75rem;
+  padding: .16rem .32rem .13rem;
+  overflow: hidden;
+  color: var(--night);
+  background: rgba(255, 248, 229, .92);
+  border: 2px solid rgba(6, 21, 22, .78);
+  border-radius: 4px;
+  box-shadow: 2px 2px 0 rgba(6, 21, 22, .2);
+  font-family: var(--condensed);
+  font-size: clamp(.56rem, 1.15vw, .78rem);
+  font-weight: 900;
+  line-height: 1;
+  text-align: center;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  transform: translate(-50%, -100%);
+  white-space: nowrap;
+  pointer-events: none;
+}
 .track-list {
   position: relative;
   z-index: 1;

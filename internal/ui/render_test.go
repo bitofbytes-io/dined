@@ -201,6 +201,9 @@ func TestRenderTrophyShowsMapProxyImageWithoutGoogleKey(t *testing.T) {
 		TrophyMapPoints: []model.RestaurantMapPoint{
 			{RestaurantID: uuid.New(), Name: "Hank's Downtown Diner", Latitude: 35.7796, Longitude: -78.6382, VisitCount: 1, LatestVisitedAt: time.Now()},
 		},
+		TrophyMapLabels: []TrophyMapLabel{
+			{Name: "Hank's Downto...", Left: "50.000%", Top: "50.000%"},
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -209,12 +212,15 @@ func TestRenderTrophyShowsMapProxyImageWithoutGoogleKey(t *testing.T) {
 	for _, fragment := range []string{
 		"Places We've Dined",
 		"1 pinned",
-		`class="dined-map-preview" data-map-preview`,
-		`data-map-src="/trophy-case/map.png"`,
-		`data-map-alt="Map of places where the family has dined"`,
+		`class="dined-map-preview"`,
+		`aria-controls="trophy-map-modal"`,
+		`dinedOpenTrophyMap()`,
+		`id="trophy-map-modal"`,
+		`class="trophy-map-stage"`,
+		`class="trophy-map-label"`,
+		"Hank&#39;s Downto...",
 		`src="/trophy-case/map.png"`,
 		`id="photo-preview-modal"`,
-		`dinedOpenMapPreview`,
 	} {
 		if !strings.Contains(rendered, fragment) {
 			t.Fatalf("rendered trophy missing %q:\n%s", fragment, rendered)
