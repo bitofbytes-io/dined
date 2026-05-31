@@ -12,6 +12,7 @@ import (
 	"github.com/bitofbytes-io/dined/internal/apptime"
 	"github.com/bitofbytes-io/dined/internal/places"
 	"github.com/bitofbytes-io/dined/internal/repository"
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
@@ -154,6 +155,45 @@ func TestTrophyMapUsesStoredCoordinatesOnly(t *testing.T) {
 	}
 }
 
+func TestRefreshRestaurantGoogleUpdatesMappedCategory(t *testing.T) {
+	ctx := context.Background()
+	store := repository.NewMemoryStore()
+	restaurants, err := store.Restaurants(ctx, "Hank")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(restaurants) != 1 {
+		t.Fatalf("restaurants len = %d, want 1", len(restaurants))
+	}
+	restaurantID := restaurants[0].ID
+	fakePlaces := &fakeGooglePlacesClient{
+		configured: true,
+		detailsPlace: &places.Place{
+			ID:    "demo-hanks",
+			Types: []string{"korean_restaurant", "restaurant"},
+		},
+	}
+	handler := New(nil, store, fakePlaces, nil, nil)
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/restaurants/"+restaurantID.String()+"/google-refresh", nil)
+	routeContext := chi.NewRouteContext()
+	routeContext.URLParams.Add("id", restaurantID.String())
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, routeContext))
+	rec := httptest.NewRecorder()
+
+	handler.RefreshRestaurantGoogle(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d: %s", rec.Code, http.StatusSeeOther, rec.Body.String())
+	}
+	restaurant, err := store.Restaurant(ctx, restaurantID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restaurant.Category == nil || *restaurant.Category != "Korean" {
+		t.Fatalf("Category = %#v, want Korean", restaurant.Category)
+	}
+}
+
 func TestVisitInputParsesGoogleMetadata(t *testing.T) {
 	personID := uuid.New()
 	form := url.Values{
@@ -272,6 +312,7 @@ func TestRestaurantInputValidatesGoogleRating(t *testing.T) {
 
 type fakeGooglePlacesClient struct {
 	configured       bool
+	detailsPlace     *places.Place
 	staticMapImage   *places.StaticMapImage
 	staticMapErr     error
 	staticMapMarkers []places.StaticMapMarker
@@ -294,8 +335,8 @@ func (f *fakeGooglePlacesClient) Nearby(context.Context, float64, float64) ([]pl
 	return nil, nil
 }
 
-func (f *fakeGooglePlacesClient) Details(context.Context, string) (*places.Place, error) {
-	return nil, nil
+func (f *fakeGooglePlacesClient) Details(_ context.Context, _ string) (*places.Place, error) {
+	return f.detailsPlace, nil
 }
 
 func (f *fakeGooglePlacesClient) StaticMap(_ context.Context, markers []places.StaticMapMarker) (*places.StaticMapImage, error) {

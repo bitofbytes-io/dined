@@ -45,6 +45,7 @@ func MetadataFromPlace(place places.Place) model.GoogleRestaurantMetadata {
 	if priceLevel := places.PriceLevelNumber(place.PriceLevel); priceLevel > 0 {
 		metadata.GooglePriceLevel = intPtr(priceLevel)
 	}
+	metadata.Category = places.Category(place)
 	return metadata
 }
 
@@ -61,12 +62,14 @@ func applyPlaceDetails(input model.VisitInput, place places.Place) model.VisitIn
 	if strings.TrimSpace(input.City) == "" {
 		input.City = places.City(place)
 	}
-	if strings.TrimSpace(input.Category) == "" {
-		input.Category = places.Category(place)
-	}
-
 	metadata := input.GoogleMetadata
 	placeMetadata := MetadataFromPlace(place)
+	if strings.TrimSpace(input.Category) == "" {
+		input.Category = placeMetadata.Category
+	}
+	if placeMetadata.Category != "" {
+		metadata.Category = placeMetadata.Category
+	}
 	if placeMetadata.Latitude != nil {
 		metadata.Latitude = placeMetadata.Latitude
 	}

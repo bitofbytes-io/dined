@@ -649,9 +649,41 @@ func TestMemoryStoreUpdateRestaurantGoogleMetadataRefreshesExistingValues(t *tes
 	if restaurant.Website == nil || *restaurant.Website != "https://fresh.example" {
 		t.Fatalf("Website = %#v, want refreshed value", restaurant.Website)
 	}
+	if restaurant.Category == nil || *restaurant.Category != "Southern" {
+		t.Fatalf("Category = %#v, want existing value preserved when refresh category is empty", restaurant.Category)
+	}
 	visit := visitByID(t, store, store.visits[0].ID)
 	if visit.Restaurant.GoogleRating == nil || *visit.Restaurant.GoogleRating != rating {
 		t.Fatalf("visit restaurant copy was not refreshed: %#v", visit.Restaurant)
+	}
+}
+
+func TestMemoryStoreUpdateRestaurantGoogleMetadataRefreshesCategory(t *testing.T) {
+	store := NewMemoryStore()
+	restaurantID := store.restaurants[0].ID
+	if err := store.UpdateRestaurant(context.Background(), restaurantID, model.RestaurantInput{
+		Name:     "Hank's Corrected Diner",
+		Category: "Other",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := store.UpdateRestaurantGoogleMetadata(context.Background(), restaurantID, model.GoogleRestaurantMetadata{
+		Category: "Korean",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	restaurant, err := store.Restaurant(context.Background(), restaurantID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restaurant.Category == nil || *restaurant.Category != "Korean" {
+		t.Fatalf("Category = %#v, want refreshed Korean value", restaurant.Category)
+	}
+	visit := visitByID(t, store, store.visits[0].ID)
+	if visit.Restaurant.Category == nil || *visit.Restaurant.Category != "Korean" {
+		t.Fatalf("visit restaurant copy category was not refreshed: %#v", visit.Restaurant.Category)
 	}
 }
 

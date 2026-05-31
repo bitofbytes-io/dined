@@ -393,6 +393,7 @@ func (s *Store) CreateVisit(ctx context.Context, input model.VisitInput) (*uuid.
 
 func (s *Store) UpdateRestaurantGoogleMetadata(ctx context.Context, id uuid.UUID, metadata model.GoogleRestaurantMetadata) error {
 	latitude, longitude, phone, website, googleRating, googlePriceLevel := googleMetadataValues(metadata)
+	category := nullableString(metadata.Category)
 	_, err := s.pool.Exec(ctx, `
 		UPDATE restaurants
 		SET latitude = COALESCE($2, latitude),
@@ -401,8 +402,9 @@ func (s *Store) UpdateRestaurantGoogleMetadata(ctx context.Context, id uuid.UUID
 		    website = COALESCE($5, website),
 		    google_rating = COALESCE($6, google_rating),
 		    google_price_level = COALESCE($7, google_price_level),
+		    category = COALESCE($8, category),
 		    updated_at = NOW()
-		WHERE id = $1`, id, latitude, longitude, phone, website, googleRating, googlePriceLevel)
+		WHERE id = $1`, id, latitude, longitude, phone, website, googleRating, googlePriceLevel, category)
 	if err != nil {
 		return fmt.Errorf("update restaurant google metadata: %w", err)
 	}

@@ -56,6 +56,14 @@ func TestEnrichVisitInputReturnsOriginalInputWhenDetailsFails(t *testing.T) {
 	}
 }
 
+func TestMetadataFromPlaceIncludesMappedCategory(t *testing.T) {
+	metadata := MetadataFromPlace(places.Place{Types: []string{"korean_restaurant", "restaurant"}})
+
+	if metadata.Category != "Korean" {
+		t.Fatalf("Category = %q, want Korean", metadata.Category)
+	}
+}
+
 type fakeDetailsClient struct {
 	configured bool
 	places     map[string]places.Place
@@ -113,5 +121,8 @@ func assertGoogleMetadata(t *testing.T, metadata model.GoogleRestaurantMetadata)
 	}
 	if metadata.GooglePriceLevel == nil || *metadata.GooglePriceLevel != 2 {
 		t.Fatalf("GooglePriceLevel = %#v", metadata.GooglePriceLevel)
+	}
+	if metadata.Category != "American" {
+		t.Fatalf("Category = %q", metadata.Category)
 	}
 }

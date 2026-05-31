@@ -77,10 +77,30 @@ func TestPlaceDecodesGoogleMetadataFields(t *testing.T) {
 }
 
 func TestCategoryMapsRestaurantTypes(t *testing.T) {
-	place := Place{Types: []string{"brunch_restaurant", "american_restaurant", "restaurant"}}
+	tests := []struct {
+		name  string
+		types []string
+		want  string
+	}{
+		{
+			name:  "american",
+			types: []string{"brunch_restaurant", "american_restaurant", "restaurant"},
+			want:  "American",
+		},
+		{
+			name:  "korean",
+			types: []string{"korean_restaurant", "restaurant"},
+			want:  "Korean",
+		},
+	}
 
-	if got := Category(place); got != "American" {
-		t.Fatalf("Category = %q, want American", got)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			place := Place{Types: test.types}
+			if got := Category(place); got != test.want {
+				t.Fatalf("Category = %q, want %s", got, test.want)
+			}
+		})
 	}
 }
 
