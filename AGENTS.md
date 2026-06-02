@@ -17,6 +17,7 @@
 - `make migrate`, `make migrate-down`, and `make migrate-status`: apply, roll back, or inspect Goose migrations; require `DATABASE_URL`.
 - `make docker-build`: build the Docker image locally.
 - `make docker-buildx`: build and push the multi-arch Docker image; set `REGISTRY`, `IMAGE_REPO`, `PLATFORMS`, and `TAG` as needed.
+- `make clean`: remove local build outputs under `bin/`.
 
 ## Coding Style & Naming Conventions
 - Go code should stay `gofmt` formatted and follow the existing package boundaries under `internal/`.
