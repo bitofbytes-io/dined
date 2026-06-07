@@ -1,14 +1,14 @@
 module github.com/bitofbytes-io/dined
 
-go 1.26.3
+go 1.26.4
 
 require (
 	github.com/chromedp/cdproto v0.0.0-20250724212937-08a3db8b4327
 	github.com/chromedp/chromedp v0.14.2
 	github.com/coreos/go-oidc/v3 v3.18.0
-	github.com/go-chi/chi/v5 v5.2.3
+	github.com/go-chi/chi/v5 v5.2.5
 	github.com/google/uuid v1.6.0
-	github.com/jackc/pgx/v5 v5.8.0
+	github.com/jackc/pgx/v5 v5.9.2
 	golang.org/x/oauth2 v0.36.0
 )
 
