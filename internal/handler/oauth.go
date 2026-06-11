@@ -57,12 +57,14 @@ func (h *Handler) StartGoogleLogin(w http.ResponseWriter, r *http.Request) {
 
 	stateJSON, _ := json.Marshal(payload)
 	encodedState := base64.RawURLEncoding.EncodeToString(stateJSON)
+	slog.Info("oauth login started", "redirect_to", payload.Redirect)
 	http.Redirect(w, r, h.googleAuth.AuthURL(encodedState), http.StatusTemporaryRedirect)
 }
 
 func (h *Handler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	stateCookie, err := r.Cookie(oauthStateCookieName)
 	if err != nil || stateCookie.Value == "" {
+		slog.Info("oauth callback rejected", "reason", "missing_state_cookie")
 		h.redirectLoginError(w, r, "Session expired. Please try again.")
 		return
 	}
@@ -71,16 +73,19 @@ func (h *Handler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	stateParam := r.URL.Query().Get("state")
 	stateBytes, err := base64.RawURLEncoding.DecodeString(stateParam)
 	if err != nil {
+		slog.Info("oauth callback rejected", "reason", "invalid_state_encoding")
 		h.redirectLoginError(w, r, "Invalid login state. Please try again.")
 		return
 	}
 
 	var payload oauthStatePayload
 	if err := json.Unmarshal(stateBytes, &payload); err != nil {
+		slog.Info("oauth callback rejected", "reason", "invalid_state_payload")
 		h.redirectLoginError(w, r, "Invalid login state. Please try again.")
 		return
 	}
 	if subtle.ConstantTimeCompare([]byte(payload.State), []byte(stateCookie.Value)) != 1 {
+		slog.Info("oauth callback rejected", "reason", "state_mismatch")
 		h.redirectLoginError(w, r, "Invalid login state. Please try again.")
 		return
 	}
@@ -102,6 +107,7 @@ func (h *Handler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 
 	code := r.URL.Query().Get("code")
 	if code == "" {
+		slog.Info("oauth callback rejected", "reason", "missing_code")
 		h.redirectLoginError(w, r, "Google did not return an authorization code.")
 		return
 	}
@@ -138,6 +144,7 @@ func (h *Handler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	middleware.SetSessionCookie(w, token, h.cfg.SecureCookies, h.cfg.AuthSessionTTL)
+	slog.Info("oauth login successful", "user_id", user.ID, "email", user.Email, "redirect_to", redirect)
 	http.Redirect(w, r, redirect, http.StatusSeeOther)
 }
 

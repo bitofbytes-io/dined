@@ -399,6 +399,7 @@ func (h *Handler) CreateVisit(w http.ResponseWriter, r *http.Request) {
 		h.renderLogError(w, r, err.Error())
 		return
 	}
+	slog.Info("visit created", "visit_id", visitID, "picker_id", input.PickerID, "rating_count", len(input.Ratings), "tag_count", len(input.TagIDs), "photo_count", len(input.Photos))
 	http.Redirect(w, r, "/dines#"+visitID.String(), http.StatusSeeOther)
 }
 
@@ -439,6 +440,7 @@ func (h *Handler) UpdateVisit(w http.ResponseWriter, r *http.Request) {
 		h.renderVisitEditError(w, r, id, err.Error())
 		return
 	}
+	slog.Info("visit updated", "visit_id", id, "picker_id", input.PickerID, "rating_count", len(input.Ratings), "tag_count", len(input.TagIDs), "photo_count", len(input.Photos))
 	http.Redirect(w, r, "/dines#"+id.String(), http.StatusSeeOther)
 }
 
@@ -452,6 +454,7 @@ func (h *Handler) DeleteVisit(w http.ResponseWriter, r *http.Request) {
 		h.error(w, "delete visit", err)
 		return
 	}
+	slog.Info("visit deleted", "visit_id", id)
 	http.Redirect(w, r, "/dines", http.StatusSeeOther)
 }
 
@@ -470,6 +473,7 @@ func (h *Handler) DeleteRestaurant(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Restaurant has visits and cannot be removed from saved spots", http.StatusConflict)
 		return
 	}
+	slog.Info("restaurant deleted", "restaurant_id", id)
 	http.Redirect(w, r, searchRedirect(r.FormValue("q")), http.StatusSeeOther)
 }
 
@@ -497,6 +501,7 @@ func (h *Handler) UpdateRestaurant(w http.ResponseWriter, r *http.Request) {
 		h.renderRestaurantEditError(w, r, id, err.Error())
 		return
 	}
+	slog.Info("restaurant updated", "restaurant_id", id, "is_chain", input.IsChain)
 	if returnVisitID != "" {
 		http.Redirect(w, r, "/visits/"+returnVisitID+"/edit", http.StatusSeeOther)
 		return
@@ -515,6 +520,7 @@ func (h *Handler) ToggleChain(w http.ResponseWriter, r *http.Request) {
 		h.error(w, "toggle chain", err)
 		return
 	}
+	slog.Info("restaurant chain flag updated", "restaurant_id", id, "is_chain", isChain)
 	http.Redirect(w, r, "/restaurants/"+id.String(), http.StatusSeeOther)
 }
 
@@ -560,6 +566,7 @@ func (h *Handler) RefreshRestaurantGoogle(w http.ResponseWriter, r *http.Request
 		h.error(w, "refresh restaurant google metadata", err)
 		return
 	}
+	slog.Info("restaurant google metadata refreshed", "restaurant_id", id, "place_id", *restaurant.GooglePlaceID)
 	redirectRestaurantGoogleRefresh(w, r, id, "updated", returnVisitID)
 }
 
@@ -731,16 +738,20 @@ func (h *Handler) LoginPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
+	slog.Info("login requested", "provider", "google")
 	http.Redirect(w, r, googleLoginPath(r.FormValue("redirect")), http.StatusSeeOther)
 }
 
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
+	hadSession := false
 	if cookie, err := r.Cookie(middleware.CookieName); err == nil && cookie.Value != "" && h.authService != nil {
+		hadSession = true
 		if err := h.authService.DeleteSession(r.Context(), cookie.Value); err != nil {
 			slog.Error("delete session", "error", err)
 		}
 	}
 	middleware.ClearSessionCookie(w, h.cfg.SecureCookies)
+	slog.Info("logout", "had_session", hadSession)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
