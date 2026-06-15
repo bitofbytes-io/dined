@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -24,6 +25,7 @@ func Auth(authService *auth.Service, secureCookies bool) func(http.Handler) http
 				if err == nil {
 					clearCookie(w, secureCookies)
 				}
+				slog.Info("browser authentication required", "path", r.URL.Path)
 				if shouldReturnUnauthorized(r) {
 					http.Error(w, "Unauthorized", http.StatusUnauthorized)
 					return
@@ -35,6 +37,7 @@ func Auth(authService *auth.Service, secureCookies bool) func(http.Handler) http
 			user, err := authService.ValidateSession(r.Context(), cookie.Value)
 			if err != nil || user == nil {
 				clearCookie(w, secureCookies)
+				slog.Info("browser authentication failed", "reason", "invalid_session", "path", r.URL.Path)
 				if shouldReturnUnauthorized(r) {
 					http.Error(w, "Unauthorized", http.StatusUnauthorized)
 					return
