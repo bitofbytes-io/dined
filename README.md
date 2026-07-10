@@ -6,6 +6,7 @@ Dined is a self-hosted restaurant memory ledger for recording visits, who chose 
 
 - Docker 24+
 - PostgreSQL 15+ for persistent deployments
+- Goose for database migrations
 - A Google Cloud project with billing enabled
 - An [OAuth 2.0 Web application client](https://developers.google.com/identity/protocols/oauth2/web-server)
 - An API key with [Places API (New)](https://developers.google.com/maps/documentation/places/web-service/get-api-key) and [Maps Static API](https://developers.google.com/maps/documentation/maps-static/start) enabled
@@ -27,7 +28,7 @@ docker build -t dined:local .
 
 ## Configure the application
 
-Create an untracked `dined.env` file:
+Create the ignored `.env` file:
 
 ```dotenv
 DATA_STORE=postgres
@@ -71,11 +72,14 @@ docker run -d --name db --network dined \
   -p 5432:5432 \
   -v dined-postgres:/var/lib/postgresql/data \
   postgres:17
+
+until docker exec db pg_isready -U dined -d dined >/dev/null 2>&1; do sleep 1; done
 ```
 
 Apply migrations before starting Dined:
 
 ```bash
+go install github.com/pressly/goose/v3/cmd/goose@latest
 export DATABASE_URL='postgres://dined:change-me@localhost:5432/dined?sslmode=disable'
 goose -dir migrations postgres "$DATABASE_URL" up
 ```
@@ -84,7 +88,7 @@ goose -dir migrations postgres "$DATABASE_URL" up
 
 ```bash
 docker run --rm --name dined --network dined \
-  --env-file dined.env \
+  --env-file .env \
   -p 4600:4600 \
   dined:local
 ```
