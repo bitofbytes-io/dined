@@ -1,117 +1,105 @@
 # Dined
 
-Dined is a private, family-first restaurant memory ledger for tracking where the family ate, who picked it, who attended, and how everyone rated it.
+Dined is a self-hosted restaurant memory ledger for recording visits, who chose a restaurant, who attended, ratings, photos, and map-based history. It is a server-rendered Go application with Google sign-in.
 
-## Tech Stack
+## Requirements
 
-- Go
-- HTMX
-- Tailwind-style CSS assets
-- PostgreSQL
-- Goose migrations
-- Docker Swarm deployment
+- Docker 24+
+- PostgreSQL 15+ for persistent deployments
+- A Google Cloud project with billing enabled
+- An [OAuth 2.0 Web application client](https://developers.google.com/identity/protocols/oauth2/web-server)
+- An API key with [Places API (New)](https://developers.google.com/maps/documentation/places/web-service/get-api-key) and [Maps Static API](https://developers.google.com/maps/documentation/maps-static/start) enabled
 
-## Development
+For local OAuth, add this exact authorized redirect URI to the Google client:
 
-Run the no-database local preview:
-
-```bash
-make run
+```text
+http://localhost:4600/api/auth/google/callback
 ```
 
-Open `http://localhost:4600`. Google OAuth is required for write access. Copy `local.mk.example` to
-`local.mk`, then set your local/test OAuth client values:
+Production callbacks must use HTTPS and exactly match `AUTH_GOOGLE_REDIRECT_URL`. Restrict the Maps key to the required APIs and the server environments that will use it.
 
-```make
-AUTH_GOOGLE_CLIENT_ID := your-local-client-id.apps.googleusercontent.com
-AUTH_GOOGLE_CLIENT_SECRET := your-local-client-secret
-AUTH_GOOGLE_REDIRECT_URL := http://localhost:4600/api/auth/google/callback
-AUTH_GOOGLE_ALLOWED_EMAILS := you@gmail.com
-```
-
-The local Google OAuth client needs:
-
-- Authorized JavaScript origin: `http://localhost:4600`
-- Authorized redirect URI: `http://localhost:4600/api/auth/google/callback`
-
-The default development mode uses `DATA_STORE=memory`, so changes persist only while the process is running.
-
-## Production-Like Local Run
-
-Create a local `local.mk` or pass environment variables with a Postgres URL and Google Places key:
-
-```bash
-make migrate
-make run-postgres
-```
-
-Set `DATABASE_URL` in `local.mk` or the environment before running Postgres-backed targets.
-Credentials in `DATABASE_URL` must already be URL-encoded before passing it to
-`make`.
-
-The same `GOOGLE_PLACES_API_KEY` is also used server-side for the trophy-case
-map image. Enable both Places API and Maps Static API on that Google Cloud key;
-the map key is never rendered into browser HTML.
-
-## CSS Assets
-
-`tailwind/styles.css` is the canonical stylesheet to edit. `static/styles.css`
-is generated output served by the app. After UI CSS changes, run:
+## Build the image
 
 ```bash
 make tail-prod
+docker build -t dined:local .
 ```
 
-`make test` and CI run `make check-css` to fail when the generated stylesheet is
-out of sync.
+## Configure the application
 
-Run tests:
+Create an untracked `dined.env` file:
+
+```dotenv
+DATA_STORE=postgres
+DATABASE_URL=postgres://dined:change-me@db:5432/dined?sslmode=disable
+GOOGLE_PLACES_API_KEY=replace-with-your-api-key
+AUTH_GOOGLE_CLIENT_ID=replace-with-your-client-id.apps.googleusercontent.com
+AUTH_GOOGLE_CLIENT_SECRET=replace-with-your-client-secret
+AUTH_GOOGLE_REDIRECT_URL=http://localhost:4600/api/auth/google/callback
+AUTH_GOOGLE_ALLOWED_EMAILS=you@example.com
+SECURE_COOKIES=false
+PORT=4600
+```
+
+Do not commit this file. `AUTH_GOOGLE_ALLOWED_DOMAINS` can replace or supplement the email allowlist.
+
+| Setting | Required | Purpose |
+| --- | --- | --- |
+| `DATA_STORE` | No | `postgres` for persistence or `memory` for an ephemeral preview |
+| `DATABASE_URL` | With Postgres | PostgreSQL connection string |
+| `GOOGLE_PLACES_API_KEY` | With Postgres | Places search/details and server-rendered static maps |
+| `AUTH_GOOGLE_CLIENT_ID` | Yes | Google OAuth client ID |
+| `AUTH_GOOGLE_CLIENT_SECRET` | Yes | Google OAuth client secret |
+| `AUTH_GOOGLE_ALLOWED_EMAILS` or `AUTH_GOOGLE_ALLOWED_DOMAINS` | Yes | Login allowlist |
+| `AUTH_GOOGLE_REDIRECT_URL` | No | OAuth callback; defaults to the local URL above |
+| `AUTH_SESSION_TTL` | No | Go duration for sessions; defaults to `2160h` |
+| `SECURE_COOKIES` | No | Set `false` for local HTTP; defaults to `true` |
+| `PORT` | No | HTTP port; defaults to `4600` |
+| `LOG_LEVEL` | No | Application log level; defaults to `info` |
+
+The database URL, Places key, OAuth client ID, and OAuth secret support corresponding `*_FILE` variables and default secret paths under `/run/secrets/dined_*`.
+
+## Database and migrations
 
 ```bash
+docker network create dined
+
+docker run -d --name db --network dined \
+  -e POSTGRES_DB=dined \
+  -e POSTGRES_USER=dined \
+  -e POSTGRES_PASSWORD=change-me \
+  -p 5432:5432 \
+  -v dined-postgres:/var/lib/postgresql/data \
+  postgres:17
+```
+
+Apply migrations before starting Dined:
+
+```bash
+export DATABASE_URL='postgres://dined:change-me@localhost:5432/dined?sslmode=disable'
+goose -dir migrations postgres "$DATABASE_URL" up
+```
+
+## Run with Docker
+
+```bash
+docker run --rm --name dined --network dined \
+  --env-file dined.env \
+  -p 4600:4600 \
+  dined:local
+```
+
+Open <http://localhost:4600>. The health endpoint is <http://localhost:4600/health>.
+
+For an ephemeral preview without Postgres, set `DATA_STORE=memory` and omit the database URL and Places key. Google OAuth and an allowlist are still required.
+
+## Development
+
+```bash
+cp local.mk.example local.mk
+make run          # memory preview
+make run-postgres # persistent local run
 make test
 ```
 
-## Deployment
-
-The production deployment mirrors Dejaview:
-
-- Image: `registry.tail209cfc.ts.net/dined:<shortsha>`
-- Service: `proxy_dined`
-- Host: `https://dined.bitofbytes.io`
-- Required Swarm secrets:
-  - `dined_database_url`
-  - `dined_google_places_api_key`
-  - `dined_google_client_id`
-  - `dined_google_client_secret`
-
-The production Google OAuth client needs:
-
-- Authorized JavaScript origin: `https://dined.bitofbytes.io`
-- Authorized redirect URI: `https://dined.bitofbytes.io/api/auth/google/callback`
-
-Dined also enforces its own `AUTH_GOOGLE_ALLOWED_EMAILS` allowlist. Google
-Cloud test users can be configured as an additional control, but the app does
-not rely on that setting to decide who can write.
-
-Create the production database on bahamut:
-
-```sql
-create user dined with password '<strong-password>';
-create database dined owner dined;
-grant all privileges on database dined to dined;
-```
-
-Then store:
-
-```text
-postgres://dined:<strong-password>@192.168.1.2:8432/dined?sslmode=disable
-```
-
-in the `dined_database_url` Docker secret.
-
-Create the OAuth Docker secrets on the Swarm manager:
-
-```bash
-printf '<google-oauth-client-id>' | docker secret create dined_google_client_id -
-printf '<google-oauth-client-secret>' | docker secret create dined_google_client_secret -
-```
+Use `make migrate`, `make migrate-status`, and `make migrate-down` for database maintenance when `DATABASE_URL` is configured.
