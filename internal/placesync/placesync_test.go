@@ -31,7 +31,7 @@ func TestEnrichVisitInputAppliesPlaceDetails(t *testing.T) {
 	if got.City != "Raleigh" {
 		t.Fatalf("City = %q", got.City)
 	}
-	if got.Category != "American" {
+	if got.Category != "Southern" {
 		t.Fatalf("Category = %q", got.Category)
 	}
 	if got.PriceLevel != 2 {
@@ -98,7 +98,7 @@ func tupeloPlace(id string) places.Place {
 		Website:    "https://tupelohoneycafe.com/restaurant/raleigh/",
 		Rating:     4.3,
 		PriceLevel: "PRICE_LEVEL_MODERATE",
-		Types:      []string{"brunch_restaurant", "american_restaurant", "restaurant"},
+		Types:      []string{"soul_food_restaurant", "restaurant"},
 	}
 }
 
@@ -122,7 +122,7 @@ func assertGoogleMetadata(t *testing.T, metadata model.GoogleRestaurantMetadata)
 	if metadata.GooglePriceLevel == nil || *metadata.GooglePriceLevel != 2 {
 		t.Fatalf("GooglePriceLevel = %#v", metadata.GooglePriceLevel)
 	}
-	if metadata.Category != "American" {
+	if metadata.Category != "Southern" {
 		t.Fatalf("Category = %q", metadata.Category)
 	}
 }

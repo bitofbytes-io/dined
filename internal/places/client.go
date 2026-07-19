@@ -315,6 +315,8 @@ func PriceLevelNumber(priceLevel string) int {
 func Category(place Place) string {
 	for _, typ := range place.Types {
 		switch typ {
+		case "soul_food_restaurant":
+			return "Southern"
 		case "american_restaurant":
 			return "American"
 		case "mexican_restaurant":
