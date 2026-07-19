@@ -142,6 +142,7 @@ func TestRenderTrophyShowsRedesignedRecordsAndTopRestaurants(t *testing.T) {
 			},
 			TopRestaurantsByCuisine: []model.CuisineRestaurantStat{
 				{Cuisine: "Mexican", Name: "El Patio Verde", AverageRating: 8.6, RatingCount: 4, VisitCount: 1},
+				{Cuisine: "Southern", Name: "Tupelo Honey", AverageRating: 8.2, RatingCount: 4, VisitCount: 1},
 			},
 		},
 		PickerTurn: model.PickerTurn{NextPicker: model.Person{Name: "Caleb"}},
@@ -165,6 +166,9 @@ func TestRenderTrophyShowsRedesignedRecordsAndTopRestaurants(t *testing.T) {
 		"Mexican",
 		"El Patio Verde",
 		"8.6 avg",
+		"Southern",
+		"Tupelo Honey",
+		"8.2 avg",
 	} {
 		if !strings.Contains(rendered, fragment) {
 			t.Fatalf("rendered trophy missing %q:\n%s", fragment, rendered)
@@ -349,8 +353,8 @@ func TestRenderLogCarriesGoogleMetadataPrefill(t *testing.T) {
 	}
 }
 
-func TestRenderLogIncludesKoreanCategoryOption(t *testing.T) {
-	for _, category := range []string{"Korean", "Cuban"} {
+func TestRenderLogIncludesMappedCategoryOptions(t *testing.T) {
+	for _, category := range []string{"Southern", "Korean", "Cuban"} {
 		t.Run(category, func(t *testing.T) {
 			var out strings.Builder
 			err := Render(&out, "log", PageData{PrefillCategory: category})

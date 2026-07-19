@@ -88,6 +88,11 @@ func TestCategoryMapsRestaurantTypes(t *testing.T) {
 			want:  "American",
 		},
 		{
+			name:  "southern",
+			types: []string{"soul_food_restaurant", "restaurant"},
+			want:  "Southern",
+		},
+		{
 			name:  "korean",
 			types: []string{"korean_restaurant", "restaurant"},
 			want:  "Korean",
