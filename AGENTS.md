@@ -5,5 +5,6 @@
 - Keep the Google Places key server-side. Do not render it into HTML or client JavaScript.
 - Preserve the application-level email/domain allowlist in addition to Google OAuth configuration.
 - Use `make run` for the memory-backed local preview and `make run-postgres` when validating persistent Postgres behavior.
+- Database helpers are `make migrate`, `make migrate-status`, and `make migrate-down`; they require `DATABASE_URL` to be configured locally.
 - `make test` depends on `make check-css`; run `make tail-prod` after Tailwind source changes so `static/styles.css` stays synchronized.
 - Run `make test` so generated CSS synchronization is checked with the Go suite.
