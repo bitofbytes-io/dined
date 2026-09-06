@@ -1,0 +1,11 @@
+{{define "dines"}}
+{{template "top" .}}
+<main class="page-band ledger-page">
+  <section class="wide-ticket ledger-panel">
+	    <div class="section-head"><div><h1>All Dines</h1></div>{{if .Authenticated}}<a class="small-cta" href="/log">Log a Dine</a>{{end}}</div>
+    {{template "visit-list" .}}
+  </section>
+</main>
+{{template "bottom" .}}
+{{end}}
+

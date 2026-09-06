@@ -1,0 +1,32 @@
+{{define "trophy"}}
+{{template "top" .}}
+<main class="jukebox-stage">
+  <section class="trophy-panel">
+    <div class="trophy-title">
+      <p>Dined Family Soundtrack</p>
+      <h1>Trophy Case</h1>
+    </div>
+    <div class="record-grid" aria-label="Dined family records">
+      <div class="record"><span class="record-value">{{.Stats.TotalDines}}</span><p>Total Dines</p></div>
+      <div class="record"><span class="record-value">{{score .Stats.AverageRating}}</span><p>Family Average</p></div>
+      <div class="record"><span class="record-value record-name">{{default .Stats.BestPicker "Waiting"}}</span><p>Best Picker</p>{{if .Stats.BestPicker}}<small>{{score .Stats.BestPickerAverage}} average</small>{{else}}<small>More dines needed</small>{{end}}</div>
+      <div class="record"><span class="record-value record-name">{{default .Stats.WorstPicker "Waiting"}}</span><p>Worst Picker</p>{{if .Stats.WorstPicker}}<small>{{score .Stats.WorstPickerAverage}} average</small>{{else}}<small>More dines needed</small>{{end}}</div>
+      <div class="record"><span class="record-value record-name">{{default .PickerTurn.NextPicker.Name "Waiting"}}</span><p>Next Up</p><small>Picker turn</small></div>
+      <div class="record"><span class="record-value">{{.Stats.NewPlaces}}</span><p>New Places</p></div>
+      <div class="record"><span class="record-value">{{.Stats.CitiesExplored}}</span><p>Cities Explored</p></div>
+    </div>
+    <div class="dined-map-panel">
+      <div class="dined-map-heading"><p>Places We've Dined</p>{{if .TrophyMapPoints}}<span>{{len .TrophyMapPoints}} pinned</span>{{end}}</div>
+      {{if .TrophyMapReady}}<button type="button" class="dined-map-preview" onclick="dinedOpenTrophyMap()" aria-haspopup="dialog" aria-controls="trophy-map-modal" aria-label="Open larger map of places we've dined"><img src="/trophy-case/map.png" alt="Map of places where the family has dined" width="640" height="360" loading="lazy"></button>{{else}}<div class="dined-map-empty">{{default .TrophyMapFallback "No mapped dines yet"}}</div>{{end}}
+    </div>
+    <div class="track-list">
+      <h2>All-Time Top Restaurants</h2>
+      {{if .Stats.TopRestaurants}}<ol class="top-restaurant-list">{{range $index, $restaurant := .Stats.TopRestaurants}}<li><span class="track-rank">{{add1 $index}}</span><span class="track-name">{{$restaurant.Name}}</span><span class="track-score">{{score $restaurant.AverageRating}} avg</span></li>{{end}}</ol>{{else}}<p class="track-empty">Waiting on more dines</p>{{end}}
+      <h2 class="track-section-title">Best By Cuisine</h2>
+      {{if .Stats.TopRestaurantsByCuisine}}<ol class="top-restaurant-list cuisine-restaurant-list">{{range $restaurant := .Stats.TopRestaurantsByCuisine}}<li><span class="track-cuisine">{{$restaurant.Cuisine}}</span><span class="track-name">{{$restaurant.Name}}</span><span class="track-score">{{score $restaurant.AverageRating}} avg</span></li>{{end}}</ol>{{else}}<p class="track-empty">Waiting on cuisine data</p>{{end}}
+    </div>
+  </section>
+</main>
+{{template "bottom" .}}
+{{end}}
+

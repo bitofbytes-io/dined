@@ -1,0 +1,50 @@
+{{define "log"}}
+{{template "top" .}}
+<main class="page-band order-page">
+		<form class="wide-ticket log-form order-pad console-pad" method="post" action="/visits" data-log-form>
+	    <div class="section-head console-head">
+		      <div><h1>Log a Dine</h1></div>
+	    </div>
+    {{if .PrefillPlaceID}}<p class="place-source">Google place loaded: {{.PrefillName}}</p>{{end}}
+    <div class="console-grid">
+	      <section class="form-section restaurant-console">
+	        <input type="hidden" name="restaurant_id" value="{{.PrefillRestaurantID}}">
+	        <input type="hidden" name="city" value="{{.PrefillCity}}">
+	        <input type="hidden" name="latitude" value="{{.PrefillLatitude}}">
+	        <input type="hidden" name="longitude" value="{{.PrefillLongitude}}">
+	        <input type="hidden" name="phone" value="{{.PrefillPhone}}">
+	        <input type="hidden" name="website" value="{{.PrefillWebsite}}">
+	        <input type="hidden" name="google_rating" value="{{.PrefillGoogleRating}}">
+	        <input type="hidden" name="google_price_level" value="{{.PrefillGooglePriceLevel}}">
+	        <div class="form-grid restaurant-grid">
+		          <label>Restaurant<input name="restaurant_name" list="restaurant-options" placeholder="Search or add restaurant" value="{{.PrefillName}}" required><datalist id="restaurant-options">{{range .Restaurants}}<option value="{{.Name}}" data-restaurant-id="{{.ID}}" data-address="{{if .Address}}{{.Address}}{{end}}" data-city="{{if .City}}{{.City}}{{end}}" data-google-place-id="{{if .GooglePlaceID}}{{.GooglePlaceID}}{{end}}" data-category="{{if .Category}}{{.Category}}{{end}}">{{if .Address}}{{.Address}}{{end}}</option>{{end}}</datalist></label>
+	          <label>Address<input name="address" placeholder="Optional" value="{{.PrefillAddress}}"></label>
+          <label>Google Place ID<input name="google_place_id" placeholder="Optional" value="{{.PrefillPlaceID}}"></label>
+          <label>Category<select name="category"><option></option><option {{if eq .PrefillCategory "American"}}selected{{end}}>American</option><option {{if eq .PrefillCategory "Southern"}}selected{{end}}>Southern</option><option {{if eq .PrefillCategory "Mexican"}}selected{{end}}>Mexican</option><option {{if eq .PrefillCategory "Italian"}}selected{{end}}>Italian</option><option {{if eq .PrefillCategory "Pizza"}}selected{{end}}>Pizza</option><option {{if eq .PrefillCategory "Burgers"}}selected{{end}}>Burgers</option><option {{if eq .PrefillCategory "Breakfast"}}selected{{end}}>Breakfast</option><option {{if eq .PrefillCategory "Chinese"}}selected{{end}}>Chinese</option><option {{if eq .PrefillCategory "Cuban"}}selected{{end}}>Cuban</option><option {{if eq .PrefillCategory "Japanese"}}selected{{end}}>Japanese</option><option {{if eq .PrefillCategory "Korean"}}selected{{end}}>Korean</option><option {{if eq .PrefillCategory "Thai"}}selected{{end}}>Thai</option><option {{if eq .PrefillCategory "Indian"}}selected{{end}}>Indian</option><option {{if eq .PrefillCategory "BBQ"}}selected{{end}}>BBQ</option><option {{if eq .PrefillCategory "Seafood"}}selected{{end}}>Seafood</option><option {{if eq .PrefillCategory "Dessert"}}selected{{end}}>Dessert</option><option {{if eq .PrefillCategory "Coffee"}}selected{{end}}>Coffee</option><option {{if eq .PrefillCategory "Other"}}selected{{end}}>Other</option></select></label>
+        </div>
+      </section>
+      <section class="form-section visit-console">
+        <div class="form-grid visit-form-grid">
+	          <label>Date and time<input type="datetime-local" name="visited_at" value="{{.NowLocal}}" required></label>
+          <label>Picked by<select name="picker_id" required>{{range .People}}<option value="{{.ID}}" {{if eq $.PrefillPickerID .ID.String}}selected{{end}}>{{.Name}}</option>{{end}}</select></label>
+          <label>Price Level<select name="price_level"><option value="1" {{if eq .PrefillPriceLevel 1}}selected{{end}}>$</option><option value="2" {{if or (eq .PrefillPriceLevel 0) (eq .PrefillPriceLevel 2)}}selected{{end}}>$$</option><option value="3" {{if eq .PrefillPriceLevel 3}}selected{{end}}>$$$</option><option value="4" {{if eq .PrefillPriceLevel 4}}selected{{end}}>$$$$</option></select></label>
+        </div>
+      </section>
+    </div>
+		    <fieldset class="ratings-field score-console" aria-describedby="rating-requirement"><legend>Rate Your Experience</legend><p class="rating-requirement" id="rating-requirement" data-rating-message aria-live="polite"{{if prefillHasRating .PrefillRatings}} hidden{{end}}>At least one rating is required before saving.</p>{{range .People}}<label class="rating-card">{{if avatar .Name}}<img class="avatar-face" src="{{avatar .Name}}" alt="">{{else}}<span class="avatar-dot">{{slice .Name 0 1}}</span>{{end}}<span>{{.Name}}</span><input name="rating_{{.ID}}" type="number" min="0" max="10" step="0.5" inputmode="decimal" placeholder="0-10" value="{{prefillRatingValue $.PrefillRatings .ID}}" data-half-step-rating></label>{{end}}</fieldset>
+		    <fieldset class="tags-field chip-field"><legend>Tags</legend>{{range .Tags}}<label><input type="checkbox" name="tag_id" value="{{.ID}}" {{if prefillTagChecked $.PrefillTagIDs .ID}}checked{{end}}> <span>{{.Name}}</span></label>{{end}}<label class="new-tag">New tag<input name="new_tag" placeholder="Great fries" value="{{.PrefillNewTag}}"></label></fieldset>
+	    <label class="notes-field">Notes<textarea name="notes" rows="4" placeholder="What should we remember next time?">{{.PrefillNotes}}</textarea></label>
+	    <section class="form-section photo-console" data-photo-uploader data-photo-limit="{{maxVisitPhotos}}">
+	      <div class="photo-console-head"><div><h2>Photos</h2><p>Food, fun, memories. Up to {{maxVisitPhotos}}.</p></div></div>
+	      <div class="photo-upload-strip" data-photo-upload-list data-photo-strip>
+	        <label class="photo-add-tile" data-photo-add><span class="photo-add-mark">+</span><span>Add Photos</span><input type="file" accept="image/*" multiple data-photo-input hidden></label>
+	        {{range .PrefillPhotoDataURIs}}<div class="photo-upload-tile" data-photo-item><button type="button" class="photo-thumb photo-upload-preview" data-photo-preview data-photo-src="{{imageSrc .}}" data-photo-alt="New dine photo"><img src="{{imageSrc .}}" alt=""></button><input type="hidden" name="photo_data_uri" value="{{.}}"><button type="button" class="photo-remove-button" data-photo-remove aria-label="Remove photo">Remove</button></div>{{end}}
+	      </div>
+	      <p class="photo-error" data-photo-error hidden></p>
+	    </section>
+	    <div class="form-actions console-actions"><label class="inline-check"><input type="checkbox" name="is_chain" value="true" {{if .PrefillIsChain}}checked{{end}}> Mark new restaurant as chain</label><button class="primary-button" data-log-submit>Save Dine</button></div>
+  </form>
+</main>
+{{template "bottom" .}}
+{{end}}
+

@@ -739,6 +739,7 @@ func (s *Store) PickerTurn(ctx context.Context) (model.PickerTurn, error) {
 }
 
 func (s *Store) scanVisits(ctx context.Context, rows pgx.Rows, includePhotos bool) ([]model.Visit, error) {
+	defer rows.Close()
 	var visits []model.Visit
 	for rows.Next() {
 		var visit model.Visit
@@ -771,6 +772,17 @@ func (s *Store) scanVisits(ctx context.Context, rows pgx.Rows, includePhotos boo
 		if err != nil {
 			return nil, fmt.Errorf("scan visit: %w", err)
 		}
+		visits = append(visits, visit)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read visits: %w", err)
+	}
+	// Release the base query connection before loading related records from the pool.
+	rows.Close()
+
+	for i := range visits {
+		visit := &visits[i]
+		var err error
 		visit.Ratings, err = s.visitRatings(ctx, visit.ID)
 		if err != nil {
 			return nil, err
@@ -785,9 +797,8 @@ func (s *Store) scanVisits(ctx context.Context, rows pgx.Rows, includePhotos boo
 				return nil, err
 			}
 		}
-		visits = append(visits, visit)
 	}
-	return visits, rows.Err()
+	return visits, nil
 }
 
 func insertVisitPhotos(ctx context.Context, tx pgx.Tx, visitID uuid.UUID, photos []model.VisitPhotoInput, startOrder int) error {

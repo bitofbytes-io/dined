@@ -1,0 +1,29 @@
+{{define "home"}}
+{{template "top" .}}
+	<main class="booth-stage">
+	  <section class="booth-scene" aria-label="Dined booth interior">
+	    <div class="booth-layer booth-layer-action">
+      <div class="booth-search">
+        <h1>Have we eaten here before?</h1>
+        {{if .Authenticated}}
+        <form action="/search" method="get" class="search-row">
+          <input name="q" type="search" placeholder="Search restaurants..." value="{{.Query}}">
+          <button>Search</button>
+        </form>
+        {{else}}
+        <p>Log in to search Google Places or add new dines.</p>
+        {{end}}
+      </div>
+
+      {{if .Authenticated}}<a class="image-cta" href="/log"><img src="/static/assets/dined-log-arrow-generated.png" alt="Log a Dine"></a>{{else}}<a class="public-badge-link" href="/dines"><span>View Dines</span></a>{{end}}
+    </div>
+
+    <div class="booth-recent">
+      <div class="section-head"><div><h2>Recent Dines</h2>{{if .PickerTurn.NextPicker.Name}}<p class="next-up">Next Up: {{.PickerTurn.NextPicker.Name}}</p>{{end}}</div><a href="/dines">View all</a></div>
+      {{template "visit-list" .}}
+    </div>
+  </section>
+</main>
+{{template "bottom" .}}
+{{end}}
+

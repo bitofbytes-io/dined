@@ -1,11 +1,44 @@
 name: CI build -> push -> trigger deploy
 
 on:
+  pull_request:
+    branches: [ main ]
   push:
     branches: [ main ]
 
 jobs:
+  test:
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: dined_test
+          POSTGRES_USER: dined_test
+          POSTGRES_PASSWORD: dined_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dined_test -d dined_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DINED_TEST_DATABASE_URL: postgres://dined_test:dined_test@localhost:5432/dined_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - run: make test
+      - run: go vet ./...
+
   build-and-trigger:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: test
     permissions:
       contents: read
       id-token: write
@@ -38,9 +71,6 @@ jobs:
 
       - name: Build CSS
         run: make tail-prod
-
-      - name: Run tests
-        run: make test
 
       - name: Connect to Tailscale
         uses: tailscale/github-action@306e68a486fd2350f2bfc3b19fcd143891a4a2d8

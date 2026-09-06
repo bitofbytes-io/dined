@@ -1,0 +1,10 @@
+{{define "bottom"}}
+	  </div>
+	  {{if .Authenticated}}{{template "delete-confirm-modal" .}}{{end}}
+	  {{template "photo-preview-modal" .}}
+	  {{if .TrophyMapReady}}{{template "trophy-map-modal" .}}{{end}}
+	  {{template "page-scripts" .}}
+	</body>
+	</html>
+{{end}}
+

@@ -1,0 +1,14 @@
+{{define "search"}}
+{{template "top" .}}
+<main class="page-band search-page">
+  <section class="wide-ticket sign-panel search-panel">
+    <p class="eyebrow">Counter Search</p>
+    <h1>Have we eaten here before?</h1>
+    <form class="search-row" method="get" action="/search"><input name="q" type="search" value="{{.Query}}" placeholder="Restaurant name"><button>Search</button></form>
+    {{if .SearchResults}}<h2>Saved Spots</h2><div class="restaurant-list history-list">{{range .SearchResults}}<article class="restaurant-row history-row"><div class="history-title"><a href="/restaurants/{{.Restaurant.ID}}"><strong>{{.Restaurant.Name}}</strong></a>{{if .Restaurant.IsChain}}<em>Chain</em>{{end}}</div><span>{{if .Restaurant.Address}}{{.Restaurant.Address}}{{end}}</span>{{with .LatestVisit}}<span>Last visit {{date .VisitedAt}} · Picked by {{.Picker.Name}} · {{dollars .PriceLevel}}</span>{{end}}<div class="row-stats"><span>{{.VisitCount}} {{if eq .VisitCount 1}}visit{{else}}visits{{end}}</span><span>Avg {{score .AverageRating}}</span></div>{{if .Tags}}<div class="tags">{{range .Tags}}<span>{{.Name}}</span>{{end}}</div>{{end}}{{if and $.Authenticated (eq .VisitCount 0)}}<form class="history-remove-form" method="post" action="/restaurants/{{.Restaurant.ID}}/delete" hx-boost="false" data-delete-title="Remove saved spot?" data-delete-message="This removes the saved restaurant from search. Dines with visits cannot be removed here." data-delete-confirm="Remove" onsubmit="return dinedConfirmDelete(event, this)"><input type="hidden" name="q" value="{{$.Query}}"><button class="danger history-remove-button" type="submit" aria-label="Remove {{.Restaurant.Name}} from saved spots">Remove</button></form>{{end}}</article>{{end}}</div>{{else if .Query}}<p class="empty">No saved dines match that search yet.</p>{{end}}
+    {{if .Places}}<h2>Around Town</h2><div class="restaurant-list places-list">{{range .Places}}<article class="restaurant-row place-row"><div><strong>{{.DisplayName.Text}}</strong>{{if .Rating}}<em>{{score .Rating}} Google</em>{{end}}</div><span>{{.Address}}</span><span>{{if price .PriceLevel}}{{dollars (price .PriceLevel)}}{{else}}Price not listed{{end}}</span>{{if $.Authenticated}}<a class="small-cta" href="/log?restaurant_name={{query .DisplayName.Text}}&address={{query .Address}}&city={{query (placeCity .)}}&google_place_id={{query .ID}}{{if .Phone}}&phone={{query .Phone}}{{end}}{{if .Website}}&website={{query .Website}}{{end}}{{if .Rating}}&google_rating={{query (printf "%.1f" .Rating)}}{{end}}{{if price .PriceLevel}}&google_price_level={{price .PriceLevel}}{{end}}{{if .Location.Latitude}}&latitude={{query (printf "%.6f" .Location.Latitude)}}{{end}}{{if .Location.Longitude}}&longitude={{query (printf "%.6f" .Location.Longitude)}}{{end}}&category={{query (placeCategory .)}}&price_level={{price .PriceLevel}}">Log this dine</a>{{end}}</article>{{end}}</div>{{end}}
+  </section>
+</main>
+{{template "bottom" .}}
+{{end}}
+

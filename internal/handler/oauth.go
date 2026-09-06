@@ -161,22 +161,27 @@ func googleLoginPath(redirect string) string {
 	return target
 }
 
-func isSafeRedirectPath(path string) bool {
-	if path == "" {
+func isSafeRedirectPath(target string) bool {
+	if containsUnsafeRedirectCharacters(target) {
 		return false
 	}
-	decoded, err := url.QueryUnescape(path)
-	if err != nil {
+	parsed, err := url.Parse(target)
+	if err != nil || parsed.Scheme != "" || parsed.Host != "" || parsed.Opaque != "" || parsed.User != nil {
 		return false
 	}
-	if !strings.HasPrefix(decoded, "/") || strings.HasPrefix(decoded, "//") {
+	// Browsers treat backslashes as slashes. Check the decoded path as well as
+	// the original URL so an encoded authority cannot become an external redirect.
+	if !strings.HasPrefix(parsed.Path, "/") || strings.HasPrefix(parsed.Path, "//") {
 		return false
 	}
-	parsed, err := url.Parse(decoded)
-	if err != nil {
-		return false
-	}
-	return parsed.Scheme == "" && parsed.Host == ""
+	decoded, err := url.PathUnescape(target)
+	return err == nil && !containsUnsafeRedirectCharacters(decoded)
+}
+
+func containsUnsafeRedirectCharacters(value string) bool {
+	return strings.ContainsFunc(value, func(r rune) bool {
+		return r == '\\' || r < 0x20 || r == 0x7f
+	})
 }
 
 func clearOAuthStateCookie(w http.ResponseWriter, secure bool) {

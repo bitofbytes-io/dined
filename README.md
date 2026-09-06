@@ -99,6 +99,12 @@ For an ephemeral preview without Postgres, set `DATA_STORE=memory` and omit the 
 
 ## Development
 
+PostgreSQL regression tests use `DINED_TEST_DATABASE_URL` and create isolated schemas that are removed afterward. Point it at a disposable database; the test account needs permission to create schemas and the `pgcrypto` extension. Without this variable, PostgreSQL tests are skipped. CI supplies a PostgreSQL service for every pull request.
+
+```bash
+DINED_TEST_DATABASE_URL='postgres://dined:change-me@localhost:5432/dined_test?sslmode=disable' make test
+```
+
 ```bash
 cp local.mk.example local.mk
 make run          # memory preview

@@ -1,0 +1,35 @@
+{{define "visit-edit"}}
+{{template "top" .}}
+<main class="page-band order-page">
+  {{with .Visit}}{{$visit := .}}
+  <form class="wide-ticket log-form order-pad console-pad" method="post" action="/visits/{{.ID}}">
+    <div class="section-head console-head">
+      <div><h1>Edit Dine</h1><p>{{.Restaurant.Name}}{{if .Restaurant.Address}} · {{.Restaurant.Address}}{{end}}</p></div>
+      <a class="secondary-button" href="/dines#{{.ID}}">Cancel</a>
+    </div>
+    <input type="hidden" name="restaurant_id" value="{{.Restaurant.ID}}">
+    <section class="form-section visit-console">
+      <div class="form-grid visit-form-grid">
+        <label>Date and time<input type="datetime-local" name="visited_at" value="{{datetime .VisitedAt}}"></label>
+        <label>Picked by<select name="picker_id" required>{{range $.People}}<option value="{{.ID}}" {{if eq $visit.Picker.ID .ID}}selected{{end}}>{{.Name}}</option>{{end}}</select></label>
+        <label>Price Level<select name="price_level"><option value="1" {{if eq .PriceLevel 1}}selected{{end}}>$</option><option value="2" {{if eq .PriceLevel 2}}selected{{end}}>$$</option><option value="3" {{if eq .PriceLevel 3}}selected{{end}}>$$$</option><option value="4" {{if eq .PriceLevel 4}}selected{{end}}>$$$$</option></select></label>
+      </div>
+    </section>
+    <fieldset class="ratings-field score-console"><legend>Rate Your Experience</legend>{{range $.People}}<label class="rating-card">{{if avatar .Name}}<img class="avatar-face" src="{{avatar .Name}}" alt="">{{else}}<span class="avatar-dot">{{slice .Name 0 1}}</span>{{end}}<span>{{.Name}}</span><input name="rating_{{.ID}}" type="number" min="0" max="10" step="0.5" inputmode="decimal" placeholder="0-10" value="{{ratingValue $visit .}}" data-half-step-rating></label>{{end}}</fieldset>
+    <fieldset class="tags-field chip-field"><legend>Tags</legend>{{range $.Tags}}<label><input type="checkbox" name="tag_id" value="{{.ID}}" {{if hasVisitTag $visit .}}checked{{end}}> <span>{{.Name}}</span></label>{{end}}<label class="new-tag">New tag<input name="new_tag" placeholder="Great fries"></label></fieldset>
+    <label class="notes-field">Notes<textarea name="notes" rows="4" placeholder="What should we remember next time?">{{str .Notes}}</textarea></label>
+    <section class="form-section photo-console" data-photo-uploader data-photo-limit="{{maxVisitPhotos}}">
+      <div class="photo-console-head"><div><h2>Photos</h2><p>Food, fun, memories. Up to {{maxVisitPhotos}}.</p></div></div>
+      <div class="photo-upload-strip" data-photo-upload-list data-photo-strip>
+        <label class="photo-add-tile" data-photo-add><span class="photo-add-mark">+</span><span>Add Photos</span><input type="file" accept="image/*" multiple data-photo-input hidden></label>
+        {{range $index, $photo := .Photos}}<div class="photo-upload-tile" data-photo-item><button type="button" class="photo-thumb photo-upload-preview" data-photo-preview data-photo-src="{{imageSrc $photo.DataURI}}" data-photo-alt="{{$visit.Restaurant.Name}} photo {{add1 $index}}"><img src="{{imageSrc $photo.DataURI}}" alt=""></button><input type="hidden" name="keep_photo_id" value="{{$photo.ID}}"><button type="button" class="photo-remove-button" data-photo-remove aria-label="Remove photo">Remove</button></div>{{end}}
+      </div>
+      <p class="photo-error" data-photo-error hidden></p>
+    </section>
+    <div class="form-actions console-actions"><a class="secondary-button" href="/restaurants/{{.Restaurant.ID}}/edit?return_visit_id={{.ID}}">Edit Restaurant Details</a><button class="primary-button">Save Changes</button></div>
+  </form>
+  {{end}}
+</main>
+{{template "bottom" .}}
+{{end}}
+

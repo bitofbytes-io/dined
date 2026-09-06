@@ -1,0 +1,24 @@
+{{define "visit-list"}}
+{{if .Visits}}
+  <div class="visit-list">
+  {{range .Visits}}
+    {{$visit := .}}<article class="visit-card" id="{{.ID}}">
+      <div class="visit-main">
+        <h3><a href="/restaurants/{{.Restaurant.ID}}">{{.Restaurant.Name}}</a>{{if .Restaurant.IsChain}} <span class="badge">Chain</span>{{end}}</h3>
+        <p class="visit-meta">{{date .VisitedAt}} · Picked by {{.Picker.Name}} · {{dollars .PriceLevel}}</p>
+        {{if .Restaurant.Address}}<p class="muted">{{.Restaurant.Address}}</p>{{end}}
+      </div>
+      <div class="score-disc">{{avg .}}</div>
+      <div class="ratings">{{range .Ratings}}<span>{{.Person.Name}} {{score .Score}}</span>{{end}}</div>
+      {{if .Tags}}<div class="tags">{{range .Tags}}<span>{{.Name}}</span>{{end}}</div>{{end}}
+      {{if .Notes}}<p class="note">{{.Notes}}</p>{{end}}
+      {{if .Photos}}<div class="visit-photo-strip" data-photo-strip>{{range $index, $photo := .Photos}}<button type="button" class="photo-thumb" data-photo-preview data-photo-src="{{imageSrc $photo.DataURI}}" data-photo-alt="{{$visit.Restaurant.Name}} photo {{add1 $index}}"><img src="{{imageSrc $photo.DataURI}}" alt=""></button>{{end}}</div>{{end}}
+      {{if and $.Authenticated (not $.ReadOnlyVisits)}}<div class="visit-actions"><a class="secondary-button" href="/visits/{{.ID}}/edit">Edit</a><form method="post" action="/visits/{{.ID}}/delete" hx-boost="false" data-delete-dine-form data-delete-title="Delete this dine?" data-delete-message="This removes the dine and its ratings from the ledger." data-delete-confirm="Delete" onsubmit="return dinedConfirmDelete(event, this)"><button class="danger">Delete</button></form></div>{{end}}
+    </article>
+  {{end}}
+  </div>
+{{else}}
+  <p class="empty">No dines logged yet.</p>
+{{end}}
+{{end}}
+
