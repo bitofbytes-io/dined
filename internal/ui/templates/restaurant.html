@@ -1,0 +1,14 @@
+{{define "restaurant"}}
+{{template "top" .}}
+<main class="page-band ledger-page">
+  <section class="wide-ticket ledger-panel">
+    {{with .Restaurant}}
+    <div class="section-head"><div><h1>{{.Name}} {{if .IsChain}}<span class="badge">Chain</span>{{end}}</h1>{{if .Address}}<p>{{.Address}}</p>{{end}}</div></div>
+    <dl class="details"><div class="detail-item"><dt>Category</dt><dd>{{if .Category}}{{.Category}}{{else}}-{{end}}</dd></div><div class="detail-item"><dt>Address</dt><dd>{{if .Address}}{{.Address}}{{else}}-{{end}}</dd></div><div class="detail-item"><dt>City</dt><dd>{{if .City}}{{.City}}{{else}}-{{end}}</dd></div><div class="detail-item"><dt>Phone</dt><dd>{{if .Phone}}{{.Phone}}{{else}}-{{end}}</dd></div><div class="detail-item"><dt>Website</dt><dd>{{if .Website}}<a href="{{.Website}}">{{.Website}}</a>{{else}}-{{end}}</dd></div><div class="detail-item"><dt>Google rating</dt><dd>{{if .GoogleRating}}{{floatInput .GoogleRating}}{{else}}-{{end}}</dd></div><div class="detail-item"><dt>Google price</dt><dd>{{if .GooglePriceLevel}}{{dollars (intValue .GooglePriceLevel)}}{{else}}-{{end}}</dd></div></dl>
+    {{end}}
+    {{template "visit-list" .}}
+  </section>
+</main>
+{{template "bottom" .}}
+{{end}}
+

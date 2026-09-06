@@ -1,0 +1,33 @@
+{{define "restaurant-edit"}}
+{{template "top" .}}
+<main class="page-band order-page">
+  {{with .Restaurant}}
+  {{if .GooglePlaceID}}<form id="restaurant-google-refresh-form" method="post" action="/restaurants/{{.ID}}/google-refresh">{{with $.ReturnVisitID}}<input type="hidden" name="return_visit_id" value="{{.}}">{{end}}</form>{{end}}
+  <form class="wide-ticket log-form order-pad console-pad" method="post" action="/restaurants/{{.ID}}">
+    <div class="section-head console-head">
+      <div><h1>Edit Restaurant</h1>{{if .GooglePlaceID}}<p>Google place: {{str .GooglePlaceID}}</p>{{end}}</div>
+      <a class="secondary-button" href="/restaurants/{{.ID}}">Cancel</a>
+    </div>
+    {{with $.ReturnVisitID}}<input type="hidden" name="return_visit_id" value="{{.}}">{{end}}
+    <section class="form-section restaurant-console">
+      <div class="form-grid restaurant-edit-grid">
+        <label>Restaurant<input name="restaurant_name" value="{{.Name}}" required></label>
+        <label>Category<input name="category" placeholder="American, Southern, Sushi..." value="{{str .Category}}"></label>
+        <label>Address<input name="address" placeholder="Optional" value="{{str .Address}}"></label>
+        <label>City<input name="city" placeholder="Optional" value="{{str .City}}"></label>
+        <label>Phone<input name="phone" placeholder="Optional" value="{{str .Phone}}"></label>
+        <label>Website<input name="website" type="url" placeholder="https://example.com" value="{{str .Website}}"></label>
+        <label>Google Rating<input name="google_rating" type="number" min="0" max="5" step="0.1" inputmode="decimal" placeholder="0-5" value="{{floatInput .GoogleRating}}"></label>
+        <label>Google Price<select name="google_price_level"><option></option><option value="1" {{if eq (intValue .GooglePriceLevel) 1}}selected{{end}}>$</option><option value="2" {{if eq (intValue .GooglePriceLevel) 2}}selected{{end}}>$$</option><option value="3" {{if eq (intValue .GooglePriceLevel) 3}}selected{{end}}>$$$</option><option value="4" {{if eq (intValue .GooglePriceLevel) 4}}selected{{end}}>$$$$</option></select></label>
+      </div>
+    </section>
+    <div class="form-actions console-actions">
+      <div>{{with $.ReturnVisitID}}<a class="secondary-button" href="/visits/{{.}}/edit">Return to Edit Dine</a>{{end}}</div>
+      <div class="section-actions"><label class="inline-check"><input type="checkbox" name="is_chain" value="true" {{if .IsChain}}checked{{end}}> Mark as chain</label>{{if .GooglePlaceID}}<button class="secondary-button" type="submit" form="restaurant-google-refresh-form">Refresh Google Info</button>{{end}}<button class="primary-button">Save Restaurant</button></div>
+    </div>
+  </form>
+  {{end}}
+</main>
+{{template "bottom" .}}
+{{end}}
+

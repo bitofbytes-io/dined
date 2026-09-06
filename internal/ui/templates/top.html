@@ -1,0 +1,45 @@
+{{define "top"}}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0d6f6f">
+  <title>{{.Title}}</title>
+  <link rel="manifest" href="/site.webmanifest?v=20260513">
+  <link rel="icon" href="/favicon.ico?v=20260513" sizes="any">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=20260513">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png?v=20260513">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png?v=20260513">
+  <link rel="stylesheet" href="{{asset "/static/styles.css"}}">
+  <script src="{{asset "/static/htmx.min.js"}}" defer></script>
+  <script>
+    (function () {
+      if (window.location.hostname !== "dined.bitofbytes.io") {
+        return;
+      }
+
+      var script = document.createElement("script");
+      script.async = true;
+      script.dataset.websiteId = "95e29ad0-5e97-4375-849b-fa5d7633d5a8";
+      script.src = "https://dined.bitofbytes.io/umami/script.js";
+      document.head.appendChild(script);
+    })();
+  </script>
+</head>
+	<body hx-boost="true">
+	  <div class="app-shell">
+	    <header class="topbar">
+	      <a class="brand" href="/" aria-label="Dined home"><img src="/static/assets/dined-logo-generated.png" alt="Dined"></a>
+	      <button class="nav-toggle" type="button" aria-controls="primary-nav" aria-expanded="false" onclick="var h=this.closest('.topbar'); var open=h.classList.toggle('nav-open'); this.setAttribute('aria-expanded', open ? 'true' : 'false');"><span></span><span></span><span></span><span class="sr-only">Menu</span></button>
+	      <nav class="nav" id="primary-nav" aria-label="Primary">
+	        <a href="/dines">Dines</a>
+	        {{if .Authenticated}}<a href="/nearby">Nearby</a><a href="/search">Search</a><a href="/log">Log</a>{{end}}
+	        <a href="/trophy-case">Trophy Case</a>
+	        {{if .Authenticated}}<form method="post" action="/logout"><button class="link-button">LOGOUT</button></form>{{else}}<a href="/login">Login</a>{{end}}
+      </nav>
+    </header>
+    {{if .Error}}<div class="flash" role="alert">{{.Error}}</div>{{end}}
+    {{if .Notice}}<div class="flash notice" role="status">{{.Notice}}</div>{{end}}
+{{end}}
+

@@ -1,0 +1,6 @@
+{{define "login"}}
+{{template "top" .}}
+<main class="page-band pass-page"><section class="login-card kitchen-pass"><p class="eyebrow">Private Counter</p><h1>Kitchen Pass</h1><a class="primary-button" href="/api/auth/google{{if .Query}}?redirect={{query .Query}}{{end}}" hx-boost="false">Continue with Google</a></section></main>
+{{template "bottom" .}}
+{{end}}
+

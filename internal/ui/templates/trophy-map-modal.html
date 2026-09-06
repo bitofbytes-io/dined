@@ -1,0 +1,15 @@
+{{define "trophy-map-modal"}}
+  <dialog class="trophy-map-modal" id="trophy-map-modal" aria-labelledby="trophy-map-title" tabindex="-1">
+    <div class="trophy-map-card">
+      <div class="trophy-map-head">
+        <h2 id="trophy-map-title">Places We've Dined</h2>
+        <button type="button" class="secondary-button trophy-map-close" onclick="dinedCloseTrophyMap()">Close</button>
+      </div>
+      <div class="trophy-map-stage">
+        <img src="/trophy-case/map.png" alt="Map of places where the family has dined" width="640" height="360">
+        {{range .TrophyMapLabels}}<span class="trophy-map-label" style="--map-label-left: {{.Left}}; --map-label-top: {{.Top}};">{{.Name}}</span>{{end}}
+      </div>
+    </div>
+  </dialog>
+{{end}}
+
