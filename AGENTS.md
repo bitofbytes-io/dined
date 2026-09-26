@@ -8,3 +8,4 @@
 - With Goose installed and `DATABASE_URL` configured locally, use `make migrate`, `make migrate-status`, and `make migrate-down` for database changes.
 - `make test` depends on `make check-css`; run `make tail-prod` after Tailwind source changes so `static/styles.css` stays synchronized.
 - Run `make test` so generated CSS synchronization is checked with the Go suite.
+- To include PostgreSQL regressions, point `DINED_TEST_DATABASE_URL` at a disposable database whose test account can create schemas and the `pgcrypto` extension; without it those tests skip. Match CI with `make test` and `go vet ./...`.
