@@ -357,3 +357,309 @@ func TestPostgresVisitsPageOffsets(t *testing.T) {
 		}
 	}
 }
+
+func postgresVisitInput(t *testing.T, store *Store, name string) model.VisitInput {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	people, err := store.People(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return model.VisitInput{
+		RestaurantName: name,
+		VisitedAt:      time.Now().Add(-time.Hour),
+		PickerID:       people[0].ID,
+		PriceLevel:     2,
+		Ratings:        map[uuid.UUID]float64{people[0].ID: 8},
+	}
+}
+
+func postgresVisitRestaurant(t *testing.T, store *Store, visitID uuid.UUID) model.Restaurant {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	visit, err := store.Visit(ctx, visitID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if visit == nil {
+		t.Fatalf("visit %s not found", visitID)
+	}
+	return visit.Restaurant
+}
+
+func countPostgresRows(t *testing.T, store *Store, query string, args ...any) int {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	var count int
+	if err := store.pool.QueryRow(ctx, query, args...).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	return count
+}
+
+func TestPostgresCreateVisitMatchesRestaurantByPlaceID(t *testing.T) {
+	store := postgresStore(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	first := postgresVisitInput(t, store, "Place Diner")
+	first.GooglePlaceID = "place-diner"
+	first.Category = "American"
+	firstID, err := store.CreateVisit(ctx, first)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	second := postgresVisitInput(t, store, "Place Diner Renamed")
+	second.GooglePlaceID = "place-diner"
+	second.Address = "12 Oak Street"
+	second.City = "Raleigh"
+	second.Category = "Diner"
+	secondID, err := store.CreateVisit(ctx, second)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	firstRestaurant := postgresVisitRestaurant(t, store, *firstID)
+	secondRestaurant := postgresVisitRestaurant(t, store, *secondID)
+	if firstRestaurant.ID != secondRestaurant.ID {
+		t.Fatalf("visits should share the place ID restaurant: %s != %s", firstRestaurant.ID, secondRestaurant.ID)
+	}
+	if secondRestaurant.Name != "Place Diner" || *secondRestaurant.Category != "American" {
+		t.Fatalf("existing restaurant values should be preserved: %#v", secondRestaurant)
+	}
+	if secondRestaurant.Address == nil || *secondRestaurant.Address != "12 Oak Street" || secondRestaurant.City == nil || *secondRestaurant.City != "Raleigh" {
+		t.Fatalf("missing restaurant values should be filled: %#v", secondRestaurant)
+	}
+	if got := countPostgresRows(t, store, "SELECT COUNT(*) FROM restaurants"); got != 1 {
+		t.Fatalf("restaurants = %d, want 1", got)
+	}
+}
+
+func TestPostgresCreateVisitMatchesRestaurantByNameAndAddress(t *testing.T) {
+	store := postgresStore(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	first := postgresVisitInput(t, store, "Corner Cafe")
+	first.Address = "5 Elm Street"
+	firstID, err := store.CreateVisit(ctx, first)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	second := postgresVisitInput(t, store, "  corner cafe ")
+	second.Address = "5 ELM STREET"
+	second.GooglePlaceID = "place-corner"
+	second.Category = "Cafe"
+	secondID, err := store.CreateVisit(ctx, second)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	other := postgresVisitInput(t, store, "Corner Cafe")
+	other.Address = "9 Pine Street"
+	otherID, err := store.CreateVisit(ctx, other)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	matched := postgresVisitRestaurant(t, store, *secondID)
+	if matched.ID != postgresVisitRestaurant(t, store, *firstID).ID {
+		t.Fatal("case-insensitive name and address should reuse the restaurant")
+	}
+	if matched.Name != "Corner Cafe" || matched.GooglePlaceID == nil || *matched.GooglePlaceID != "place-corner" || matched.Category == nil || *matched.Category != "Cafe" {
+		t.Fatalf("matched restaurant should keep its name and gain the place ID and category: %#v", matched)
+	}
+	if postgresVisitRestaurant(t, store, *otherID).ID == matched.ID {
+		t.Fatal("a different address should create a separate restaurant")
+	}
+}
+
+// A concurrent insert of the same place ID must resolve through ON CONFLICT instead of failing.
+func TestPostgresCreateVisitUpsertsConcurrentPlaceIDInsert(t *testing.T) {
+	store := postgresStore(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	racer, err := pgx.ConnectConfig(ctx, store.pool.Config().ConnConfig.Copy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer racer.Close(context.Background())
+	tx, err := racer.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(context.Background())
+	var racerID uuid.UUID
+	if err := tx.QueryRow(ctx, `
+		INSERT INTO restaurants (name, google_place_id)
+		VALUES ('Racing Diner', 'place-race')
+		RETURNING id`).Scan(&racerID); err != nil {
+		t.Fatal(err)
+	}
+
+	input := postgresVisitInput(t, store, "Racing Diner From Google")
+	input.GooglePlaceID = "place-race"
+	input.Address = "1 Main Street"
+	type result struct {
+		id  *uuid.UUID
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		id, err := store.CreateVisit(ctx, input)
+		done <- result{id, err}
+	}()
+
+	// The place ID lookup cannot see the uncommitted row, so CreateVisit reaches the
+	// INSERT and waits on the unique index until the racing transaction commits.
+	observer, err := pgx.ConnectConfig(ctx, store.pool.Config().ConnConfig.Copy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer observer.Close(context.Background())
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		var waiting int
+		if err := observer.QueryRow(ctx, `
+			SELECT COUNT(*) FROM pg_stat_activity
+			WHERE wait_event_type = 'Lock' AND query LIKE '%INSERT INTO restaurants%'`).Scan(&waiting); err != nil {
+			t.Fatal(err)
+		}
+		if waiting > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("CreateVisit never blocked on the conflicting restaurant insert")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	got := <-done
+	if got.err != nil {
+		t.Fatal(got.err)
+	}
+	restaurant := postgresVisitRestaurant(t, store, *got.id)
+	if restaurant.ID != racerID {
+		t.Fatalf("visit restaurant = %s, want concurrently inserted %s", restaurant.ID, racerID)
+	}
+	if restaurant.Name != "Racing Diner" || restaurant.Address == nil || *restaurant.Address != "1 Main Street" {
+		t.Fatalf("upsert should keep the name and fill missing values: %#v", restaurant)
+	}
+	if count := countPostgresRows(t, store, "SELECT COUNT(*) FROM restaurants WHERE google_place_id = 'place-race'"); count != 1 {
+		t.Fatalf("restaurants with place ID = %d, want 1", count)
+	}
+}
+
+func TestPostgresUpdateVisitReconcilesPhotos(t *testing.T) {
+	store := postgresStore(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	input := postgresVisitInput(t, store, "Photo Diner")
+	input.Photos = []model.VisitPhotoInput{
+		{DataURI: "data:image/jpeg;base64,b25l"},
+		{DataURI: "data:image/jpeg;base64,dHdv"},
+		{DataURI: "data:image/jpeg;base64,dGhyZWU="},
+	}
+	visitID, err := store.CreateVisit(ctx, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := store.Visit(ctx, *visitID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(created.Photos) != 3 {
+		t.Fatalf("created photos = %d, want 3", len(created.Photos))
+	}
+	one, two, three := created.Photos[0], created.Photos[1], created.Photos[2]
+
+	update := postgresVisitInput(t, store, "")
+	update.RestaurantID = &created.Restaurant.ID
+	update.KeepPhotoIDs = []uuid.UUID{three.ID, one.ID}
+	update.Photos = []model.VisitPhotoInput{{DataURI: "data:image/jpeg;base64,Zm91cg=="}}
+	if err := store.UpdateVisit(ctx, *visitID, update); err != nil {
+		t.Fatal(err)
+	}
+
+	updated, err := store.Visit(ctx, *visitID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(updated.Photos) != 3 {
+		t.Fatalf("updated photos = %#v", updated.Photos)
+	}
+	for i, want := range []model.VisitPhoto{three, one} {
+		got := updated.Photos[i]
+		if got.ID != want.ID || got.DataURI != want.DataURI || got.SortOrder != i || !got.CreatedAt.Equal(want.CreatedAt) {
+			t.Fatalf("kept photo %d = %#v, want %#v at sort order %d", i, got, want, i)
+		}
+	}
+	added := updated.Photos[2]
+	if added.ID == one.ID || added.ID == two.ID || added.ID == three.ID || added.DataURI != "data:image/jpeg;base64,Zm91cg==" || added.SortOrder != 2 || added.ByteCount != 4 {
+		t.Fatalf("new photo = %#v", added)
+	}
+	if removed, err := store.VisitPhoto(ctx, two.ID); err != nil || removed != nil {
+		t.Fatalf("removed photo = %#v, err = %v", removed, err)
+	}
+
+	update.KeepPhotoIDs = []uuid.UUID{two.ID}
+	update.Photos = nil
+	if err := store.UpdateVisit(ctx, *visitID, update); err == nil || !strings.Contains(err.Error(), "photo not found") {
+		t.Fatalf("keeping a photo from outside the visit error = %v", err)
+	}
+	unchanged, err := store.Visit(ctx, *visitID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(unchanged.Photos) != 3 || unchanged.Photos[0].ID != three.ID {
+		t.Fatalf("failed update should roll back photos: %#v", unchanged.Photos)
+	}
+}
+
+func TestPostgresDeleteVisitCascadesAndFreesRestaurant(t *testing.T) {
+	store := postgresStore(t)
+	visitID, restaurantID := createPostgresVisit(t, store)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	deleted, err := store.DeleteRestaurantIfUnvisited(ctx, restaurantID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deleted {
+		t.Fatal("restaurant with a visit should not be deleted")
+	}
+
+	if err := store.DeleteVisit(ctx, visitID); err != nil {
+		t.Fatal(err)
+	}
+	if visit, err := store.Visit(ctx, visitID); err != nil || visit != nil {
+		t.Fatalf("deleted visit = %#v, err = %v", visit, err)
+	}
+	for _, table := range []string{"visit_participant_ratings", "visit_tags", "visit_photos"} {
+		if count := countPostgresRows(t, store, "SELECT COUNT(*) FROM "+table+" WHERE visit_id = $1", visitID); count != 0 {
+			t.Fatalf("%s rows after delete = %d, want 0", table, count)
+		}
+	}
+
+	deleted, err = store.DeleteRestaurantIfUnvisited(ctx, restaurantID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !deleted {
+		t.Fatal("restaurant without visits should be deleted")
+	}
+	if restaurant, err := store.Restaurant(ctx, restaurantID); err != nil || restaurant != nil {
+		t.Fatalf("deleted restaurant = %#v, err = %v", restaurant, err)
+	}
+}
