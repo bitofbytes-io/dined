@@ -374,6 +374,27 @@ func (h *Handler) renderVisitEditError(w http.ResponseWriter, r *http.Request, i
 		http.NotFound(w, r)
 		return
 	}
+	overlayVisitEditPostForm(&data, r)
 	data.Error = message
 	h.render(w, "visit-edit", r, data)
+}
+
+// overlayVisitEditPostForm keeps the user's submitted edits, including photo changes, after a failed save.
+func overlayVisitEditPostForm(data *ui.PageData, r *http.Request) {
+	overlayLogPostForm(data, r)
+	data.PrefillFromPost = true
+
+	existing := map[string]model.VisitPhoto{}
+	for _, photo := range data.Visit.Photos {
+		existing[photo.ID.String()] = photo
+	}
+	visit := *data.Visit
+	visit.Photos = nil
+	for _, id := range r.PostForm["keep_photo_id"] {
+		if photo, ok := existing[id]; ok {
+			visit.Photos = append(visit.Photos, photo)
+			delete(existing, id)
+		}
+	}
+	data.Visit = &visit
 }

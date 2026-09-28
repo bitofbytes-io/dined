@@ -71,6 +71,7 @@ type PageData struct {
 	PrefillRatings          map[string]string
 	PrefillTagIDs           map[string]bool
 	PrefillPhotoDataURIs    []string
+	PrefillFromPost         bool
 	ReturnVisitID           string
 }
 

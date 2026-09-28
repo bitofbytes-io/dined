@@ -429,3 +429,98 @@ func visitByRestaurantName(visits []model.Visit, name string) *model.Visit {
 	}
 	return nil
 }
+
+func TestRouterUpdateVisitErrorPreservesPostedForm(t *testing.T) {
+	ctx := context.Background()
+	store := repository.NewMemoryStore()
+	people, err := store.People(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tags, err := store.Tags(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	visitID, err := store.CreateVisit(ctx, model.VisitInput{
+		RestaurantName: "Edit Error Diner",
+		VisitedAt:      time.Date(2026, 5, 10, 18, 0, 0, 0, time.UTC),
+		PickerID:       people[0].ID,
+		PriceLevel:     1,
+		Notes:          "Saved notes",
+		Ratings:        map[uuid.UUID]float64{people[0].ID: 6},
+		TagIDs:         []uuid.UUID{tags[0].ID},
+		Photos: []model.VisitPhotoInput{
+			{DataURI: "data:image/jpeg;base64,a2VlcA=="},
+			{DataURI: "data:image/jpeg;base64,ZHJvcA=="},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved, err := store.Visit(ctx, *visitID)
+	if err != nil || saved == nil {
+		t.Fatalf("saved visit = %#v, err = %v", saved, err)
+	}
+	keptPhoto, removedPhoto := saved.Photos[0], saved.Photos[1]
+	const newPhoto = "data:image/jpeg;base64,bmV3"
+
+	form := url.Values{}
+	form.Set("restaurant_id", saved.Restaurant.ID.String())
+	form.Set("visited_at", "2026-05-17T20:50")
+	form.Set("picker_id", people[1].ID.String())
+	form.Set("price_level", "4")
+	form.Set("notes", "Edited notes")
+	form.Set("new_tag", "Patio")
+	form.Set("rating_"+people[1].ID.String(), "") // Every rating cleared: validation fails.
+	form.Add("tag_id", tags[1].ID.String())
+	form.Add("keep_photo_id", keptPhoto.ID.String())
+	form.Add("photo_data_uri", newPhoto)
+
+	router, token := newAuthenticatedTestRouter(t, store)
+	req := httptest.NewRequest(http.MethodPost, "/visits/"+visitID.String(), strings.NewReader(form.Encode()))
+	setSameOrigin(req)
+	req.AddCookie(&http.Cookie{Name: middleware.CookieName, Value: token})
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("got status %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	rendered := rec.Body.String()
+	for _, fragment := range []string{
+		"at least one rating is required",
+		`name="visited_at" value="2026-05-17T20:50"`,
+		`value="` + people[1].ID.String() + `" selected>` + people[1].Name + `</option>`,
+		`value="4" selected>$$$$</option>`,
+		`name="tag_id" value="` + tags[1].ID.String() + `" checked`,
+		`name="new_tag" placeholder="Great fries" value="Patio"`,
+		`Edited notes</textarea>`,
+		`name="keep_photo_id" value="` + keptPhoto.ID.String() + `"`,
+		`name="photo_data_uri" value="` + newPhoto + `"`,
+	} {
+		if !strings.Contains(rendered, fragment) {
+			t.Fatalf("response missing %q:\n%s", fragment, rendered)
+		}
+	}
+	for _, fragment := range []string{
+		`value="` + people[0].ID.String() + `" selected>`,
+		`name="tag_id" value="` + tags[0].ID.String() + `" checked`,
+		`name="rating_` + people[0].ID.String() + `" type="number" min="0" max="10" step="0.5" inputmode="decimal" placeholder="0-10" value="6"`,
+		`name="keep_photo_id" value="` + removedPhoto.ID.String() + `"`,
+		"Saved notes",
+	} {
+		if strings.Contains(rendered, fragment) {
+			t.Fatalf("response should not restore saved value %q:\n%s", fragment, rendered)
+		}
+	}
+
+	unchanged, err := store.Visit(ctx, *visitID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unchanged.Picker.ID != people[0].ID || len(unchanged.Photos) != 2 || unchanged.Notes == nil || *unchanged.Notes != "Saved notes" {
+		t.Fatalf("failed update changed the saved visit: %#v", unchanged)
+	}
+}
