@@ -88,6 +88,8 @@ func isPublicReadRequest(r *http.Request) bool {
 		path == "/health" ||
 		path == "/site.webmanifest" ||
 		path == "/favicon.ico" ||
+		// Dine photos appear on the public home, dines, and restaurant pages.
+		strings.HasPrefix(path, "/photos/") ||
 		strings.HasPrefix(path, "/restaurants/") ||
 		strings.HasPrefix(path, "/static/")
 }

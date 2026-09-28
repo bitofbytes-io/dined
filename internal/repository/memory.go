@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"sort"
@@ -137,15 +138,51 @@ func (m *MemoryStore) Visit(_ context.Context, id uuid.UUID) (*model.Visit, erro
 	return nil, nil
 }
 
-func (m *MemoryStore) Visits(_ context.Context, limit int) ([]model.Visit, error) {
+func (m *MemoryStore) Visits(ctx context.Context, limit int) ([]model.Visit, error) {
+	return m.VisitsPage(ctx, limit, 0)
+}
+
+// VisitsPage mirrors the Postgres store: newest first, photo metadata without image data.
+func (m *MemoryStore) VisitsPage(_ context.Context, limit, offset int) ([]model.Visit, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	visits := append([]model.Visit(nil), m.visits...)
 	sortVisitsNewestFirst(visits)
+	visits = visits[min(max(offset, 0), len(visits)):]
 	if limit > 0 && len(visits) > limit {
 		visits = visits[:limit]
 	}
+	for i := range visits {
+		visits[i].Photos = photoMetadata(visits[i].Photos)
+	}
 	return visits, nil
+}
+
+func (m *MemoryStore) VisitPosition(_ context.Context, id uuid.UUID) (int, bool, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	visits := append([]model.Visit(nil), m.visits...)
+	sortVisitsNewestFirst(visits)
+	for i, visit := range visits {
+		if visit.ID == id {
+			return i, true, nil
+		}
+	}
+	return 0, false, nil
+}
+
+func (m *MemoryStore) VisitPhoto(_ context.Context, id uuid.UUID) (*model.VisitPhoto, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, visit := range m.visits {
+		for _, photo := range visit.Photos {
+			if photo.ID == id {
+				copy := photo
+				return &copy, nil
+			}
+		}
+	}
+	return nil, nil
 }
 
 func (m *MemoryStore) RestaurantVisits(_ context.Context, restaurantID uuid.UUID) ([]model.Visit, error) {
@@ -154,6 +191,7 @@ func (m *MemoryStore) RestaurantVisits(_ context.Context, restaurantID uuid.UUID
 	var visits []model.Visit
 	for _, visit := range m.visits {
 		if visit.Restaurant.ID == restaurantID {
+			visit.Photos = photoMetadata(visit.Photos)
 			visits = append(visits, visit)
 		}
 	}
@@ -161,19 +199,38 @@ func (m *MemoryStore) RestaurantVisits(_ context.Context, restaurantID uuid.UUID
 	return visits, nil
 }
 
-func (m *MemoryStore) RestaurantVisitSummaries(_ context.Context, restaurantID uuid.UUID) ([]model.Visit, error) {
+func (m *MemoryStore) RestaurantVisitSummaries(_ context.Context, restaurantIDs []uuid.UUID) (map[uuid.UUID][]model.Visit, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	var visits []model.Visit
+	wanted := make(map[uuid.UUID]bool, len(restaurantIDs))
+	for _, id := range restaurantIDs {
+		wanted[id] = true
+	}
+	summaries := map[uuid.UUID][]model.Visit{}
 	for _, visit := range m.visits {
-		if visit.Restaurant.ID == restaurantID {
+		if wanted[visit.Restaurant.ID] {
 			summary := visit
 			summary.Photos = nil
-			visits = append(visits, summary)
+			summaries[visit.Restaurant.ID] = append(summaries[visit.Restaurant.ID], summary)
 		}
 	}
-	sortVisitsNewestFirst(visits)
-	return visits, nil
+	for _, visits := range summaries {
+		sortVisitsNewestFirst(visits)
+	}
+	return summaries, nil
+}
+
+// photoMetadata copies photos without their image data, matching list reads from Postgres.
+func photoMetadata(photos []model.VisitPhoto) []model.VisitPhoto {
+	if photos == nil {
+		return nil
+	}
+	metadata := make([]model.VisitPhoto, len(photos))
+	for i, photo := range photos {
+		photo.DataURI = ""
+		metadata[i] = photo
+	}
+	return metadata
 }
 
 func (m *MemoryStore) VisitedRestaurantMapPoints(context.Context) ([]model.RestaurantMapPoint, error) {
@@ -529,6 +586,9 @@ func (m *MemoryStore) PickerTurn(context.Context) (model.PickerTurn, error) {
 func sortVisitsNewestFirst(visits []model.Visit) {
 	sort.Slice(visits, func(i, j int) bool {
 		if visits[i].VisitedAt.Equal(visits[j].VisitedAt) {
+			if visits[i].CreatedAt.Equal(visits[j].CreatedAt) {
+				return bytes.Compare(visits[i].ID[:], visits[j].ID[:]) < 0
+			}
 			return visits[i].CreatedAt.After(visits[j].CreatedAt)
 		}
 		return visits[i].VisitedAt.After(visits[j].VisitedAt)

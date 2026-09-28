@@ -52,6 +52,74 @@ func TestMemoryStoreVisitsNewestFirstUsesCreatedAtTieBreaker(t *testing.T) {
 	}
 }
 
+func TestMemoryStoreVisitsPageOffsetsAndOmitsPhotoData(t *testing.T) {
+	store := NewMemoryStore()
+	store.visits[0].Photos = photosFromInput(store.visits[0].ID, []model.VisitPhotoInput{{DataURI: testVisitPhotoDataURI}}, 0)
+	all, err := store.Visits(context.Background(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	page, err := store.VisitsPage(context.Background(), 2, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page) != 2 || page[0].ID != all[1].ID || page[1].ID != all[2].ID {
+		t.Fatalf("offset page = %#v", page)
+	}
+	if past, err := store.VisitsPage(context.Background(), 2, len(all)); err != nil || len(past) != 0 {
+		t.Fatalf("page past the end = %#v, err = %v", past, err)
+	}
+
+	listed := all[0]
+	if listed.ID != store.visits[0].ID || len(listed.Photos) != 1 || listed.Photos[0].DataURI != "" || listed.Photos[0].ByteCount != 5 {
+		t.Fatalf("listed photos should carry metadata only: %#v", listed.Photos)
+	}
+	if store.visits[0].Photos[0].DataURI != testVisitPhotoDataURI {
+		t.Fatal("listing visits must not clear stored photo data")
+	}
+	photo, err := store.VisitPhoto(context.Background(), listed.Photos[0].ID)
+	if err != nil || photo == nil || photo.DataURI != testVisitPhotoDataURI {
+		t.Fatalf("visit photo = %#v, err = %v", photo, err)
+	}
+	if missing, err := store.VisitPhoto(context.Background(), uuid.New()); err != nil || missing != nil {
+		t.Fatalf("missing photo = %#v, err = %v", missing, err)
+	}
+}
+
+func TestMemoryStoreVisitPositionMatchesVisitsOrder(t *testing.T) {
+	store := NewMemoryStore()
+	visits, err := store.Visits(context.Background(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for want, visit := range visits {
+		got, found, err := store.VisitPosition(context.Background(), visit.ID)
+		if err != nil || !found || got != want {
+			t.Fatalf("VisitPosition(%s) = %d, %v, %v; want %d", visit.ID, got, found, err, want)
+		}
+	}
+	if _, found, err := store.VisitPosition(context.Background(), uuid.New()); err != nil || found {
+		t.Fatalf("missing visit found = %v, err = %v", found, err)
+	}
+}
+
+func TestMemoryStoreRestaurantVisitSummariesGroupsByRestaurant(t *testing.T) {
+	store := NewMemoryStore()
+	first, second := store.restaurants[0].ID, store.restaurants[1].ID
+
+	summaries, err := store.RestaurantVisitSummaries(context.Background(), []uuid.UUID{first, second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(summaries) != 2 || len(summaries[first]) != 1 || len(summaries[second]) != 1 {
+		t.Fatalf("summaries = %#v", summaries)
+	}
+	if summaries[first][0].Restaurant.ID != first || summaries[second][0].Restaurant.ID != second {
+		t.Fatalf("summaries grouped under wrong restaurant: %#v", summaries)
+	}
+}
+
 func TestMemoryStoreVisitedRestaurantMapPointsDistinctVisitedRestaurants(t *testing.T) {
 	store := NewMemoryStore()
 	now := time.Date(2026, 5, 18, 20, 0, 0, 0, time.UTC)
@@ -230,10 +298,11 @@ func TestMemoryStoreRestaurantVisitSummariesOmitPhotos(t *testing.T) {
 	visit.Photos = photosFromInput(visit.ID, []model.VisitPhotoInput{{DataURI: testVisitPhotoDataURI}}, 0)
 	store.visits[0] = visit
 
-	summaries, err := store.RestaurantVisitSummaries(context.Background(), visit.Restaurant.ID)
+	summariesByRestaurant, err := store.RestaurantVisitSummaries(context.Background(), []uuid.UUID{visit.Restaurant.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
+	summaries := summariesByRestaurant[visit.Restaurant.ID]
 	if len(summaries) == 0 {
 		t.Fatal("expected restaurant visit summaries")
 	}

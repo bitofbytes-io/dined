@@ -29,6 +29,9 @@ type PageData struct {
 	Notice                  string
 	Visits                  []model.Visit
 	ReadOnlyVisits          bool
+	PrevPage                int
+	NextPage                int
+	DinesURL                string
 	Visit                   *model.Visit
 	People                  []model.Person
 	Tags                    []model.Tag
@@ -69,6 +72,7 @@ type PageData struct {
 	PrefillRatings          map[string]string
 	PrefillTagIDs           map[string]bool
 	PrefillPhotoDataURIs    []string
+	PrefillFromPost         bool
 	ReturnVisitID           string
 }
 

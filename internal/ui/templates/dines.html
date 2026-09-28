@@ -4,6 +4,7 @@
   <section class="wide-ticket ledger-panel">
 	    <div class="section-head"><div><h1>All Dines</h1></div>{{if .Authenticated}}<a class="small-cta" href="/log">Log a Dine</a>{{end}}</div>
     {{template "visit-list" .}}
+    {{if or .PrevPage .NextPage}}<nav class="pager" aria-label="Dines pages">{{if .PrevPage}}<a class="secondary-button" href="/dines{{if gt .PrevPage 1}}?page={{.PrevPage}}{{end}}" rel="prev">Newer</a>{{end}}{{if .NextPage}}<a class="secondary-button" href="/dines?page={{.NextPage}}" rel="next">Older</a>{{end}}</nav>{{end}}
   </section>
 </main>
 {{template "bottom" .}}

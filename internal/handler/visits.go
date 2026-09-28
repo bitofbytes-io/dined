@@ -28,13 +28,61 @@ func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
 	h.render(w, "home", r, ui.PageData{Visits: visits, PickerTurn: pickerTurn})
 }
 
+const (
+	dinesPageSize = 20
+	maxDinesPage  = 100000
+)
+
 func (h *Handler) Dines(w http.ResponseWriter, r *http.Request) {
-	visits, err := h.store.Visits(r.Context(), 0)
+	page, ok := dinesPage(r.URL.Query().Get("page"))
+	if !ok {
+		http.Error(w, "Invalid page", http.StatusBadRequest)
+		return
+	}
+	// Fetch one extra visit to learn whether an older page exists.
+	visits, err := h.store.VisitsPage(r.Context(), dinesPageSize+1, (page-1)*dinesPageSize)
 	if err != nil {
 		h.error(w, "all visits", err)
 		return
 	}
-	h.render(w, "dines", r, ui.PageData{Title: "All Dines", Visits: visits})
+	if page > 1 && len(visits) == 0 {
+		http.NotFound(w, r)
+		return
+	}
+	data := ui.PageData{Title: "All Dines", Visits: visits}
+	if len(visits) > dinesPageSize {
+		data.Visits = visits[:dinesPageSize]
+		data.NextPage = page + 1
+	}
+	if page > 1 {
+		data.PrevPage = page - 1
+	}
+	h.render(w, "dines", r, data)
+}
+
+// dinesVisitURL links to the /dines page that lists the visit, anchored to its card.
+func (h *Handler) dinesVisitURL(r *http.Request, id uuid.UUID) string {
+	target := "/dines"
+	position, found, err := h.store.VisitPosition(r.Context(), id)
+	if err != nil {
+		slog.Warn("visit position", "visit_id", id, "error", err)
+	}
+	if page := position/dinesPageSize + 1; found && page > 1 {
+		target += "?page=" + strconv.Itoa(page)
+	}
+	return target + "#" + id.String()
+}
+
+// dinesPage parses the optional 1-based page query value.
+func dinesPage(value string) (int, bool) {
+	if value == "" {
+		return 1, true
+	}
+	page, err := strconv.Atoi(value)
+	if err != nil || page < 1 || page > maxDinesPage {
+		return 0, false
+	}
+	return page, true
 }
 
 func (h *Handler) LogPage(w http.ResponseWriter, r *http.Request) {
@@ -72,7 +120,7 @@ func (h *Handler) CreateVisit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("visit created", "visit_id", visitID, "picker_id", input.PickerID, "rating_count", len(input.Ratings), "tag_count", len(input.TagIDs), "photo_count", len(input.Photos))
-	http.Redirect(w, r, "/dines#"+visitID.String(), http.StatusSeeOther)
+	http.Redirect(w, r, h.dinesVisitURL(r, *visitID), http.StatusSeeOther)
 }
 
 func (h *Handler) EditVisitPage(w http.ResponseWriter, r *http.Request) {
@@ -113,7 +161,7 @@ func (h *Handler) UpdateVisit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("visit updated", "visit_id", id, "picker_id", input.PickerID, "rating_count", len(input.Ratings), "tag_count", len(input.TagIDs), "photo_count", len(input.Photos))
-	http.Redirect(w, r, "/dines#"+id.String(), http.StatusSeeOther)
+	http.Redirect(w, r, h.dinesVisitURL(r, id), http.StatusSeeOther)
 }
 
 func (h *Handler) DeleteVisit(w http.ResponseWriter, r *http.Request) {
@@ -326,7 +374,7 @@ func (h *Handler) visitEditData(r *http.Request, id uuid.UUID) (ui.PageData, err
 	if err != nil {
 		return ui.PageData{}, err
 	}
-	return ui.PageData{Title: "Edit Dine", Visit: visit, People: people, Tags: tags}, nil
+	return ui.PageData{Title: "Edit Dine", Visit: visit, People: people, Tags: tags, DinesURL: h.dinesVisitURL(r, id)}, nil
 }
 
 func (h *Handler) renderVisitEditError(w http.ResponseWriter, r *http.Request, id uuid.UUID, message string) {
@@ -339,6 +387,27 @@ func (h *Handler) renderVisitEditError(w http.ResponseWriter, r *http.Request, i
 		http.NotFound(w, r)
 		return
 	}
+	overlayVisitEditPostForm(&data, r)
 	data.Error = message
 	h.render(w, "visit-edit", r, data)
+}
+
+// overlayVisitEditPostForm keeps the user's submitted edits, including photo changes, after a failed save.
+func overlayVisitEditPostForm(data *ui.PageData, r *http.Request) {
+	overlayLogPostForm(data, r)
+	data.PrefillFromPost = true
+
+	existing := map[string]model.VisitPhoto{}
+	for _, photo := range data.Visit.Photos {
+		existing[photo.ID.String()] = photo
+	}
+	visit := *data.Visit
+	visit.Photos = nil
+	for _, id := range r.PostForm["keep_photo_id"] {
+		if photo, ok := existing[id]; ok {
+			visit.Photos = append(visit.Photos, photo)
+			delete(existing, id)
+		}
+	}
+	data.Visit = &visit
 }

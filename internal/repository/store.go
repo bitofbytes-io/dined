@@ -24,8 +24,11 @@ type DinerStore interface {
 	Restaurant(context.Context, uuid.UUID) (*model.Restaurant, error)
 	Visit(context.Context, uuid.UUID) (*model.Visit, error)
 	Visits(context.Context, int) ([]model.Visit, error)
+	VisitsPage(ctx context.Context, limit, offset int) ([]model.Visit, error)
+	VisitPosition(context.Context, uuid.UUID) (int, bool, error)
+	VisitPhoto(context.Context, uuid.UUID) (*model.VisitPhoto, error)
 	RestaurantVisits(context.Context, uuid.UUID) ([]model.Visit, error)
-	RestaurantVisitSummaries(context.Context, uuid.UUID) ([]model.Visit, error)
+	RestaurantVisitSummaries(context.Context, []uuid.UUID) (map[uuid.UUID][]model.Visit, error)
 	VisitedRestaurantMapPoints(context.Context) ([]model.RestaurantMapPoint, error)
 	CreateVisit(context.Context, model.VisitInput) (*uuid.UUID, error)
 	UpdateVisit(context.Context, uuid.UUID, model.VisitInput) error
@@ -126,7 +129,7 @@ func (s *Store) Visit(ctx context.Context, id uuid.UUID) (*model.Visit, error) {
 	}
 	defer rows.Close()
 
-	visits, err := s.scanVisits(ctx, rows, true)
+	visits, err := s.scanVisits(ctx, rows, withPhotoData)
 	if err != nil {
 		return nil, err
 	}
@@ -137,10 +140,16 @@ func (s *Store) Visit(ctx context.Context, id uuid.UUID) (*model.Visit, error) {
 }
 
 func (s *Store) Visits(ctx context.Context, limit int) ([]model.Visit, error) {
-	query := visitSelectSQL() + ` ORDER BY v.visited_at DESC, v.created_at DESC`
-	args := []any{}
+	return s.VisitsPage(ctx, limit, 0)
+}
+
+// VisitsPage lists visits newest first. A limit of zero returns every visit after offset.
+// Photos carry metadata only; their image bytes are served by VisitPhoto.
+func (s *Store) VisitsPage(ctx context.Context, limit, offset int) ([]model.Visit, error) {
+	query := visitSelectSQL() + ` ORDER BY v.visited_at DESC, v.created_at DESC, v.id OFFSET $1`
+	args := []any{max(offset, 0)}
 	if limit > 0 {
-		query += ` LIMIT $1`
+		query += ` LIMIT $2`
 		args = append(args, limit)
 	}
 	rows, err := s.pool.Query(ctx, query, args...)
@@ -148,7 +157,47 @@ func (s *Store) Visits(ctx context.Context, limit int) ([]model.Visit, error) {
 		return nil, fmt.Errorf("list visits: %w", err)
 	}
 	defer rows.Close()
-	return s.scanVisits(ctx, rows, true)
+	return s.scanVisits(ctx, rows, withPhotoMetadata)
+}
+
+// VisitPosition returns the visit's zero-based index in VisitsPage ordering, or false if it does not exist.
+func (s *Store) VisitPosition(ctx context.Context, id uuid.UUID) (int, bool, error) {
+	var position int
+	err := s.pool.QueryRow(ctx, `
+		SELECT COUNT(v.id)
+		FROM dining_visits t
+		LEFT JOIN dining_visits v
+		  ON v.visited_at > t.visited_at
+		  OR (v.visited_at = t.visited_at AND v.created_at > t.created_at)
+		  OR (v.visited_at = t.visited_at AND v.created_at = t.created_at AND v.id < t.id)
+		WHERE t.id = $1
+		GROUP BY t.id`, id).Scan(&position)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, fmt.Errorf("visit position: %w", err)
+	}
+	return position, true, nil
+}
+
+func (s *Store) VisitPhoto(ctx context.Context, id uuid.UUID) (*model.VisitPhoto, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, visit_id, data_uri, content_type, byte_count, sort_order, created_at
+		FROM visit_photos
+		WHERE id = $1`, id)
+	if err != nil {
+		return nil, fmt.Errorf("visit photo: %w", err)
+	}
+	defer rows.Close()
+	photos, err := scanVisitPhotos(rows)
+	if err != nil {
+		return nil, fmt.Errorf("scan visit photo: %w", err)
+	}
+	if len(photos) == 0 {
+		return nil, nil
+	}
+	return &photos[0], nil
 }
 
 func (s *Store) RestaurantVisits(ctx context.Context, restaurantID uuid.UUID) ([]model.Visit, error) {
@@ -157,16 +206,28 @@ func (s *Store) RestaurantVisits(ctx context.Context, restaurantID uuid.UUID) ([
 		return nil, fmt.Errorf("list restaurant visits: %w", err)
 	}
 	defer rows.Close()
-	return s.scanVisits(ctx, rows, true)
+	return s.scanVisits(ctx, rows, withPhotoMetadata)
 }
 
-func (s *Store) RestaurantVisitSummaries(ctx context.Context, restaurantID uuid.UUID) ([]model.Visit, error) {
-	rows, err := s.pool.Query(ctx, visitSelectSQL()+` WHERE v.restaurant_id = $1 ORDER BY v.visited_at DESC, v.created_at DESC`, restaurantID)
+// RestaurantVisitSummaries loads photo-free visits for several restaurants at once, keyed by restaurant ID.
+func (s *Store) RestaurantVisitSummaries(ctx context.Context, restaurantIDs []uuid.UUID) (map[uuid.UUID][]model.Visit, error) {
+	summaries := map[uuid.UUID][]model.Visit{}
+	if len(restaurantIDs) == 0 {
+		return summaries, nil
+	}
+	rows, err := s.pool.Query(ctx, visitSelectSQL()+` WHERE v.restaurant_id = ANY($1) ORDER BY v.visited_at DESC, v.created_at DESC`, restaurantIDs)
 	if err != nil {
 		return nil, fmt.Errorf("list restaurant visit summaries: %w", err)
 	}
 	defer rows.Close()
-	return s.scanVisits(ctx, rows, false)
+	visits, err := s.scanVisits(ctx, rows, withoutPhotos)
+	if err != nil {
+		return nil, err
+	}
+	for _, visit := range visits {
+		summaries[visit.Restaurant.ID] = append(summaries[visit.Restaurant.ID], visit)
+	}
+	return summaries, nil
 }
 
 func (s *Store) VisitedRestaurantMapPoints(ctx context.Context) ([]model.RestaurantMapPoint, error) {
@@ -738,7 +799,16 @@ func (s *Store) PickerTurn(ctx context.Context) (model.PickerTurn, error) {
 	return model.PickerTurn{LastPicker: last, NextPicker: next}, nil
 }
 
-func (s *Store) scanVisits(ctx context.Context, rows pgx.Rows, includePhotos bool) ([]model.Visit, error) {
+// photoDetail controls how much photo data scanVisits loads alongside each visit.
+type photoDetail int
+
+const (
+	withoutPhotos photoDetail = iota
+	withPhotoMetadata
+	withPhotoData
+)
+
+func (s *Store) scanVisits(ctx context.Context, rows pgx.Rows, photos photoDetail) ([]model.Visit, error) {
 	defer rows.Close()
 	var visits []model.Visit
 	for rows.Next() {
@@ -780,25 +850,36 @@ func (s *Store) scanVisits(ctx context.Context, rows pgx.Rows, includePhotos boo
 	// Release the base query connection before loading related records from the pool.
 	rows.Close()
 
-	for i := range visits {
-		visit := &visits[i]
-		var err error
-		visit.Ratings, err = s.visitRatings(ctx, visit.ID)
-		if err != nil {
-			return nil, err
-		}
-		visit.Tags, err = s.visitTags(ctx, visit.ID)
-		if err != nil {
-			return nil, err
-		}
-		if includePhotos {
-			visit.Photos, err = s.visitPhotos(ctx, visit.ID)
-			if err != nil {
-				return nil, err
-			}
-		}
+	if err := s.loadVisitRelations(ctx, visits, photos); err != nil {
+		return nil, err
 	}
 	return visits, nil
+}
+
+// loadVisitRelations fills ratings, tags, and optionally photos with one query per relation.
+func (s *Store) loadVisitRelations(ctx context.Context, visits []model.Visit, photos photoDetail) error {
+	if len(visits) == 0 {
+		return nil
+	}
+	ids := make([]uuid.UUID, len(visits))
+	byID := make(map[uuid.UUID]*model.Visit, len(visits))
+	for i := range visits {
+		ids[i] = visits[i].ID
+		byID[visits[i].ID] = &visits[i]
+	}
+
+	if err := s.loadVisitRatings(ctx, ids, byID); err != nil {
+		return err
+	}
+	if err := s.loadVisitTags(ctx, ids, byID); err != nil {
+		return err
+	}
+	if photos != withoutPhotos {
+		if err := s.loadVisitPhotos(ctx, ids, byID, photos == withPhotoData); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func insertVisitPhotos(ctx context.Context, tx pgx.Tx, visitID uuid.UUID, photos []model.VisitPhotoInput, startOrder int) error {
@@ -872,63 +953,81 @@ func visitPhotosForTx(ctx context.Context, tx pgx.Tx, visitID uuid.UUID) ([]mode
 	return scanVisitPhotos(rows)
 }
 
-func (s *Store) visitRatings(ctx context.Context, visitID uuid.UUID) ([]model.Rating, error) {
+func (s *Store) loadVisitRatings(ctx context.Context, ids []uuid.UUID, byID map[uuid.UUID]*model.Visit) error {
 	rows, err := s.pool.Query(ctx, `
-		SELECT p.id, p.name, p.avatar_color, r.rating
+		SELECT r.visit_id, p.id, p.name, p.avatar_color, r.rating
 		FROM visit_participant_ratings r
 		JOIN persons p ON p.id = r.person_id
-		WHERE r.visit_id = $1
-		ORDER BY p.sort_order`, visitID)
+		WHERE r.visit_id = ANY($1)
+		ORDER BY p.sort_order`, ids)
 	if err != nil {
-		return nil, fmt.Errorf("list visit ratings: %w", err)
+		return fmt.Errorf("list visit ratings: %w", err)
 	}
 	defer rows.Close()
 
-	var ratings []model.Rating
 	for rows.Next() {
+		var visitID uuid.UUID
 		var rating model.Rating
-		if err := rows.Scan(&rating.Person.ID, &rating.Person.Name, &rating.Person.AvatarColor, &rating.Score); err != nil {
-			return nil, err
+		if err := rows.Scan(&visitID, &rating.Person.ID, &rating.Person.Name, &rating.Person.AvatarColor, &rating.Score); err != nil {
+			return fmt.Errorf("scan visit rating: %w", err)
 		}
-		ratings = append(ratings, rating)
+		if visit := byID[visitID]; visit != nil {
+			visit.Ratings = append(visit.Ratings, rating)
+		}
 	}
-	return ratings, rows.Err()
+	return rows.Err()
 }
 
-func (s *Store) visitTags(ctx context.Context, visitID uuid.UUID) ([]model.Tag, error) {
+func (s *Store) loadVisitTags(ctx context.Context, ids []uuid.UUID, byID map[uuid.UUID]*model.Visit) error {
 	rows, err := s.pool.Query(ctx, `
-		SELECT t.id, t.name
+		SELECT vt.visit_id, t.id, t.name
 		FROM visit_tags vt
 		JOIN tags t ON t.id = vt.tag_id
-		WHERE vt.visit_id = $1
-		ORDER BY t.name`, visitID)
+		WHERE vt.visit_id = ANY($1)
+		ORDER BY t.name`, ids)
 	if err != nil {
-		return nil, fmt.Errorf("list visit tags: %w", err)
+		return fmt.Errorf("list visit tags: %w", err)
 	}
 	defer rows.Close()
 
-	var tags []model.Tag
 	for rows.Next() {
+		var visitID uuid.UUID
 		var tag model.Tag
-		if err := rows.Scan(&tag.ID, &tag.Name); err != nil {
-			return nil, err
+		if err := rows.Scan(&visitID, &tag.ID, &tag.Name); err != nil {
+			return fmt.Errorf("scan visit tag: %w", err)
 		}
-		tags = append(tags, tag)
+		if visit := byID[visitID]; visit != nil {
+			visit.Tags = append(visit.Tags, tag)
+		}
 	}
-	return tags, rows.Err()
+	return rows.Err()
 }
 
-func (s *Store) visitPhotos(ctx context.Context, visitID uuid.UUID) ([]model.VisitPhoto, error) {
+// loadVisitPhotos attaches photo metadata, plus the stored data URI only when includeData is set.
+func (s *Store) loadVisitPhotos(ctx context.Context, ids []uuid.UUID, byID map[uuid.UUID]*model.Visit, includeData bool) error {
+	dataColumn := "''"
+	if includeData {
+		dataColumn = "data_uri"
+	}
 	rows, err := s.pool.Query(ctx, `
-		SELECT id, visit_id, data_uri, content_type, byte_count, sort_order, created_at
+		SELECT id, visit_id, `+dataColumn+`, content_type, byte_count, sort_order, created_at
 		FROM visit_photos
-		WHERE visit_id = $1
-		ORDER BY sort_order, created_at, id`, visitID)
+		WHERE visit_id = ANY($1)
+		ORDER BY sort_order, created_at, id`, ids)
 	if err != nil {
-		return nil, fmt.Errorf("list visit photos: %w", err)
+		return fmt.Errorf("list visit photos: %w", err)
 	}
 	defer rows.Close()
-	return scanVisitPhotos(rows)
+	photos, err := scanVisitPhotos(rows)
+	if err != nil {
+		return fmt.Errorf("scan visit photos: %w", err)
+	}
+	for _, photo := range photos {
+		if visit := byID[photo.VisitID]; visit != nil {
+			visit.Photos = append(visit.Photos, photo)
+		}
+	}
+	return nil
 }
 
 func scanVisitPhotos(rows pgx.Rows) ([]model.VisitPhoto, error) {
