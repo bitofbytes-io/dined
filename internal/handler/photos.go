@@ -1,17 +1,19 @@
 package handler
 
 import (
+	"bytes"
 	"log/slog"
 	"net/http"
-	"strconv"
+	"time"
 
 	"github.com/bitofbytes-io/dined/internal/model"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
-// Photo IDs are never reused and kept photos retain their bytes, so a photo URL's content never changes.
-const photoCacheControl = "public, max-age=604800, immutable"
+// A photo ID's bytes never change, so the ID is a strong ETag. The short max-age bounds how long a
+// deleted photo can still be served from a cache; after that, clients revalidate and get a 304 or 404.
+const photoCacheControl = "public, max-age=300"
 
 // Photo serves a stored dine photo so list pages can reference it by URL instead of embedding it.
 func (h *Handler) Photo(w http.ResponseWriter, r *http.Request) {
@@ -36,8 +38,8 @@ func (h *Handler) Photo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "image/jpeg")
-	w.Header().Set("Content-Length", strconv.Itoa(len(image)))
 	w.Header().Set("Cache-Control", photoCacheControl)
+	w.Header().Set("ETag", `"`+photo.ID.String()+`"`)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	_, _ = w.Write(image)
+	http.ServeContent(w, r, "", time.Time{}, bytes.NewReader(image))
 }

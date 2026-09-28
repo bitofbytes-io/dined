@@ -663,3 +663,35 @@ func TestPostgresDeleteVisitCascadesAndFreesRestaurant(t *testing.T) {
 		t.Fatalf("deleted restaurant = %#v, err = %v", restaurant, err)
 	}
 }
+
+func TestPostgresVisitPositionMatchesVisitsPageOrder(t *testing.T) {
+	store := postgresStore(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	sameTime := time.Now().Add(-2 * time.Hour).Truncate(time.Second)
+	for i := range 6 {
+		input := postgresVisitInput(t, store, "Position diner "+strconv.Itoa(i))
+		input.VisitedAt = sameTime.Add(-time.Duration(i%3) * time.Minute) // Pairs share a visit time.
+		if _, err := store.CreateVisit(ctx, input); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Force a full tie on visited_at and created_at so the id tie-breaker decides.
+	if _, err := store.pool.Exec(ctx, "UPDATE dining_visits SET created_at = $1 WHERE visited_at = $2", sameTime, sameTime); err != nil {
+		t.Fatal(err)
+	}
+
+	visits, err := store.VisitsPage(ctx, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for want, visit := range visits {
+		got, found, err := store.VisitPosition(ctx, visit.ID)
+		if err != nil || !found || got != want {
+			t.Fatalf("VisitPosition(%s) = %d, %v, %v; want %d", visit.ID, got, found, err, want)
+		}
+	}
+	if _, found, err := store.VisitPosition(ctx, uuid.New()); err != nil || found {
+		t.Fatalf("missing visit found = %v, err = %v", found, err)
+	}
+}

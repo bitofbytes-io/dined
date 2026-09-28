@@ -158,6 +158,19 @@ func (m *MemoryStore) VisitsPage(_ context.Context, limit, offset int) ([]model.
 	return visits, nil
 }
 
+func (m *MemoryStore) VisitPosition(_ context.Context, id uuid.UUID) (int, bool, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	visits := append([]model.Visit(nil), m.visits...)
+	sortVisitsNewestFirst(visits)
+	for i, visit := range visits {
+		if visit.ID == id {
+			return i, true, nil
+		}
+	}
+	return 0, false, nil
+}
+
 func (m *MemoryStore) VisitPhoto(_ context.Context, id uuid.UUID) (*model.VisitPhoto, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

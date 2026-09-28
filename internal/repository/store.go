@@ -25,6 +25,7 @@ type DinerStore interface {
 	Visit(context.Context, uuid.UUID) (*model.Visit, error)
 	Visits(context.Context, int) ([]model.Visit, error)
 	VisitsPage(ctx context.Context, limit, offset int) ([]model.Visit, error)
+	VisitPosition(context.Context, uuid.UUID) (int, bool, error)
 	VisitPhoto(context.Context, uuid.UUID) (*model.VisitPhoto, error)
 	RestaurantVisits(context.Context, uuid.UUID) ([]model.Visit, error)
 	RestaurantVisitSummaries(context.Context, []uuid.UUID) (map[uuid.UUID][]model.Visit, error)
@@ -157,6 +158,27 @@ func (s *Store) VisitsPage(ctx context.Context, limit, offset int) ([]model.Visi
 	}
 	defer rows.Close()
 	return s.scanVisits(ctx, rows, withPhotoMetadata)
+}
+
+// VisitPosition returns the visit's zero-based index in VisitsPage ordering, or false if it does not exist.
+func (s *Store) VisitPosition(ctx context.Context, id uuid.UUID) (int, bool, error) {
+	var position int
+	err := s.pool.QueryRow(ctx, `
+		SELECT COUNT(v.id)
+		FROM dining_visits t
+		LEFT JOIN dining_visits v
+		  ON v.visited_at > t.visited_at
+		  OR (v.visited_at = t.visited_at AND v.created_at > t.created_at)
+		  OR (v.visited_at = t.visited_at AND v.created_at = t.created_at AND v.id < t.id)
+		WHERE t.id = $1
+		GROUP BY t.id`, id).Scan(&position)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, false, nil
+	}
+	if err != nil {
+		return 0, false, fmt.Errorf("visit position: %w", err)
+	}
+	return position, true, nil
 }
 
 func (s *Store) VisitPhoto(ctx context.Context, id uuid.UUID) (*model.VisitPhoto, error) {

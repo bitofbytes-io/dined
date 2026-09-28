@@ -7,7 +7,7 @@
   <form class="wide-ticket log-form order-pad console-pad" method="post" action="/visits/{{.ID}}">
     <div class="section-head console-head">
       <div><h1>Edit Dine</h1><p>{{.Restaurant.Name}}{{if .Restaurant.Address}} · {{.Restaurant.Address}}{{end}}</p></div>
-      <a class="secondary-button" href="/dines#{{.ID}}">Cancel</a>
+      <a class="secondary-button" href="{{if $.DinesURL}}{{$.DinesURL}}{{else}}/dines#{{.ID}}{{end}}">Cancel</a>
     </div>
     <input type="hidden" name="restaurant_id" value="{{.Restaurant.ID}}">
     <section class="form-section visit-console">

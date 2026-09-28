@@ -87,6 +87,23 @@ func TestMemoryStoreVisitsPageOffsetsAndOmitsPhotoData(t *testing.T) {
 	}
 }
 
+func TestMemoryStoreVisitPositionMatchesVisitsOrder(t *testing.T) {
+	store := NewMemoryStore()
+	visits, err := store.Visits(context.Background(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for want, visit := range visits {
+		got, found, err := store.VisitPosition(context.Background(), visit.ID)
+		if err != nil || !found || got != want {
+			t.Fatalf("VisitPosition(%s) = %d, %v, %v; want %d", visit.ID, got, found, err, want)
+		}
+	}
+	if _, found, err := store.VisitPosition(context.Background(), uuid.New()); err != nil || found {
+		t.Fatalf("missing visit found = %v, err = %v", found, err)
+	}
+}
+
 func TestMemoryStoreRestaurantVisitSummariesGroupsByRestaurant(t *testing.T) {
 	store := NewMemoryStore()
 	first, second := store.restaurants[0].ID, store.restaurants[1].ID

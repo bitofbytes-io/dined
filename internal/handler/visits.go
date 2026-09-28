@@ -60,6 +60,19 @@ func (h *Handler) Dines(w http.ResponseWriter, r *http.Request) {
 	h.render(w, "dines", r, data)
 }
 
+// dinesVisitURL links to the /dines page that lists the visit, anchored to its card.
+func (h *Handler) dinesVisitURL(r *http.Request, id uuid.UUID) string {
+	target := "/dines"
+	position, found, err := h.store.VisitPosition(r.Context(), id)
+	if err != nil {
+		slog.Warn("visit position", "visit_id", id, "error", err)
+	}
+	if page := position/dinesPageSize + 1; found && page > 1 {
+		target += "?page=" + strconv.Itoa(page)
+	}
+	return target + "#" + id.String()
+}
+
 // dinesPage parses the optional 1-based page query value.
 func dinesPage(value string) (int, bool) {
 	if value == "" {
@@ -107,7 +120,7 @@ func (h *Handler) CreateVisit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("visit created", "visit_id", visitID, "picker_id", input.PickerID, "rating_count", len(input.Ratings), "tag_count", len(input.TagIDs), "photo_count", len(input.Photos))
-	http.Redirect(w, r, "/dines#"+visitID.String(), http.StatusSeeOther)
+	http.Redirect(w, r, h.dinesVisitURL(r, *visitID), http.StatusSeeOther)
 }
 
 func (h *Handler) EditVisitPage(w http.ResponseWriter, r *http.Request) {
@@ -148,7 +161,7 @@ func (h *Handler) UpdateVisit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("visit updated", "visit_id", id, "picker_id", input.PickerID, "rating_count", len(input.Ratings), "tag_count", len(input.TagIDs), "photo_count", len(input.Photos))
-	http.Redirect(w, r, "/dines#"+id.String(), http.StatusSeeOther)
+	http.Redirect(w, r, h.dinesVisitURL(r, id), http.StatusSeeOther)
 }
 
 func (h *Handler) DeleteVisit(w http.ResponseWriter, r *http.Request) {
@@ -361,7 +374,7 @@ func (h *Handler) visitEditData(r *http.Request, id uuid.UUID) (ui.PageData, err
 	if err != nil {
 		return ui.PageData{}, err
 	}
-	return ui.PageData{Title: "Edit Dine", Visit: visit, People: people, Tags: tags}, nil
+	return ui.PageData{Title: "Edit Dine", Visit: visit, People: people, Tags: tags, DinesURL: h.dinesVisitURL(r, id)}, nil
 }
 
 func (h *Handler) renderVisitEditError(w http.ResponseWriter, r *http.Request, id uuid.UUID, message string) {

@@ -31,6 +31,7 @@ type PageData struct {
 	ReadOnlyVisits          bool
 	PrevPage                int
 	NextPage                int
+	DinesURL                string
 	Visit                   *model.Visit
 	People                  []model.Person
 	Tags                    []model.Tag
