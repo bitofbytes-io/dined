@@ -29,6 +29,8 @@ type PageData struct {
 	Notice                  string
 	Visits                  []model.Visit
 	ReadOnlyVisits          bool
+	PrevPage                int
+	NextPage                int
 	Visit                   *model.Visit
 	People                  []model.Person
 	Tags                    []model.Tag

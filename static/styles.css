@@ -725,6 +725,15 @@ a:focus-visible, button:focus-visible {
 .visit-actions form {
   margin: 0;
 }
+.pager {
+  display: flex;
+  justify-content: space-between;
+  gap: .65rem;
+  margin-top: 1rem;
+}
+.pager [rel="next"] {
+  margin-left: auto;
+}
 .confirm-modal {
   width: min(calc(100% - 2rem), 28rem);
   padding: 0;

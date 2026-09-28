@@ -62,22 +62,31 @@ func (in VisitInput) Validate() error {
 }
 
 func ValidateVisitPhotoDataURI(raw string) (int, error) {
+	decoded, err := DecodeVisitPhotoDataURI(raw)
+	if err != nil {
+		return 0, err
+	}
+	return len(decoded), nil
+}
+
+// DecodeVisitPhotoDataURI validates a stored or submitted JPEG data URI and returns its image bytes.
+func DecodeVisitPhotoDataURI(raw string) ([]byte, error) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
-		return 0, errors.New("photo data is required")
+		return nil, errors.New("photo data is required")
 	}
 	if !strings.HasPrefix(strings.ToLower(trimmed), visitPhotoPrefix) {
-		return 0, errors.New("dine photos must be JPEG images")
+		return nil, errors.New("dine photos must be JPEG images")
 	}
 	encoded := trimmed[len(visitPhotoPrefix):]
 	decoded, err := base64.StdEncoding.DecodeString(encoded)
 	if err != nil {
-		return 0, errors.New("dine photos must contain valid base64 image data")
+		return nil, errors.New("dine photos must contain valid base64 image data")
 	}
 	if len(decoded) > MaxVisitPhotoBytes {
-		return 0, fmt.Errorf("dine photos must be smaller than %dKB", MaxVisitPhotoBytes/1024)
+		return nil, fmt.Errorf("dine photos must be smaller than %dKB", MaxVisitPhotoBytes/1024)
 	}
-	return len(decoded), nil
+	return decoded, nil
 }
 
 func (in RestaurantInput) Validate() error {

@@ -279,13 +279,17 @@ func (h *Handler) renderRestaurantEditError(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *Handler) searchResults(r *http.Request, restaurants []model.Restaurant) ([]ui.RestaurantResult, error) {
+	ids := make([]uuid.UUID, len(restaurants))
+	for i, restaurant := range restaurants {
+		ids[i] = restaurant.ID
+	}
+	visitsByRestaurant, err := h.store.RestaurantVisitSummaries(r.Context(), ids)
+	if err != nil {
+		return nil, err
+	}
 	results := make([]ui.RestaurantResult, 0, len(restaurants))
 	for _, restaurant := range restaurants {
-		visits, err := h.store.RestaurantVisitSummaries(r.Context(), restaurant.ID)
-		if err != nil {
-			return nil, err
-		}
-		results = append(results, restaurantResult(restaurant, visits))
+		results = append(results, restaurantResult(restaurant, visitsByRestaurant[restaurant.ID]))
 	}
 	return results, nil
 }

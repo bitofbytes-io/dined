@@ -508,6 +508,7 @@ func TestRenderAuthenticatedDinesUsesEditLinkAndDeleteConfirmationModal(t *testi
 func TestRenderDinesShowsPhotoStripAndPreviewHooks(t *testing.T) {
 	visitID := uuid.New()
 	restaurantID := uuid.New()
+	photos := []model.VisitPhoto{{ID: uuid.New()}, {ID: uuid.New()}, {ID: uuid.New()}, {ID: uuid.New()}}
 	var out strings.Builder
 	err := Render(&out, "dines", PageData{
 		Visits: []model.Visit{{
@@ -517,12 +518,7 @@ func TestRenderDinesShowsPhotoStripAndPreviewHooks(t *testing.T) {
 			Picker:     model.Person{Name: "Daniel"},
 			PriceLevel: 2,
 			Ratings:    []model.Rating{{Person: model.Person{Name: "Daniel"}, Score: 8}},
-			Photos: []model.VisitPhoto{
-				{ID: uuid.New(), DataURI: testPhotoDataURI},
-				{ID: uuid.New(), DataURI: "data:image/jpeg;base64,dHdv"},
-				{ID: uuid.New(), DataURI: "data:image/jpeg;base64,dGhyZWU="},
-				{ID: uuid.New(), DataURI: "data:image/jpeg;base64,Zm91cg=="},
-			},
+			Photos:     photos,
 		}},
 	})
 	if err != nil {
@@ -531,8 +527,8 @@ func TestRenderDinesShowsPhotoStripAndPreviewHooks(t *testing.T) {
 	rendered := out.String()
 	for _, fragment := range []string{
 		`class="visit-photo-strip" data-photo-strip`,
-		`data-photo-preview data-photo-src="` + testPhotoDataURI + `"`,
-		`data-photo-preview data-photo-src="data:image/jpeg;base64,Zm91cg=="`,
+		`data-photo-preview data-photo-src="/photos/` + photos[0].ID.String() + `"`,
+		`<img src="/photos/` + photos[3].ID.String() + `" alt="" loading="lazy">`,
 		`id="photo-preview-image"`,
 		`id="photo-preview-prev"`,
 		`id="photo-preview-next"`,

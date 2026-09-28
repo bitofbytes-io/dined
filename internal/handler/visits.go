@@ -28,13 +28,48 @@ func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
 	h.render(w, "home", r, ui.PageData{Visits: visits, PickerTurn: pickerTurn})
 }
 
+const (
+	dinesPageSize = 20
+	maxDinesPage  = 100000
+)
+
 func (h *Handler) Dines(w http.ResponseWriter, r *http.Request) {
-	visits, err := h.store.Visits(r.Context(), 0)
+	page, ok := dinesPage(r.URL.Query().Get("page"))
+	if !ok {
+		http.Error(w, "Invalid page", http.StatusBadRequest)
+		return
+	}
+	// Fetch one extra visit to learn whether an older page exists.
+	visits, err := h.store.VisitsPage(r.Context(), dinesPageSize+1, (page-1)*dinesPageSize)
 	if err != nil {
 		h.error(w, "all visits", err)
 		return
 	}
-	h.render(w, "dines", r, ui.PageData{Title: "All Dines", Visits: visits})
+	if page > 1 && len(visits) == 0 {
+		http.NotFound(w, r)
+		return
+	}
+	data := ui.PageData{Title: "All Dines", Visits: visits}
+	if len(visits) > dinesPageSize {
+		data.Visits = visits[:dinesPageSize]
+		data.NextPage = page + 1
+	}
+	if page > 1 {
+		data.PrevPage = page - 1
+	}
+	h.render(w, "dines", r, data)
+}
+
+// dinesPage parses the optional 1-based page query value.
+func dinesPage(value string) (int, bool) {
+	if value == "" {
+		return 1, true
+	}
+	page, err := strconv.Atoi(value)
+	if err != nil || page < 1 || page > maxDinesPage {
+		return 0, false
+	}
+	return page, true
 }
 
 func (h *Handler) LogPage(w http.ResponseWriter, r *http.Request) {
