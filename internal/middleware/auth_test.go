@@ -49,6 +49,34 @@ func TestAuthAllowsPublicPhotos(t *testing.T) {
 	}
 }
 
+func TestAuthPublicRestaurantRouteIsExact(t *testing.T) {
+	tests := []struct {
+		path       string
+		wantPublic bool
+	}{
+		{path: "/restaurants/0b1d5a9e-7b6f-4a53-9d6e-6f3c1f9d2a10", wantPublic: true},
+		{path: "/restaurants/0b1d5a9e-7b6f-4a53-9d6e-6f3c1f9d2a10/edit", wantPublic: false},
+		{path: "/restaurants/0b1d5a9e-7b6f-4a53-9d6e-6f3c1f9d2a10/", wantPublic: false},
+		{path: "/restaurants/", wantPublic: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tt.path, nil)
+			rec := httptest.NewRecorder()
+			called := false
+			Auth(testAuthService(t), false)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				called = true
+			})).ServeHTTP(rec, req)
+			if called != tt.wantPublic {
+				t.Fatalf("handler called = %v, want %v (status %d)", called, tt.wantPublic, rec.Code)
+			}
+			if !tt.wantPublic && rec.Code != http.StatusSeeOther {
+				t.Fatalf("status = %d, want redirect to login", rec.Code)
+			}
+		})
+	}
+}
+
 func TestAuthBlocksMutationsWithoutSession(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/visits", nil)
 	rec := httptest.NewRecorder()
@@ -71,6 +99,40 @@ func TestAuthAllowsSessionCookie(t *testing.T) {
 	})).ServeHTTP(rec, req)
 	if !called {
 		t.Fatal("handler was not called")
+	}
+}
+
+func TestAuthRejectsSessionRemovedFromAllowlist(t *testing.T) {
+	repo := auth.NewMemoryRepository()
+	loginService := auth.NewService(repo, time.Hour, nil)
+	user, err := loginService.CreateOrUpdateUser(t.Context(), &auth.GoogleClaims{Sub: "google-user-id", Email: "removed@example.com", EmailVerified: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, err := loginService.CreateSession(t.Context(), user.ID, "test", "127.0.0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	authService := auth.NewService(repo, time.Hour, auth.NewAllowlist([]string{"family@example.com"}, nil).Allowed)
+
+	req := httptest.NewRequest(http.MethodGet, "/log", nil)
+	req.AddCookie(&http.Cookie{Name: CookieName, Value: token})
+	rec := httptest.NewRecorder()
+	Auth(authService, false)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("handler should not be called for a user removed from the allowlist")
+	})).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusSeeOther || !strings.HasPrefix(rec.Header().Get("Location"), "/login") {
+		t.Fatalf("status = %d, location = %q, want redirect to login", rec.Code, rec.Header().Get("Location"))
+	}
+	cleared := false
+	for _, cookie := range rec.Result().Cookies() {
+		if cookie.Name == CookieName && cookie.MaxAge < 0 {
+			cleared = true
+		}
+	}
+	if !cleared {
+		t.Fatal("session cookie was not cleared")
 	}
 }
 
@@ -220,7 +282,7 @@ func TestLoggerElevatesClientAndServerErrors(t *testing.T) {
 
 func testAuthService(t *testing.T) *auth.Service {
 	t.Helper()
-	return auth.NewService(auth.NewMemoryRepository(), time.Hour)
+	return auth.NewService(auth.NewMemoryRepository(), time.Hour, nil)
 }
 
 func testAuthServiceWithSession(t *testing.T) (*auth.Service, string) {

@@ -7,22 +7,30 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 )
 
+// SessionCleanupInterval is how often expired sessions are purged.
+const SessionCleanupInterval = 24 * time.Hour
+
 type Service struct {
 	repo       Repository
 	sessionTTL time.Duration
+	allowed    func(string) bool
 }
 
-func NewService(repo Repository, sessionTTL time.Duration) *Service {
+// NewService validates sessions against allowed on every request, so removing
+// an account from the allowlist revokes its existing sessions. A nil allowed
+// admits every user.
+func NewService(repo Repository, sessionTTL time.Duration, allowed func(string) bool) *Service {
 	if sessionTTL <= 0 {
 		sessionTTL = 90 * 24 * time.Hour
 	}
-	return &Service{repo: repo, sessionTTL: sessionTTL}
+	return &Service{repo: repo, sessionTTL: sessionTTL, allowed: allowed}
 }
 
 func (s *Service) CreateOrUpdateUser(ctx context.Context, claims *GoogleClaims) (*User, error) {
@@ -39,9 +47,12 @@ func (s *Service) CreateOrUpdateUser(ctx context.Context, claims *GoogleClaims) 
 	}
 
 	if existing != nil {
-		if err := s.repo.UpdateUserLogin(ctx, existing.ID, claims.Name, claims.Picture); err != nil {
+		// Keep the stored email current: sessions are re-checked against the
+		// allowlist by this email, and Google lets an account's email change.
+		if err := s.repo.UpdateUserLogin(ctx, existing.ID, email, claims.Name, claims.Picture); err != nil {
 			return nil, fmt.Errorf("update user login: %w", err)
 		}
+		existing.Email = email
 		existing.Name = claims.Name
 		existing.AvatarURL = claims.Picture
 		existing.LastLoginAt = time.Now()
@@ -103,6 +114,11 @@ func (s *Service) ValidateSession(ctx context.Context, token string) (*User, err
 		_ = s.repo.DeleteSession(ctx, session.ID)
 		return nil, nil
 	}
+	if s.allowed != nil && !s.allowed(user.Email) {
+		slog.Info("session revoked", "reason", "email_not_allowed", "user_id", user.ID)
+		_ = s.repo.DeleteSession(ctx, session.ID)
+		return nil, nil
+	}
 	return user, nil
 }
 
@@ -122,6 +138,30 @@ func (s *Service) DeleteSession(ctx context.Context, token string) error {
 
 func (s *Service) CleanupExpiredSessions(ctx context.Context) (int64, error) {
 	return s.repo.DeleteExpiredSessions(ctx)
+}
+
+// ScheduleSessionCleanup deletes expired sessions at startup and then every
+// interval until ctx is canceled.
+func (s *Service) ScheduleSessionCleanup(ctx context.Context, interval time.Duration) {
+	if interval <= 0 {
+		interval = SessionCleanupInterval
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		if deleted, err := s.CleanupExpiredSessions(ctx); err != nil {
+			if ctx.Err() == nil {
+				slog.Error("expired session cleanup failed", "error", err)
+			}
+		} else if deleted > 0 {
+			slog.Info("expired sessions deleted", "count", deleted)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
 }
 
 func (s *Service) SessionTTL() time.Duration {

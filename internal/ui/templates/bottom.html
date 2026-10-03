@@ -3,7 +3,7 @@
 	  {{if .Authenticated}}{{template "delete-confirm-modal" .}}{{end}}
 	  {{template "photo-preview-modal" .}}
 	  {{if .TrophyMapReady}}{{template "trophy-map-modal" .}}{{end}}
-	  {{template "page-scripts" .}}
+	  <script src="{{asset "/static/app.js"}}"></script>
 	</body>
 	</html>
 {{end}}

@@ -16,17 +16,15 @@ import (
 const testPhotoDataURI = "data:image/jpeg;base64,aGVsbG8="
 
 func TestAssetAppendsStaticFileVersion(t *testing.T) {
-	withWorkingDir(t)
-	if err := os.Mkdir("static", 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join("static", "styles.css"), []byte("body{}"), 0o644); err != nil {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "styles.css"), []byte("body{}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	modTime := time.Unix(1715451234, 0)
-	if err := os.Chtimes(filepath.Join("static", "styles.css"), modTime, modTime); err != nil {
+	if err := os.Chtimes(filepath.Join(dir, "styles.css"), modTime, modTime); err != nil {
 		t.Fatal(err)
 	}
+	loadTestAssetVersions(t, dir)
 
 	got := string(asset("/static/styles.css"))
 	want := "/static/styles.css?v=1715451234"
@@ -36,7 +34,7 @@ func TestAssetAppendsStaticFileVersion(t *testing.T) {
 }
 
 func TestAssetFallsBackWhenFileMissing(t *testing.T) {
-	withWorkingDir(t)
+	loadTestAssetVersions(t, t.TempDir())
 
 	got := string(asset("/static/missing.css"))
 	want := "/static/missing.css"
@@ -46,34 +44,31 @@ func TestAssetFallsBackWhenFileMissing(t *testing.T) {
 }
 
 func TestAssetDoesNotVersionPathsOutsideStatic(t *testing.T) {
-	withWorkingDir(t)
-	if err := os.Mkdir("static", 0o755); err != nil {
+	root := t.TempDir()
+	dir := filepath.Join(root, "static")
+	if err := os.Mkdir(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile("go.mod", []byte("module example"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	loadTestAssetVersions(t, dir)
 
 	got := string(asset("/static/../go.mod"))
 	if got != "/static/../go.mod" {
 		t.Fatalf("asset() = %q, want original path", got)
 	}
-	if strings.Contains(got, "?v=") {
-		t.Fatalf("asset() versioned a path outside static: %q", got)
-	}
 }
 
 func TestRenderUsesVersionedStylesheetAndScript(t *testing.T) {
-	withWorkingDir(t)
-	if err := os.Mkdir("static", 0o755); err != nil {
-		t.Fatal(err)
-	}
+	dir := t.TempDir()
 	files := []string{"styles.css", "htmx.min.js"}
 	for _, file := range files {
-		if err := os.WriteFile(filepath.Join("static", file), []byte(file), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, file), []byte(file), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
+	loadTestAssetVersions(t, dir)
 
 	var out strings.Builder
 	if err := Render(&out, "login", PageData{}); err != nil {
@@ -85,6 +80,14 @@ func TestRenderUsesVersionedStylesheetAndScript(t *testing.T) {
 			t.Fatalf("rendered HTML missing %q:\n%s", fragment, rendered)
 		}
 	}
+}
+
+func loadTestAssetVersions(t *testing.T, dir string) {
+	t.Helper()
+	if err := LoadAssetVersions(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { assetVersions.Store(nil) })
 }
 
 func TestRenderLoginOAuthLinkOptsOutOfBoost(t *testing.T) {
@@ -317,12 +320,40 @@ func TestRenderLogPreservesPrefillCity(t *testing.T) {
 	if !strings.Contains(got, `name="city" value="Apex"`) {
 		t.Fatalf("rendered log missing city hidden input:\n%s", got)
 	}
-	if strings.Contains(got, `if (city) city.value = "";`) {
-		t.Fatalf("rendered log clears hidden city on unmatched datalist input:\n%s", got)
+	script := appScript(t)
+	if strings.Contains(script, `if (city) city.value = "";`) {
+		t.Fatal("app.js clears hidden city on unmatched datalist input")
 	}
-	if !strings.Contains(got, `if (city) city.value = option.dataset.city || "";`) {
-		t.Fatalf("rendered log does not overwrite city on matched datalist input:\n%s", got)
+	if !strings.Contains(script, `if (city) city.value = option.dataset.city || "";`) {
+		t.Fatal("app.js does not overwrite city on matched datalist input")
 	}
+}
+
+func TestAppScriptIsStaticAndHandlesPageBehaviour(t *testing.T) {
+	script := appScript(t)
+	if strings.Contains(script, "{{") {
+		t.Fatal("app.js contains template actions, but it is served as a static file")
+	}
+	for _, fragment := range []string{
+		`function dinedUpdateLogValidation(form)`,
+		`function dinedCompressPhoto(file, maxBytes)`,
+		`uploader.dataset.photoMaxBytes`,
+		`function dinedConfirmDelete(event, form)`,
+		`document.addEventListener("htmx:load", dinedInitializePage);`,
+	} {
+		if !strings.Contains(script, fragment) {
+			t.Fatalf("app.js missing %q", fragment)
+		}
+	}
+}
+
+func appScript(t *testing.T) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("..", "..", "static", "app.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
 }
 
 func TestRenderLogCarriesGoogleMetadataPrefill(t *testing.T) {
@@ -415,7 +446,7 @@ func TestRenderLogValidationAndPreservedState(t *testing.T) {
 		`Dinner notes</textarea>`,
 		`name="is_chain" value="true" checked`,
 		`data-log-submit`,
-		`dinedUpdateLogValidation`,
+		`<script src="/static/app.js"></script>`,
 	} {
 		if !strings.Contains(rendered, fragment) {
 			t.Fatalf("rendered log missing %q:\n%s", fragment, rendered)
@@ -448,12 +479,12 @@ func TestRenderLogIncludesPhotoUploadAndPrefilledPhotos(t *testing.T) {
 	}
 	rendered := out.String()
 	for _, fragment := range []string{
-		`data-photo-uploader data-photo-limit="4"`,
+		`data-photo-uploader data-photo-limit="4" data-photo-max-bytes="512000"`,
 		`Food, fun, memories. Up to 4.`,
 		`name="photo_data_uri" value="` + testPhotoDataURI + `"`,
 		`type="file" accept="image/*" multiple data-photo-input`,
 		`id="photo-preview-modal"`,
-		`dinedCompressPhoto`,
+		`<script src="/static/app.js"></script>`,
 	} {
 		if !strings.Contains(rendered, fragment) {
 			t.Fatalf("rendered log missing %q:\n%s", fragment, rendered)
@@ -719,21 +750,4 @@ func TestRenderSearchDoesNotShowGooglePlacesWarningForEmptySavedSearch(t *testin
 	if strings.Contains(rendered, "Google Places results will appear here") {
 		t.Fatalf("rendered search showed Google Places warning:\n%s", rendered)
 	}
-}
-
-func withWorkingDir(t *testing.T) {
-	t.Helper()
-	original, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	dir := t.TempDir()
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		if err := os.Chdir(original); err != nil {
-			t.Fatal(err)
-		}
-	})
 }

@@ -16,6 +16,9 @@ func optionalFloat(value, label string) (*float64, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s must be a number", label)
 	}
+	if math.IsNaN(parsed) || math.IsInf(parsed, 0) {
+		return nil, fmt.Errorf("%s must be a finite number", label)
+	}
 	return &parsed, nil
 }
 

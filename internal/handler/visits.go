@@ -31,6 +31,9 @@ func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
 const (
 	dinesPageSize = 20
 	maxDinesPage  = 100000
+	// saveVisitFailedMessage is shown when the store rejects a validated dine;
+	// the underlying error is logged rather than shown.
+	saveVisitFailedMessage = "Could not save this dine. Please try again."
 )
 
 func (h *Handler) Dines(w http.ResponseWriter, r *http.Request) {
@@ -116,7 +119,8 @@ func (h *Handler) CreateVisit(w http.ResponseWriter, r *http.Request) {
 	}
 	visitID, err := h.store.CreateVisit(r.Context(), input)
 	if err != nil {
-		h.renderLogError(w, r, err.Error())
+		slog.Error("create visit", "error", err)
+		h.renderLogError(w, r, saveVisitFailedMessage)
 		return
 	}
 	slog.Info("visit created", "visit_id", visitID, "picker_id", input.PickerID, "rating_count", len(input.Ratings), "tag_count", len(input.TagIDs), "photo_count", len(input.Photos))
@@ -156,8 +160,17 @@ func (h *Handler) UpdateVisit(w http.ResponseWriter, r *http.Request) {
 		h.renderVisitEditError(w, r, id, err.Error())
 		return
 	}
-	if err := h.store.UpdateVisit(r.Context(), id, input); err != nil {
+	if err := input.Validate(); err != nil {
 		h.renderVisitEditError(w, r, id, err.Error())
+		return
+	}
+	if input.RestaurantID == nil {
+		h.renderVisitEditError(w, r, id, "restaurant is required")
+		return
+	}
+	if err := h.store.UpdateVisit(r.Context(), id, input); err != nil {
+		slog.Error("update visit", "visit_id", id, "error", err)
+		h.renderVisitEditError(w, r, id, saveVisitFailedMessage)
 		return
 	}
 	slog.Info("visit updated", "visit_id", id, "picker_id", input.PickerID, "rating_count", len(input.Ratings), "tag_count", len(input.TagIDs), "photo_count", len(input.Photos))

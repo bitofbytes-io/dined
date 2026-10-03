@@ -339,7 +339,7 @@ func (m *MemoryStore) UpdateRestaurantGoogleMetadata(_ context.Context, id uuid.
 	defer m.mu.Unlock()
 	for i := range m.restaurants {
 		if m.restaurants[i].ID == id {
-			m.refreshGoogleMetadata(i, metadata)
+			m.applyGoogleMetadata(i, metadata, true)
 			return nil
 		}
 	}
@@ -618,20 +618,17 @@ func (m *MemoryStore) findRestaurantByInput(input model.VisitInput) (model.Resta
 }
 
 func (m *MemoryStore) updateRestaurantMetadata(index int, input model.VisitInput) {
-	now := time.Now()
 	if placeID := strings.TrimSpace(input.GooglePlaceID); placeID != "" && m.restaurants[index].GooglePlaceID == nil {
 		m.restaurants[index].GooglePlaceID = strPtr(placeID)
-		m.restaurants[index].UpdatedAt = now
-	}
-	if category := strings.TrimSpace(input.Category); category != "" && m.restaurants[index].Category == nil {
-		m.restaurants[index].Category = strPtr(category)
-		m.restaurants[index].UpdatedAt = now
+		m.restaurants[index].UpdatedAt = time.Now()
 	}
 	if city := strings.TrimSpace(input.City); city != "" && m.restaurants[index].City == nil {
 		m.restaurants[index].City = strPtr(city)
-		m.restaurants[index].UpdatedAt = now
+		m.restaurants[index].UpdatedAt = time.Now()
 	}
-	m.updateGoogleMetadata(index, input.GoogleMetadata)
+	metadata := input.GoogleMetadata
+	metadata.Category = input.Category
+	m.applyGoogleMetadata(index, metadata, false)
 }
 
 func (m *MemoryStore) updateRestaurantMetadataByID(id uuid.UUID, input model.VisitInput) {
@@ -643,66 +640,36 @@ func (m *MemoryStore) updateRestaurantMetadataByID(id uuid.UUID, input model.Vis
 	}
 }
 
-func (m *MemoryStore) updateGoogleMetadata(index int, metadata model.GoogleRestaurantMetadata) {
+// applyGoogleMetadata copies the metadata's non-empty fields onto a
+// restaurant. With overwrite false it only fills fields that are still empty,
+// like Postgres CreateVisit; with overwrite true it replaces them, like
+// Postgres UpdateRestaurantGoogleMetadata.
+func (m *MemoryStore) applyGoogleMetadata(index int, metadata model.GoogleRestaurantMetadata, overwrite bool) {
+	restaurant := &m.restaurants[index]
 	now := time.Now()
-	if metadata.Latitude != nil && m.restaurants[index].Latitude == nil {
-		m.restaurants[index].Latitude = floatPtr(*metadata.Latitude)
-		m.restaurants[index].UpdatedAt = now
+	setFloat := func(field **float64, value *float64) {
+		if value != nil && (overwrite || *field == nil) {
+			*field = floatPtr(*value)
+			restaurant.UpdatedAt = now
+		}
 	}
-	if metadata.Longitude != nil && m.restaurants[index].Longitude == nil {
-		m.restaurants[index].Longitude = floatPtr(*metadata.Longitude)
-		m.restaurants[index].UpdatedAt = now
+	setString := func(field **string, value string) {
+		if value = strings.TrimSpace(value); value != "" && (overwrite || *field == nil) {
+			*field = strPtr(value)
+			restaurant.UpdatedAt = now
+		}
 	}
-	if phone := strings.TrimSpace(metadata.Phone); phone != "" && m.restaurants[index].Phone == nil {
-		m.restaurants[index].Phone = strPtr(phone)
-		m.restaurants[index].UpdatedAt = now
+	setFloat(&restaurant.Latitude, metadata.Latitude)
+	setFloat(&restaurant.Longitude, metadata.Longitude)
+	setString(&restaurant.Phone, metadata.Phone)
+	setString(&restaurant.Website, metadata.Website)
+	setFloat(&restaurant.GoogleRating, metadata.GoogleRating)
+	if metadata.GooglePriceLevel != nil && (overwrite || restaurant.GooglePriceLevel == nil) {
+		restaurant.GooglePriceLevel = intPtr(*metadata.GooglePriceLevel)
+		restaurant.UpdatedAt = now
 	}
-	if website := strings.TrimSpace(metadata.Website); website != "" && m.restaurants[index].Website == nil {
-		m.restaurants[index].Website = strPtr(website)
-		m.restaurants[index].UpdatedAt = now
-	}
-	if metadata.GoogleRating != nil && m.restaurants[index].GoogleRating == nil {
-		m.restaurants[index].GoogleRating = floatPtr(*metadata.GoogleRating)
-		m.restaurants[index].UpdatedAt = now
-	}
-	if metadata.GooglePriceLevel != nil && m.restaurants[index].GooglePriceLevel == nil {
-		m.restaurants[index].GooglePriceLevel = intPtr(*metadata.GooglePriceLevel)
-		m.restaurants[index].UpdatedAt = now
-	}
-	m.syncRestaurant(m.restaurants[index])
-}
-
-func (m *MemoryStore) refreshGoogleMetadata(index int, metadata model.GoogleRestaurantMetadata) {
-	now := time.Now()
-	if metadata.Latitude != nil {
-		m.restaurants[index].Latitude = floatPtr(*metadata.Latitude)
-		m.restaurants[index].UpdatedAt = now
-	}
-	if metadata.Longitude != nil {
-		m.restaurants[index].Longitude = floatPtr(*metadata.Longitude)
-		m.restaurants[index].UpdatedAt = now
-	}
-	if phone := strings.TrimSpace(metadata.Phone); phone != "" {
-		m.restaurants[index].Phone = strPtr(phone)
-		m.restaurants[index].UpdatedAt = now
-	}
-	if website := strings.TrimSpace(metadata.Website); website != "" {
-		m.restaurants[index].Website = strPtr(website)
-		m.restaurants[index].UpdatedAt = now
-	}
-	if metadata.GoogleRating != nil {
-		m.restaurants[index].GoogleRating = floatPtr(*metadata.GoogleRating)
-		m.restaurants[index].UpdatedAt = now
-	}
-	if metadata.GooglePriceLevel != nil {
-		m.restaurants[index].GooglePriceLevel = intPtr(*metadata.GooglePriceLevel)
-		m.restaurants[index].UpdatedAt = now
-	}
-	if category := strings.TrimSpace(metadata.Category); category != "" {
-		m.restaurants[index].Category = strPtr(category)
-		m.restaurants[index].UpdatedAt = now
-	}
-	m.syncRestaurant(m.restaurants[index])
+	setString(&restaurant.Category, metadata.Category)
+	m.syncRestaurant(*restaurant)
 }
 
 func (m *MemoryStore) personByID(id uuid.UUID) model.Person {

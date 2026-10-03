@@ -60,7 +60,7 @@ func (r *MemoryRepository) CreateUser(ctx context.Context, user User) (User, err
 	return user, nil
 }
 
-func (r *MemoryRepository) UpdateUserLogin(ctx context.Context, id uuid.UUID, name, avatarURL string) error {
+func (r *MemoryRepository) UpdateUserLogin(ctx context.Context, id uuid.UUID, email, name, avatarURL string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	user, ok := r.usersByID[id]
@@ -68,6 +68,9 @@ func (r *MemoryRepository) UpdateUserLogin(ctx context.Context, id uuid.UUID, na
 		return nil
 	}
 	now := time.Now()
+	delete(r.usersByEmail, user.Email)
+	r.usersByEmail[email] = id
+	user.Email = email
 	user.Name = name
 	user.AvatarURL = avatarURL
 	user.LastLoginAt = now

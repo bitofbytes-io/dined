@@ -10,7 +10,7 @@ type Repository interface {
 	FindUserByOAuth(ctx context.Context, provider, providerID string) (*User, error)
 	FindUserByEmail(ctx context.Context, email string) (*User, error)
 	CreateUser(ctx context.Context, user User) (User, error)
-	UpdateUserLogin(ctx context.Context, id uuid.UUID, name, avatarURL string) error
+	UpdateUserLogin(ctx context.Context, id uuid.UUID, email, name, avatarURL string) error
 
 	CreateSession(ctx context.Context, session Session, tokenHash string) error
 	FindSessionByTokenHash(ctx context.Context, tokenHash string) (*Session, *User, error)

@@ -9,8 +9,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bitofbytes-io/dined/internal/auth"
+	"github.com/bitofbytes-io/dined/internal/config"
 	"github.com/bitofbytes-io/dined/internal/middleware"
 	"github.com/bitofbytes-io/dined/internal/model"
+	"github.com/bitofbytes-io/dined/internal/places"
 	"github.com/bitofbytes-io/dined/internal/repository"
 	"github.com/google/uuid"
 )
@@ -522,5 +525,119 @@ func TestRouterUpdateVisitErrorPreservesPostedForm(t *testing.T) {
 	}
 	if unchanged.Picker.ID != people[0].ID || len(unchanged.Photos) != 2 || unchanged.Notes == nil || *unchanged.Notes != "Saved notes" {
 		t.Fatalf("failed update changed the saved visit: %#v", unchanged)
+	}
+}
+
+type countingAuthRepository struct {
+	*auth.MemoryRepository
+	sessionLookups int
+}
+
+func (c *countingAuthRepository) FindSessionByTokenHash(ctx context.Context, tokenHash string) (*auth.Session, *auth.User, error) {
+	c.sessionLookups++
+	return c.MemoryRepository.FindSessionByTokenHash(ctx, tokenHash)
+}
+
+func TestRouterLooksUpSessionOncePerPage(t *testing.T) {
+	repo := &countingAuthRepository{MemoryRepository: auth.NewMemoryRepository()}
+	authService := auth.NewService(repo, time.Hour, nil)
+	user, err := authService.CreateOrUpdateUser(context.Background(), &auth.GoogleClaims{Sub: "google-user", Email: "family@example.com", EmailVerified: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, err := authService.CreateSession(context.Background(), user.ID, "test", "127.0.0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	router := New(&config.Config{AuthSessionTTL: time.Hour}, repository.NewMemoryStore(), places.NewClient(""), authService, nil).Router()
+
+	for _, path := range []string{"/log", "/dines"} {
+		repo.sessionLookups = 0
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.AddCookie(&http.Cookie{Name: middleware.CookieName, Value: token})
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s status = %d", path, rec.Code)
+		}
+		if !strings.Contains(rec.Body.String(), "LOGOUT") {
+			t.Fatalf("%s did not render the signed-in navigation", path)
+		}
+		if repo.sessionLookups != 1 {
+			t.Fatalf("%s looked up the session %d times, want 1", path, repo.sessionLookups)
+		}
+	}
+}
+
+func TestRouterCreateVisitRejectsInvalidGoogleRating(t *testing.T) {
+	ctx := context.Background()
+	store := repository.NewMemoryStore()
+	people, err := store.People(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	router, token := newAuthenticatedTestRouter(t, store)
+
+	for value, want := range map[string]string{
+		"999": "Google rating must be between 0 and 5",
+		"NaN": "Google rating must be a finite number",
+	} {
+		form := url.Values{}
+		form.Set("restaurant_name", "Rating Diner")
+		form.Set("visited_at", "2026-05-17T20:50")
+		form.Set("picker_id", people[0].ID.String())
+		form.Set("price_level", "2")
+		form.Set("rating_"+people[0].ID.String(), "8")
+		form.Set("google_rating", value)
+
+		rec := postVisitForm(t, router, token, "/visits", form)
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), want) {
+			t.Fatalf("google_rating=%s: status %d, want error %q in:\n%s", value, rec.Code, want, rec.Body.String())
+		}
+	}
+	if restaurants, err := store.Restaurants(ctx, "Rating Diner"); err != nil || len(restaurants) != 0 {
+		t.Fatalf("invalid Google rating saved a restaurant: %#v, err = %v", restaurants, err)
+	}
+}
+
+func TestRouterUpdateVisitShowsGenericErrorWhenStoreFails(t *testing.T) {
+	ctx := context.Background()
+	store := repository.NewMemoryStore()
+	people, err := store.People(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	visitID, err := store.CreateVisit(ctx, model.VisitInput{
+		RestaurantName: "Store Error Diner",
+		VisitedAt:      time.Date(2026, 5, 10, 18, 0, 0, 0, time.UTC),
+		PickerID:       people[0].ID,
+		PriceLevel:     1,
+		Ratings:        map[uuid.UUID]float64{people[0].ID: 6},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved, err := store.Visit(ctx, *visitID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	form := url.Values{}
+	form.Set("restaurant_id", saved.Restaurant.ID.String())
+	form.Set("visited_at", "2026-05-17T20:50")
+	form.Set("picker_id", people[0].ID.String())
+	form.Set("price_level", "2")
+	form.Set("rating_"+people[0].ID.String(), "7")
+	form.Add("keep_photo_id", uuid.NewString()) // Not one of this visit's photos: the store rejects it.
+
+	router, token := newAuthenticatedTestRouter(t, store)
+	rec := postVisitForm(t, router, token, "/visits/"+visitID.String(), form)
+
+	rendered := rec.Body.String()
+	if rec.Code != http.StatusOK || !strings.Contains(rendered, "Could not save this dine. Please try again.") {
+		t.Fatalf("status %d, want generic save error in:\n%s", rec.Code, rendered)
+	}
+	if strings.Contains(rendered, "photo not found") {
+		t.Fatalf("response leaked the store error:\n%s", rendered)
 	}
 }
