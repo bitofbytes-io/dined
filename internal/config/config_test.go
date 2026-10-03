@@ -88,7 +88,8 @@ func TestLoadTrustedProxies(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !containsAddr(cfg.TrustedProxies, "10.0.3.4") || containsAddr(cfg.TrustedProxies, "203.0.113.7") {
+	if !containsAddr(cfg.TrustedProxies, "10.0.1.4") || !containsAddr(cfg.TrustedProxies, "127.0.0.1") ||
+		containsAddr(cfg.TrustedProxies, "192.168.1.20") || containsAddr(cfg.TrustedProxies, "172.17.0.1") || containsAddr(cfg.TrustedProxies, "203.0.113.7") {
 		t.Fatalf("default trusted proxies = %v", cfg.TrustedProxies)
 	}
 

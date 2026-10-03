@@ -30,10 +30,12 @@ const (
 	DataStorePostgres = "postgres"
 )
 
-// defaultTrustedProxies covers loopback and the private ranges Docker assigns
-// to overlay networks, which is how Traefik reaches Dined. Dined publishes no
-// port of its own, so only containers on those networks can connect directly.
-const defaultTrustedProxies = "127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7"
+// defaultTrustedProxies covers loopback and Docker Swarm's default overlay
+// address pool (10.0.0.0/8). Traefik reaches Dined over the "proxy" overlay
+// network, and Dined publishes no port of its own, so only containers on
+// overlay networks can connect directly. LAN and Docker bridge ranges are not
+// trusted.
+const defaultTrustedProxies = "127.0.0.0/8,::1/128,10.0.0.0/8"
 
 func Load() (*Config, error) {
 	cfg := &Config{}
