@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help dev run run-postgres build test check-css migrate migrate-down migrate-status tail-prod docker-build docker-buildx clean
+.PHONY: help dev run run-postgres build test migrate migrate-down migrate-status docker-build docker-buildx clean
 
 BIN_DIR ?= bin
 PORT ?= 4600
@@ -21,24 +21,18 @@ TAG ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
 
 -include local.mk
 
-dev: tail-prod ## Run local visual preview with memory storage and no database
+dev: ## Run local visual preview with memory storage and no database
 	APP_ENV=development DATA_STORE=memory PORT=$(PORT) GOOGLE_PLACES_API_KEY="$(GOOGLE_PLACES_API_KEY)" AUTH_GOOGLE_CLIENT_ID="$(AUTH_GOOGLE_CLIENT_ID)" AUTH_GOOGLE_CLIENT_SECRET="$(AUTH_GOOGLE_CLIENT_SECRET)" AUTH_GOOGLE_REDIRECT_URL="$(AUTH_GOOGLE_REDIRECT_URL)" AUTH_GOOGLE_ALLOWED_EMAILS="$(AUTH_GOOGLE_ALLOWED_EMAILS)" AUTH_GOOGLE_ALLOWED_DOMAINS="$(AUTH_GOOGLE_ALLOWED_DOMAINS)" AUTH_SESSION_TTL="$(AUTH_SESSION_TTL)" SECURE_COOKIES=false go run ./cmd/dined
 
 run: dev ## Alias for local preview
 
-run-postgres: tail-prod ## Run locally against Postgres
+run-postgres: ## Run locally against Postgres
 	@test -n '$(DATABASE_URL)' || (echo "DATABASE_URL must be set in local.mk or the environment" >&2; exit 1)
 	APP_ENV=$(APP_ENV) DATA_STORE=postgres PORT=$(PORT) DATABASE_URL='$(DATABASE_URL)' GOOGLE_PLACES_API_KEY="$(GOOGLE_PLACES_API_KEY)" AUTH_GOOGLE_CLIENT_ID="$(AUTH_GOOGLE_CLIENT_ID)" AUTH_GOOGLE_CLIENT_SECRET="$(AUTH_GOOGLE_CLIENT_SECRET)" AUTH_GOOGLE_REDIRECT_URL="$(AUTH_GOOGLE_REDIRECT_URL)" AUTH_GOOGLE_ALLOWED_EMAILS="$(AUTH_GOOGLE_ALLOWED_EMAILS)" AUTH_GOOGLE_ALLOWED_DOMAINS="$(AUTH_GOOGLE_ALLOWED_DOMAINS)" AUTH_SESSION_TTL="$(AUTH_SESSION_TTL)" SECURE_COOKIES=false go run ./cmd/dined
 
-build: tail-prod ## Build the production binary
+build: ## Build the production binary
 	mkdir -p $(BIN_DIR)
 	go build -o $(BIN_DIR)/dined ./cmd/dined
-
-tail-prod: ## Build static CSS
-	cp tailwind/styles.css static/styles.css
-
-check-css: ## Check generated static CSS is current
-	@cmp -s tailwind/styles.css static/styles.css || (echo "static/styles.css is out of sync with tailwind/styles.css; run make tail-prod" >&2; exit 1)
 
 migrate: ## Apply database migrations
 	@test -n '$(DATABASE_URL)' || (echo "DATABASE_URL must be set in local.mk or the environment" >&2; exit 1)
@@ -52,13 +46,13 @@ migrate-status: ## Show migration status
 	@test -n '$(DATABASE_URL)' || (echo "DATABASE_URL must be set in local.mk or the environment" >&2; exit 1)
 	goose -dir migrations postgres '$(DATABASE_URL)' status
 
-test: check-css ## Run Go tests
+test: ## Run Go tests
 	go test -v ./...
 
-docker-build: tail-prod ## Build the Docker image locally
+docker-build: ## Build the Docker image locally
 	docker build -t $(REGISTRY)/$(IMAGE_REPO):$(TAG) .
 
-docker-buildx: tail-prod ## Build and push multi-arch Docker image
+docker-buildx: ## Build and push multi-arch Docker image
 	docker buildx build \
 		--platform $(PLATFORMS) \
 		--tag $(REGISTRY)/$(IMAGE_REPO):$(TAG) \

@@ -22,7 +22,6 @@ Production callbacks must use HTTPS and exactly match `AUTH_GOOGLE_REDIRECT_URL`
 ## Build the image
 
 ```bash
-make tail-prod
 docker build -t dined:local .
 ```
 

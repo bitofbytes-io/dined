@@ -493,12 +493,9 @@ func (m *MemoryStore) Stats(context.Context) (model.Stats, error) {
 	for _, restaurant := range m.restaurants {
 		restaurantCities[restaurant.ID] = strings.TrimSpace(valueOrEmpty(restaurant.City))
 	}
-	visitsByRestaurant := map[string]int{}
-	ratingByRestaurant := map[string][]float64{}
 	ratingsByRestaurantID := map[uuid.UUID]*restaurantRatingAggregate{}
 	ratingsByCuisineRestaurantID := map[string]map[uuid.UUID]*restaurantRatingAggregate{}
 	ratingByPicker := map[string][]float64{}
-	var biggestSplit float64
 	for _, visit := range m.visits {
 		visitedRestaurants[visit.Restaurant.ID] = struct{}{}
 		city := restaurantCities[visit.Restaurant.ID]
@@ -508,7 +505,6 @@ func (m *MemoryStore) Stats(context.Context) (model.Stats, error) {
 		if city != "" {
 			cities[strings.ToLower(city)] = struct{}{}
 		}
-		visitsByRestaurant[visit.Restaurant.Name]++
 		restaurantAggregate := ratingsByRestaurantID[visit.Restaurant.ID]
 		if restaurantAggregate == nil {
 			restaurantAggregate = &restaurantRatingAggregate{name: visit.Restaurant.Name}
@@ -534,23 +530,16 @@ func (m *MemoryStore) Stats(context.Context) (model.Stats, error) {
 		for _, rating := range visit.Ratings {
 			sum += rating.Score
 			count++
-			ratingByRestaurant[visit.Restaurant.Name] = append(ratingByRestaurant[visit.Restaurant.Name], rating.Score)
 			restaurantAggregate.ratings = append(restaurantAggregate.ratings, rating.Score)
 			if cuisineAggregate != nil {
 				cuisineAggregate.ratings = append(cuisineAggregate.ratings, rating.Score)
 			}
 			ratingByPicker[visit.Picker.Name] = append(ratingByPicker[visit.Picker.Name], rating.Score)
 		}
-		if split := visitSplit(visit); split > biggestSplit {
-			biggestSplit = split
-			stats.BiggestSplitRestaurant = visit.Restaurant.Name
-		}
 	}
 	if count > 0 {
 		stats.AverageRating = sum / float64(count)
 	}
-	stats.MostVisitedRestaurant = topCount(visitsByRestaurant)
-	stats.HighestRatedRestaurant = topAverage(ratingByRestaurant)
 	stats.BestPicker, stats.BestPickerAverage = topAverageWithScore(ratingByPicker)
 	stats.WorstPicker, stats.WorstPickerAverage = bottomAverageWithScore(ratingByPicker)
 	stats.NewPlaces = len(visitedRestaurants)
@@ -804,40 +793,6 @@ func demoVisit(restaurant model.Restaurant, picker model.Person, visitedAt time.
 		CreatedAt:  now,
 		UpdatedAt:  now,
 	}
-}
-
-func visitSplit(visit model.Visit) float64 {
-	if len(visit.Ratings) < 2 {
-		return 0
-	}
-	min := visit.Ratings[0].Score
-	max := visit.Ratings[0].Score
-	for _, rating := range visit.Ratings[1:] {
-		if rating.Score < min {
-			min = rating.Score
-		}
-		if rating.Score > max {
-			max = rating.Score
-		}
-	}
-	return max - min
-}
-
-func topCount(values map[string]int) string {
-	bestName := ""
-	bestValue := -1
-	for name, value := range values {
-		if value > bestValue || (value == bestValue && name < bestName) {
-			bestName = name
-			bestValue = value
-		}
-	}
-	return bestName
-}
-
-func topAverage(values map[string][]float64) string {
-	name, _ := topAverageWithScore(values)
-	return name
 }
 
 func topAverageWithScore(values map[string][]float64) (string, float64) {
