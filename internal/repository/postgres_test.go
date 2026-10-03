@@ -604,6 +604,41 @@ func TestPostgresCreateVisitFillsChosenRestaurantDetails(t *testing.T) {
 	}
 }
 
+func TestPostgresCreateVisitSkipsPlaceIDOwnedByAnotherRestaurant(t *testing.T) {
+	store := postgresStore(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	owner := postgresVisitInput(t, store, "Place Owner")
+	owner.GooglePlaceID = "shared-place"
+	ownerVisitID, err := store.CreateVisit(ctx, owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chosenVisitID, err := store.CreateVisit(ctx, postgresVisitInput(t, store, "Chosen Without Place"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	chosen := postgresVisitRestaurant(t, store, *chosenVisitID)
+
+	input := postgresVisitInput(t, store, "")
+	input.RestaurantID = &chosen.ID
+	input.GooglePlaceID = "shared-place"
+	input.City = "Durham"
+	visitID, err := store.CreateVisit(ctx, input)
+	if err != nil {
+		t.Fatalf("visit for a restaurant without the shared place ID failed: %v", err)
+	}
+
+	got := postgresVisitRestaurant(t, store, *visitID)
+	if got.ID != chosen.ID || got.GooglePlaceID != nil || got.City == nil || *got.City != "Durham" {
+		t.Fatalf("chosen restaurant = %#v, want city filled and place ID left empty", got)
+	}
+	if ownerRestaurant := postgresVisitRestaurant(t, store, *ownerVisitID); ownerRestaurant.GooglePlaceID == nil || *ownerRestaurant.GooglePlaceID != "shared-place" {
+		t.Fatalf("owner restaurant lost its place ID: %#v", ownerRestaurant)
+	}
+}
+
 func TestPostgresUpdateVisitReplacesRatingsAndTags(t *testing.T) {
 	store := postgresStore(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

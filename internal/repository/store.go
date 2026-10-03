@@ -376,14 +376,22 @@ func resolveRestaurant(ctx context.Context, tx pgx.Tx, input model.VisitInput) (
 }
 
 // fillRestaurantDetails copies the input's address, city, place ID, category
-// and Google metadata onto the restaurant wherever it has no value yet.
+// and Google metadata onto the restaurant wherever it has no value yet. The
+// place ID is skipped when another restaurant already owns it, so the unique
+// index cannot fail the visit.
 func fillRestaurantDetails(ctx context.Context, tx pgx.Tx, id uuid.UUID, input model.VisitInput) error {
 	latitude, longitude, phone, website, googleRating, googlePriceLevel := googleMetadataValues(input.GoogleMetadata)
 	_, err := tx.Exec(ctx, `
 		UPDATE restaurants
 		SET address = COALESCE(restaurants.address, $2),
 		    city = COALESCE(restaurants.city, $3),
-		    google_place_id = COALESCE(restaurants.google_place_id, $4),
+		    google_place_id = COALESCE(
+		        restaurants.google_place_id,
+		        (SELECT $4::text WHERE NOT EXISTS (
+		            SELECT 1 FROM restaurants other
+		            WHERE other.google_place_id = $4::text AND other.id <> $1
+		        ))
+		    ),
 		    latitude = COALESCE(restaurants.latitude, $5),
 		    longitude = COALESCE(restaurants.longitude, $6),
 		    phone = COALESCE(restaurants.phone, $7),
