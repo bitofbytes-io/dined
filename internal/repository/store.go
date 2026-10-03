@@ -634,25 +634,6 @@ func (s *Store) Stats(ctx context.Context) (model.Stats, error) {
 		return stats, fmt.Errorf("count cities explored: %w", err)
 	}
 	err := s.pool.QueryRow(ctx, `
-		SELECT r.name FROM restaurants r
-		JOIN dining_visits v ON v.restaurant_id = r.id
-		GROUP BY r.id, r.name
-		ORDER BY COUNT(*) DESC, r.name
-		LIMIT 1`).Scan(&stats.MostVisitedRestaurant)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return stats, fmt.Errorf("most visited restaurant: %w", err)
-	}
-	err = s.pool.QueryRow(ctx, `
-		SELECT r.name FROM restaurants r
-		JOIN dining_visits v ON v.restaurant_id = r.id
-		JOIN visit_participant_ratings vr ON vr.visit_id = v.id
-		GROUP BY r.id, r.name
-		ORDER BY AVG(vr.rating) DESC, r.name
-		LIMIT 1`).Scan(&stats.HighestRatedRestaurant)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return stats, fmt.Errorf("highest rated restaurant: %w", err)
-	}
-	err = s.pool.QueryRow(ctx, `
 		SELECT p.name, AVG(vr.rating) FROM persons p
 		JOIN dining_visits v ON v.picked_by_person_id = p.id
 		JOIN visit_participant_ratings vr ON vr.visit_id = v.id
@@ -671,16 +652,6 @@ func (s *Store) Stats(ctx context.Context) (model.Stats, error) {
 		LIMIT 1`).Scan(&stats.WorstPicker, &stats.WorstPickerAverage)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return stats, fmt.Errorf("worst picker: %w", err)
-	}
-	err = s.pool.QueryRow(ctx, `
-		SELECT r.name FROM restaurants r
-		JOIN dining_visits v ON v.restaurant_id = r.id
-		JOIN visit_participant_ratings vr ON vr.visit_id = v.id
-		GROUP BY v.id, r.name
-		ORDER BY (MAX(vr.rating) - MIN(vr.rating)) DESC, r.name
-		LIMIT 1`).Scan(&stats.BiggestSplitRestaurant)
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return stats, fmt.Errorf("biggest split restaurant: %w", err)
 	}
 	stats.TopRestaurants, err = s.topRestaurants(ctx)
 	if err != nil {
