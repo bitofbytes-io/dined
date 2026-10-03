@@ -40,6 +40,9 @@ func (in VisitInput) Validate() error {
 	if validRatings == 0 {
 		return errors.New("at least one rating is required")
 	}
+	if err := validateGoogleRatingAndPriceLevel(in.GoogleMetadata.GoogleRating, in.GoogleMetadata.GooglePriceLevel); err != nil {
+		return err
+	}
 	if len(in.KeepPhotoIDs)+len(in.Photos) > MaxVisitPhotos {
 		return fmt.Errorf("dine photos must be %d or fewer", MaxVisitPhotos)
 	}
@@ -93,10 +96,15 @@ func (in RestaurantInput) Validate() error {
 	if strings.TrimSpace(in.Name) == "" {
 		return errors.New("restaurant name is required")
 	}
-	if in.GoogleRating != nil && (*in.GoogleRating < 0 || *in.GoogleRating > 5) {
+	return validateGoogleRatingAndPriceLevel(in.GoogleRating, in.GooglePriceLevel)
+}
+
+func validateGoogleRatingAndPriceLevel(rating *float64, priceLevel *int) error {
+	// Written so that NaN, which fails every comparison, is rejected too.
+	if rating != nil && !(*rating >= 0 && *rating <= 5) {
 		return errors.New("Google rating must be between 0 and 5")
 	}
-	if in.GooglePriceLevel != nil && (*in.GooglePriceLevel < 1 || *in.GooglePriceLevel > 4) {
+	if priceLevel != nil && (*priceLevel < 1 || *priceLevel > 4) {
 		return errors.New("Google price level must be between 1 and 4")
 	}
 	return nil

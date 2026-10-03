@@ -100,7 +100,8 @@ func (h *Handler) UpdateRestaurant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.store.UpdateRestaurant(r.Context(), id, input); err != nil {
-		h.renderRestaurantEditError(w, r, id, err.Error())
+		slog.Error("update restaurant", "restaurant_id", id, "error", err)
+		h.renderRestaurantEditError(w, r, id, "Could not save this restaurant. Please try again.")
 		return
 	}
 	slog.Info("restaurant updated", "restaurant_id", id, "is_chain", input.IsChain)

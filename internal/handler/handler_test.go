@@ -338,6 +338,17 @@ func TestVisitInputParsesPhotos(t *testing.T) {
 	}
 }
 
+func TestOptionalFloatRejectsNonFiniteValues(t *testing.T) {
+	for _, value := range []string{"NaN", "Inf", "-Inf", "1e400"} {
+		if _, err := optionalFloat(value, "Google rating"); err == nil {
+			t.Fatalf("optionalFloat(%q) accepted a non-finite value", value)
+		}
+	}
+	if got, err := optionalFloat(" 4.5 ", "Google rating"); err != nil || got == nil || *got != 4.5 {
+		t.Fatalf("optionalFloat(4.5) = %v, %v", got, err)
+	}
+}
+
 func TestRestaurantInputValidatesGoogleRating(t *testing.T) {
 	form := url.Values{
 		"restaurant_name": {"Hank's"},

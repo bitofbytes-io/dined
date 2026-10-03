@@ -2,6 +2,7 @@ package model
 
 import (
 	"encoding/base64"
+	"math"
 	"testing"
 	"time"
 
@@ -162,4 +163,41 @@ func TestRestaurantInputValidateRejectsInvalidGoogleRating(t *testing.T) {
 
 func visitPhotoDataURI(data []byte) string {
 	return "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(data)
+}
+
+func TestVisitInputValidateChecksGoogleMetadata(t *testing.T) {
+	nan, high, rating := math.NaN(), 999.0, 4.5
+	badPrice, price := 9, 2
+	tests := []struct {
+		name     string
+		metadata GoogleRestaurantMetadata
+		wantErr  bool
+	}{
+		{name: "valid", metadata: GoogleRestaurantMetadata{GoogleRating: &rating, GooglePriceLevel: &price}},
+		{name: "NaN rating", metadata: GoogleRestaurantMetadata{GoogleRating: &nan}, wantErr: true},
+		{name: "rating above 5", metadata: GoogleRestaurantMetadata{GoogleRating: &high}, wantErr: true},
+		{name: "price level above 4", metadata: GoogleRestaurantMetadata{GooglePriceLevel: &badPrice}, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := VisitInput{
+				RestaurantName: "Hank's",
+				VisitedAt:      time.Now(),
+				PickerID:       uuid.New(),
+				PriceLevel:     2,
+				Ratings:        map[uuid.UUID]float64{uuid.New(): 8},
+				GoogleMetadata: tt.metadata,
+			}.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("Validate() error = %v, want error %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestRestaurantInputValidateRejectsNaNGoogleRating(t *testing.T) {
+	nan := math.NaN()
+	if err := (RestaurantInput{Name: "Hank's", GoogleRating: &nan}).Validate(); err == nil {
+		t.Fatal("expected validation error")
+	}
 }
