@@ -102,6 +102,20 @@ func TestLoadTrustedProxies(t *testing.T) {
 		t.Fatalf("configured trusted proxies = %v", cfg.TrustedProxies)
 	}
 
+	t.Setenv("TRUSTED_PROXY_CIDRS", "::ffff:10.0.9.0/120, ::ffff:192.0.2.10")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !containsAddr(cfg.TrustedProxies, "10.0.9.200") || !containsAddr(cfg.TrustedProxies, "192.0.2.10") || containsAddr(cfg.TrustedProxies, "10.0.8.1") {
+		t.Fatalf("IPv4-mapped trusted proxies = %v", cfg.TrustedProxies)
+	}
+
+	t.Setenv("TRUSTED_PROXY_CIDRS", "::ffff:0:0/64")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected error for an IPv4-mapped prefix shorter than /96")
+	}
+
 	t.Setenv("TRUSTED_PROXY_CIDRS", "traefik")
 	if _, err := Load(); err == nil {
 		t.Fatal("expected error for an invalid CIDR")

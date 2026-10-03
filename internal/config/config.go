@@ -157,19 +157,26 @@ func parseCSV(value string) []string {
 }
 
 // parsePrefixes reads a comma-separated list of CIDRs; a bare IP counts as a
-// single-address prefix.
+// single-address prefix. IPv4-mapped IPv6 entries become IPv4 prefixes, since
+// peer addresses are unmapped before they are matched.
 func parsePrefixes(value string) ([]netip.Prefix, error) {
 	var prefixes []netip.Prefix
 	for _, part := range parseCSV(value) {
-		if prefix, err := netip.ParsePrefix(part); err == nil {
-			prefixes = append(prefixes, prefix.Masked())
-			continue
-		}
-		addr, err := netip.ParseAddr(part)
+		prefix, err := netip.ParsePrefix(part)
 		if err != nil {
-			return nil, fmt.Errorf("%q is not a CIDR or IP address", part)
+			addr, addrErr := netip.ParseAddr(part)
+			if addrErr != nil {
+				return nil, fmt.Errorf("%q is not a CIDR or IP address", part)
+			}
+			prefix = netip.PrefixFrom(addr, addr.BitLen())
 		}
-		prefixes = append(prefixes, netip.PrefixFrom(addr, addr.BitLen()))
+		if prefix.Addr().Is4In6() {
+			if prefix.Bits() < 96 {
+				return nil, fmt.Errorf("%q is an IPv4-mapped prefix shorter than /96", part)
+			}
+			prefix = netip.PrefixFrom(prefix.Addr().Unmap(), prefix.Bits()-96)
+		}
+		prefixes = append(prefixes, prefix.Masked())
 	}
 	return prefixes, nil
 }
