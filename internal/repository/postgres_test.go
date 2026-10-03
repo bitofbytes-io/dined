@@ -559,6 +559,105 @@ func TestPostgresCreateVisitUpsertsConcurrentPlaceIDInsert(t *testing.T) {
 	}
 }
 
+func TestPostgresCreateVisitFillsChosenRestaurantDetails(t *testing.T) {
+	store := postgresStore(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	first := postgresVisitInput(t, store, "Chosen Diner")
+	first.Category = "American"
+	firstID, err := store.CreateVisit(ctx, first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	restaurant := postgresVisitRestaurant(t, store, *firstID)
+
+	latitude, longitude, rating, priceLevel := 35.78, -78.64, 4.4, 2
+	second := postgresVisitInput(t, store, "Ignored Name")
+	second.RestaurantID = &restaurant.ID
+	second.Address = "9 Elm Street"
+	second.City = "Cary"
+	second.Category = "Diner"
+	second.GooglePlaceID = "chosen-diner"
+	second.GoogleMetadata = model.GoogleRestaurantMetadata{
+		Latitude: &latitude, Longitude: &longitude, Phone: "919-555-0100",
+		Website: "https://chosen.example", GoogleRating: &rating, GooglePriceLevel: &priceLevel,
+	}
+	secondID, err := store.CreateVisit(ctx, second)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	filled := postgresVisitRestaurant(t, store, *secondID)
+	if filled.ID != restaurant.ID || filled.Name != "Chosen Diner" || filled.Category == nil || *filled.Category != "American" {
+		t.Fatalf("chosen restaurant should keep its name and category: %#v", filled)
+	}
+	if filled.Address == nil || *filled.Address != "9 Elm Street" || filled.City == nil || *filled.City != "Cary" ||
+		filled.GooglePlaceID == nil || *filled.GooglePlaceID != "chosen-diner" ||
+		filled.Latitude == nil || *filled.Latitude != latitude || filled.Longitude == nil || *filled.Longitude != longitude ||
+		filled.Phone == nil || *filled.Phone != "919-555-0100" || filled.Website == nil || *filled.Website != "https://chosen.example" ||
+		filled.GoogleRating == nil || *filled.GoogleRating != rating || filled.GooglePriceLevel == nil || *filled.GooglePriceLevel != priceLevel {
+		t.Fatalf("missing restaurant details should be filled: %#v", filled)
+	}
+	if got := countPostgresRows(t, store, "SELECT COUNT(*) FROM restaurants"); got != 1 {
+		t.Fatalf("restaurants = %d, want 1", got)
+	}
+}
+
+func TestPostgresUpdateVisitReplacesRatingsAndTags(t *testing.T) {
+	store := postgresStore(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	people, err := store.People(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tags, err := store.Tags(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	input := postgresVisitInput(t, store, "Tag Diner")
+	input.Ratings = map[uuid.UUID]float64{people[0].ID: 8, people[1].ID: 6.5}
+	input.TagIDs = []uuid.UUID{tags[0].ID}
+	input.NewTag = "Patio"
+	visitID, err := store.CreateVisit(ctx, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := store.Visit(ctx, *visitID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(created.Ratings) != 2 || len(created.Tags) != 2 {
+		t.Fatalf("created ratings = %#v, tags = %#v", created.Ratings, created.Tags)
+	}
+
+	update := postgresVisitInput(t, store, "")
+	update.RestaurantID = &created.Restaurant.ID
+	update.Ratings = map[uuid.UUID]float64{people[1].ID: 9.5}
+	update.TagIDs = []uuid.UUID{tags[1].ID}
+	update.NewTag = "Late Night"
+	if err := store.UpdateVisit(ctx, *visitID, update); err != nil {
+		t.Fatal(err)
+	}
+
+	updated, err := store.Visit(ctx, *visitID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(updated.Ratings) != 1 || updated.Ratings[0].Person.ID != people[1].ID || updated.Ratings[0].Score != 9.5 {
+		t.Fatalf("updated ratings = %#v", updated.Ratings)
+	}
+	var tagNames []string
+	for _, tag := range updated.Tags {
+		tagNames = append(tagNames, tag.Name)
+	}
+	if want := []string{"Late Night", tags[1].Name}; !slices.Equal(tagNames, want) && !slices.Equal(tagNames, []string{want[1], want[0]}) {
+		t.Fatalf("updated tags = %v, want %v", tagNames, want)
+	}
+}
+
 func TestPostgresUpdateVisitReconcilesPhotos(t *testing.T) {
 	store := postgresStore(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

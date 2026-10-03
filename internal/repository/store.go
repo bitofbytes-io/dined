@@ -266,138 +266,9 @@ func (s *Store) CreateVisit(ctx context.Context, input model.VisitInput) (*uuid.
 	}
 	defer tx.Rollback(ctx)
 
-	latitude, longitude, phone, website, googleRating, googlePriceLevel := googleMetadataValues(input.GoogleMetadata)
-	existingRestaurantID := input.RestaurantID
-	restaurantID := input.RestaurantID
-	if restaurantID == nil {
-		var id uuid.UUID
-		name := strings.TrimSpace(input.RestaurantName)
-		address := strings.TrimSpace(input.Address)
-		addressValue := nullableString(input.Address)
-		city := nullableString(input.City)
-		placeID := nullableString(input.GooglePlaceID)
-		category := nullableString(input.Category)
-		if placeID != nil {
-			err := tx.QueryRow(ctx, `
-					SELECT id
-					FROM restaurants
-					WHERE google_place_id = $1
-					LIMIT 1`, *placeID).Scan(&id)
-			if err == nil {
-				restaurantID = &id
-				_, err = tx.Exec(ctx, `
-					UPDATE restaurants
-					SET address = COALESCE(restaurants.address, $2),
-					    city = COALESCE(restaurants.city, $3),
-					    category = COALESCE(restaurants.category, $4),
-					    latitude = COALESCE(restaurants.latitude, $5),
-					    longitude = COALESCE(restaurants.longitude, $6),
-					    phone = COALESCE(restaurants.phone, $7),
-					    website = COALESCE(restaurants.website, $8),
-					    google_rating = COALESCE(restaurants.google_rating, $9),
-					    google_price_level = COALESCE(restaurants.google_price_level, $10),
-					    updated_at = NOW()
-					WHERE id = $1`, id, addressValue, city, category, latitude, longitude, phone, website, googleRating, googlePriceLevel)
-				if err != nil {
-					return nil, fmt.Errorf("update matched restaurant metadata: %w", err)
-				}
-			} else if !errors.Is(err, pgx.ErrNoRows) {
-				return nil, fmt.Errorf("find restaurant by place id: %w", err)
-			}
-		}
-		if restaurantID == nil && address != "" {
-			err := tx.QueryRow(ctx, `
-					SELECT id
-					FROM restaurants
-					WHERE lower(name) = lower($1)
-					  AND lower(coalesce(address, '')) = lower($2)
-					ORDER BY created_at
-					LIMIT 1`, name, address).Scan(&id)
-			if err == nil {
-				restaurantID = &id
-				_, err = tx.Exec(ctx, `
-					UPDATE restaurants
-					SET google_place_id = COALESCE(restaurants.google_place_id, $2),
-					    category = COALESCE(restaurants.category, $3),
-					    city = COALESCE(restaurants.city, $4),
-					    latitude = COALESCE(restaurants.latitude, $5),
-					    longitude = COALESCE(restaurants.longitude, $6),
-					    phone = COALESCE(restaurants.phone, $7),
-					    website = COALESCE(restaurants.website, $8),
-					    google_rating = COALESCE(restaurants.google_rating, $9),
-					    google_price_level = COALESCE(restaurants.google_price_level, $10),
-					    updated_at = NOW()
-					WHERE id = $1`, id, placeID, category, city, latitude, longitude, phone, website, googleRating, googlePriceLevel)
-				if err != nil {
-					return nil, fmt.Errorf("update matched restaurant metadata: %w", err)
-				}
-			} else if !errors.Is(err, pgx.ErrNoRows) {
-				return nil, fmt.Errorf("find restaurant by name and address: %w", err)
-			}
-		}
-	}
-	if restaurantID == nil {
-		var id uuid.UUID
-		name := strings.TrimSpace(input.RestaurantName)
-		address := nullableString(input.Address)
-		city := nullableString(input.City)
-		placeID := nullableString(input.GooglePlaceID)
-		category := nullableString(input.Category)
-		err := tx.QueryRow(ctx, `
-				INSERT INTO restaurants (
-					name, address, city, latitude, longitude, phone, website, google_place_id,
-					google_rating, google_price_level, category, is_chain
-				)
-				VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-			ON CONFLICT (google_place_id) WHERE google_place_id IS NOT NULL DO UPDATE
-			SET name = restaurants.name,
-			    address = COALESCE(restaurants.address, EXCLUDED.address),
-			    city = COALESCE(restaurants.city, EXCLUDED.city),
-			    latitude = COALESCE(restaurants.latitude, EXCLUDED.latitude),
-			    longitude = COALESCE(restaurants.longitude, EXCLUDED.longitude),
-			    phone = COALESCE(restaurants.phone, EXCLUDED.phone),
-			    website = COALESCE(restaurants.website, EXCLUDED.website),
-			    google_rating = COALESCE(restaurants.google_rating, EXCLUDED.google_rating),
-			    google_price_level = COALESCE(restaurants.google_price_level, EXCLUDED.google_price_level),
-			    category = COALESCE(restaurants.category, EXCLUDED.category),
-			    updated_at = NOW()
-			RETURNING id`, name, address, city, latitude, longitude, phone, website, placeID, googleRating, googlePriceLevel, category, input.IsChain).Scan(&id)
-		if err != nil {
-			return nil, fmt.Errorf("create restaurant: %w", err)
-		}
-		restaurantID = &id
-	}
-
-	if existingRestaurantID != nil {
-		_, err = tx.Exec(ctx, `
-			UPDATE restaurants
-			SET address = COALESCE(restaurants.address, $2),
-			    city = COALESCE(restaurants.city, $3),
-			    google_place_id = COALESCE(restaurants.google_place_id, $4),
-			    latitude = COALESCE(restaurants.latitude, $5),
-			    longitude = COALESCE(restaurants.longitude, $6),
-			    phone = COALESCE(restaurants.phone, $7),
-			    website = COALESCE(restaurants.website, $8),
-			    google_rating = COALESCE(restaurants.google_rating, $9),
-			    google_price_level = COALESCE(restaurants.google_price_level, $10),
-			    category = COALESCE(restaurants.category, $11),
-			    updated_at = NOW()
-			WHERE id = $1`,
-			*existingRestaurantID,
-			nullableString(input.Address),
-			nullableString(input.City),
-			nullableString(input.GooglePlaceID),
-			latitude,
-			longitude,
-			phone,
-			website,
-			googleRating,
-			googlePriceLevel,
-			nullableString(input.Category),
-		)
-		if err != nil {
-			return nil, fmt.Errorf("update existing restaurant metadata: %w", err)
-		}
+	restaurantID, err := resolveRestaurant(ctx, tx, input)
+	if err != nil {
+		return nil, err
 	}
 
 	var visitID uuid.UUID
@@ -405,41 +276,13 @@ func (s *Store) CreateVisit(ctx context.Context, input model.VisitInput) (*uuid.
 	err = tx.QueryRow(ctx, `
 		INSERT INTO dining_visits (restaurant_id, visited_at, picked_by_person_id, price_level, notes)
 		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id`, *restaurantID, input.VisitedAt, input.PickerID, input.PriceLevel, notes).Scan(&visitID)
+		RETURNING id`, restaurantID, input.VisitedAt, input.PickerID, input.PriceLevel, notes).Scan(&visitID)
 	if err != nil {
 		return nil, fmt.Errorf("create visit: %w", err)
 	}
 
-	for personID, score := range input.Ratings {
-		_, err := tx.Exec(ctx, `
-			INSERT INTO visit_participant_ratings (visit_id, person_id, rating)
-			VALUES ($1, $2, $3)`, visitID, personID, score)
-		if err != nil {
-			return nil, fmt.Errorf("create rating: %w", err)
-		}
-	}
-
-	tagIDs := input.TagIDs
-	if name := strings.TrimSpace(input.NewTag); name != "" {
-		var tagID uuid.UUID
-		err := tx.QueryRow(ctx, `
-			INSERT INTO tags (name)
-			VALUES ($1)
-			ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
-			RETURNING id`, name).Scan(&tagID)
-		if err != nil {
-			return nil, fmt.Errorf("create tag: %w", err)
-		}
-		tagIDs = append(tagIDs, tagID)
-	}
-	for _, tagID := range tagIDs {
-		_, err := tx.Exec(ctx, `
-			INSERT INTO visit_tags (visit_id, tag_id)
-			VALUES ($1, $2)
-			ON CONFLICT DO NOTHING`, visitID, tagID)
-		if err != nil {
-			return nil, fmt.Errorf("create visit tag: %w", err)
-		}
+	if err := replaceVisitRatingsAndTags(ctx, tx, visitID, input); err != nil {
+		return nil, err
 	}
 
 	if err := insertVisitPhotos(ctx, tx, visitID, input.Photos, 0); err != nil {
@@ -450,6 +293,166 @@ func (s *Store) CreateVisit(ctx context.Context, input model.VisitInput) (*uuid.
 		return nil, fmt.Errorf("commit create visit: %w", err)
 	}
 	return &visitID, nil
+}
+
+// resolveRestaurant returns the restaurant a new visit belongs to: the chosen
+// restaurant, else one matched by Google place ID, else one matched by name and
+// address, else a newly inserted one. A matched restaurant gains any details
+// it is missing from the input.
+func resolveRestaurant(ctx context.Context, tx pgx.Tx, input model.VisitInput) (uuid.UUID, error) {
+	if input.RestaurantID != nil {
+		return *input.RestaurantID, fillRestaurantDetails(ctx, tx, *input.RestaurantID, input)
+	}
+
+	var id uuid.UUID
+	name := strings.TrimSpace(input.RestaurantName)
+	address := strings.TrimSpace(input.Address)
+	if placeID := nullableString(input.GooglePlaceID); placeID != nil {
+		err := tx.QueryRow(ctx, `
+			SELECT id
+			FROM restaurants
+			WHERE google_place_id = $1
+			LIMIT 1`, *placeID).Scan(&id)
+		if err == nil {
+			return id, fillRestaurantDetails(ctx, tx, id, input)
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return uuid.Nil, fmt.Errorf("find restaurant by place id: %w", err)
+		}
+	}
+	if address != "" {
+		err := tx.QueryRow(ctx, `
+			SELECT id
+			FROM restaurants
+			WHERE lower(name) = lower($1)
+			  AND lower(coalesce(address, '')) = lower($2)
+			ORDER BY created_at
+			LIMIT 1`, name, address).Scan(&id)
+		if err == nil {
+			return id, fillRestaurantDetails(ctx, tx, id, input)
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return uuid.Nil, fmt.Errorf("find restaurant by name and address: %w", err)
+		}
+	}
+
+	latitude, longitude, phone, website, googleRating, googlePriceLevel := googleMetadataValues(input.GoogleMetadata)
+	err := tx.QueryRow(ctx, `
+		INSERT INTO restaurants (
+			name, address, city, latitude, longitude, phone, website, google_place_id,
+			google_rating, google_price_level, category, is_chain
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		ON CONFLICT (google_place_id) WHERE google_place_id IS NOT NULL DO UPDATE
+		SET name = restaurants.name,
+		    address = COALESCE(restaurants.address, EXCLUDED.address),
+		    city = COALESCE(restaurants.city, EXCLUDED.city),
+		    latitude = COALESCE(restaurants.latitude, EXCLUDED.latitude),
+		    longitude = COALESCE(restaurants.longitude, EXCLUDED.longitude),
+		    phone = COALESCE(restaurants.phone, EXCLUDED.phone),
+		    website = COALESCE(restaurants.website, EXCLUDED.website),
+		    google_rating = COALESCE(restaurants.google_rating, EXCLUDED.google_rating),
+		    google_price_level = COALESCE(restaurants.google_price_level, EXCLUDED.google_price_level),
+		    category = COALESCE(restaurants.category, EXCLUDED.category),
+		    updated_at = NOW()
+		RETURNING id`,
+		name,
+		nullableString(input.Address),
+		nullableString(input.City),
+		latitude,
+		longitude,
+		phone,
+		website,
+		nullableString(input.GooglePlaceID),
+		googleRating,
+		googlePriceLevel,
+		nullableString(input.Category),
+		input.IsChain,
+	).Scan(&id)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("create restaurant: %w", err)
+	}
+	return id, nil
+}
+
+// fillRestaurantDetails copies the input's address, city, place ID, category
+// and Google metadata onto the restaurant wherever it has no value yet.
+func fillRestaurantDetails(ctx context.Context, tx pgx.Tx, id uuid.UUID, input model.VisitInput) error {
+	latitude, longitude, phone, website, googleRating, googlePriceLevel := googleMetadataValues(input.GoogleMetadata)
+	_, err := tx.Exec(ctx, `
+		UPDATE restaurants
+		SET address = COALESCE(restaurants.address, $2),
+		    city = COALESCE(restaurants.city, $3),
+		    google_place_id = COALESCE(restaurants.google_place_id, $4),
+		    latitude = COALESCE(restaurants.latitude, $5),
+		    longitude = COALESCE(restaurants.longitude, $6),
+		    phone = COALESCE(restaurants.phone, $7),
+		    website = COALESCE(restaurants.website, $8),
+		    google_rating = COALESCE(restaurants.google_rating, $9),
+		    google_price_level = COALESCE(restaurants.google_price_level, $10),
+		    category = COALESCE(restaurants.category, $11),
+		    updated_at = NOW()
+		WHERE id = $1`,
+		id,
+		nullableString(input.Address),
+		nullableString(input.City),
+		nullableString(input.GooglePlaceID),
+		latitude,
+		longitude,
+		phone,
+		website,
+		googleRating,
+		googlePriceLevel,
+		nullableString(input.Category),
+	)
+	if err != nil {
+		return fmt.Errorf("fill restaurant details: %w", err)
+	}
+	return nil
+}
+
+// replaceVisitRatingsAndTags writes the input's ratings and tags (creating
+// NewTag if needed) as the visit's complete set.
+func replaceVisitRatingsAndTags(ctx context.Context, tx pgx.Tx, visitID uuid.UUID, input model.VisitInput) error {
+	tagIDs := append([]uuid.UUID(nil), input.TagIDs...)
+	if name := strings.TrimSpace(input.NewTag); name != "" {
+		var tagID uuid.UUID
+		err := tx.QueryRow(ctx, `
+			INSERT INTO tags (name)
+			VALUES ($1)
+			ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
+			RETURNING id`, name).Scan(&tagID)
+		if err != nil {
+			return fmt.Errorf("create tag: %w", err)
+		}
+		tagIDs = append(tagIDs, tagID)
+	}
+
+	if _, err := tx.Exec(ctx, `DELETE FROM visit_participant_ratings WHERE visit_id = $1`, visitID); err != nil {
+		return fmt.Errorf("clear visit ratings: %w", err)
+	}
+	for personID, score := range input.Ratings {
+		_, err := tx.Exec(ctx, `
+			INSERT INTO visit_participant_ratings (visit_id, person_id, rating)
+			VALUES ($1, $2, $3)`, visitID, personID, score)
+		if err != nil {
+			return fmt.Errorf("write rating: %w", err)
+		}
+	}
+
+	if _, err := tx.Exec(ctx, `DELETE FROM visit_tags WHERE visit_id = $1`, visitID); err != nil {
+		return fmt.Errorf("clear visit tags: %w", err)
+	}
+	for _, tagID := range tagIDs {
+		_, err := tx.Exec(ctx, `
+			INSERT INTO visit_tags (visit_id, tag_id)
+			VALUES ($1, $2)
+			ON CONFLICT DO NOTHING`, visitID, tagID)
+		if err != nil {
+			return fmt.Errorf("write visit tag: %w", err)
+		}
+	}
+	return nil
 }
 
 func (s *Store) UpdateRestaurantGoogleMetadata(ctx context.Context, id uuid.UUID, metadata model.GoogleRestaurantMetadata) error {
@@ -502,43 +505,8 @@ func (s *Store) UpdateVisit(ctx context.Context, id uuid.UUID, input model.Visit
 		return pgx.ErrNoRows
 	}
 
-	tagIDs := append([]uuid.UUID(nil), input.TagIDs...)
-	if name := strings.TrimSpace(input.NewTag); name != "" {
-		var tagID uuid.UUID
-		err := tx.QueryRow(ctx, `
-			INSERT INTO tags (name)
-			VALUES ($1)
-			ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
-			RETURNING id`, name).Scan(&tagID)
-		if err != nil {
-			return fmt.Errorf("create tag: %w", err)
-		}
-		tagIDs = append(tagIDs, tagID)
-	}
-
-	if _, err := tx.Exec(ctx, `DELETE FROM visit_participant_ratings WHERE visit_id = $1`, id); err != nil {
-		return fmt.Errorf("clear visit ratings: %w", err)
-	}
-	for personID, score := range input.Ratings {
-		_, err := tx.Exec(ctx, `
-			INSERT INTO visit_participant_ratings (visit_id, person_id, rating)
-			VALUES ($1, $2, $3)`, id, personID, score)
-		if err != nil {
-			return fmt.Errorf("update rating: %w", err)
-		}
-	}
-
-	if _, err := tx.Exec(ctx, `DELETE FROM visit_tags WHERE visit_id = $1`, id); err != nil {
-		return fmt.Errorf("clear visit tags: %w", err)
-	}
-	for _, tagID := range tagIDs {
-		_, err := tx.Exec(ctx, `
-			INSERT INTO visit_tags (visit_id, tag_id)
-			VALUES ($1, $2)
-			ON CONFLICT DO NOTHING`, id, tagID)
-		if err != nil {
-			return fmt.Errorf("update visit tag: %w", err)
-		}
+	if err := replaceVisitRatingsAndTags(ctx, tx, id, input); err != nil {
+		return err
 	}
 
 	if err := reconcileVisitPhotos(ctx, tx, id, input); err != nil {
