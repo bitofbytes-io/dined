@@ -15,7 +15,7 @@ func RealIP(trustedProxies []netip.Prefix) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if peer, ok := remoteIP(r.RemoteAddr); ok && isTrusted(peer, trustedProxies) {
-				if client, ok := forwardedClientIP(r.Header); ok {
+				if client, ok := forwardedClientIP(r.Header, trustedProxies); ok {
 					r.RemoteAddr = client.String()
 				}
 			}
@@ -46,19 +46,22 @@ func isTrusted(addr netip.Addr, trustedProxies []netip.Prefix) bool {
 }
 
 // forwardedClientIP prefers X-Real-IP, which Traefik sets to the address it
-// accepted the connection from, and otherwise takes the last X-Forwarded-For
-// entry: the one the trusted proxy appended, not one the client supplied.
-func forwardedClientIP(header http.Header) (netip.Addr, bool) {
+// accepted the connection from. Otherwise it walks X-Forwarded-For from the
+// right, skipping trusted proxy hops, and returns the first other address:
+// entries further left were supplied by the client and cannot be trusted.
+func forwardedClientIP(header http.Header, trustedProxies []netip.Prefix) (netip.Addr, bool) {
 	if addr, err := netip.ParseAddr(strings.TrimSpace(header.Get("X-Real-IP"))); err == nil {
 		return addr.Unmap(), true
 	}
-	forwarded := header.Values("X-Forwarded-For")
-	if len(forwarded) == 0 {
-		return netip.Addr{}, false
-	}
-	entries := strings.Split(forwarded[len(forwarded)-1], ",")
-	if addr, err := netip.ParseAddr(strings.TrimSpace(entries[len(entries)-1])); err == nil {
-		return addr.Unmap(), true
+	entries := strings.Split(strings.Join(header.Values("X-Forwarded-For"), ","), ",")
+	for i := len(entries) - 1; i >= 0; i-- {
+		addr, err := netip.ParseAddr(strings.TrimSpace(entries[i]))
+		if err != nil {
+			return netip.Addr{}, false
+		}
+		if addr = addr.Unmap(); !isTrusted(addr, trustedProxies) {
+			return addr, true
+		}
 	}
 	return netip.Addr{}, false
 }
