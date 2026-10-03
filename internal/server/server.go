@@ -28,7 +28,7 @@ func New(cfg *config.Config, store repository.DinerStore, placesClient *places.C
 func (s *Server) Router() http.Handler {
 	r := chi.NewRouter()
 	r.Use(chimw.RequestID)
-	r.Use(chimw.RealIP)
+	r.Use(middleware.RealIP(s.cfg.TrustedProxies))
 	r.Use(middleware.Logger)
 	r.Use(chimw.Recoverer)
 	r.Use(middleware.SameOrigin)

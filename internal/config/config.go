@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/netip"
 	"os"
 	"strings"
 	"time"
@@ -21,12 +22,18 @@ type Config struct {
 	GoogleAllowedDomains []string
 	GoogleAllowedEmails  []string
 	AuthSessionTTL       time.Duration
+	TrustedProxies       []netip.Prefix
 }
 
 const (
 	DataStoreMemory   = "memory"
 	DataStorePostgres = "postgres"
 )
+
+// defaultTrustedProxies covers loopback and the private ranges Docker assigns
+// to overlay networks, which is how Traefik reaches Dined. Dined publishes no
+// port of its own, so only containers on those networks can connect directly.
+const defaultTrustedProxies = "127.0.0.0/8,::1/128,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,fc00::/7"
 
 func Load() (*Config, error) {
 	cfg := &Config{}
@@ -70,6 +77,13 @@ func Load() (*Config, error) {
 	cfg.AuthSessionTTL, err = time.ParseDuration(ttlValue)
 	if err != nil {
 		return nil, fmt.Errorf("AUTH_SESSION_TTL must be a Go duration like 2160h, got %q", ttlValue)
+	}
+	proxies, err := getEnv("TRUSTED_PROXY_CIDRS", defaultTrustedProxies)
+	if err != nil {
+		return nil, err
+	}
+	if cfg.TrustedProxies, err = parsePrefixes(proxies); err != nil {
+		return nil, fmt.Errorf("TRUSTED_PROXY_CIDRS: %w", err)
 	}
 
 	if cfg.DataStore != DataStoreMemory && cfg.DataStore != DataStorePostgres {
@@ -138,4 +152,22 @@ func parseCSV(value string) []string {
 		}
 	}
 	return out
+}
+
+// parsePrefixes reads a comma-separated list of CIDRs; a bare IP counts as a
+// single-address prefix.
+func parsePrefixes(value string) ([]netip.Prefix, error) {
+	var prefixes []netip.Prefix
+	for _, part := range parseCSV(value) {
+		if prefix, err := netip.ParsePrefix(part); err == nil {
+			prefixes = append(prefixes, prefix.Masked())
+			continue
+		}
+		addr, err := netip.ParseAddr(part)
+		if err != nil {
+			return nil, fmt.Errorf("%q is not a CIDR or IP address", part)
+		}
+		prefixes = append(prefixes, netip.PrefixFrom(addr, addr.BitLen()))
+	}
+	return prefixes, nil
 }

@@ -56,6 +56,7 @@ Do not commit this file. `AUTH_GOOGLE_ALLOWED_DOMAINS` can replace or supplement
 | `SECURE_COOKIES` | No | Set `false` for local HTTP; defaults to `true` |
 | `PORT` | No | HTTP port; defaults to `4600` |
 | `LOG_LEVEL` | No | Application log level; defaults to `info` |
+| `TRUSTED_PROXY_CIDRS` | No | Comma-separated CIDRs of reverse proxies whose `X-Real-IP` / `X-Forwarded-For` headers are trusted for the client IP; defaults to loopback and private ranges (Docker overlay networks) |
 
 The database URL, Places key, OAuth client ID, and OAuth secret support corresponding `*_FILE` variables and default secret paths under `/run/secrets/dined_*`.
 

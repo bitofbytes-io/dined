@@ -1,6 +1,7 @@
 package config
 
 import (
+	"net/netip"
 	"os"
 	"path/filepath"
 	"testing"
@@ -74,4 +75,43 @@ func TestLoadRequiresOAuthAllowlist(t *testing.T) {
 	if _, err := Load(); err == nil {
 		t.Fatal("expected error")
 	}
+}
+
+func TestLoadTrustedProxies(t *testing.T) {
+	t.Setenv("DATA_STORE", "memory")
+	t.Setenv("AUTH_GOOGLE_CLIENT_ID", "client-id")
+	t.Setenv("AUTH_GOOGLE_CLIENT_SECRET", "client-secret")
+	t.Setenv("AUTH_GOOGLE_ALLOWED_EMAILS", "one@example.com")
+
+	t.Setenv("TRUSTED_PROXY_CIDRS", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !containsAddr(cfg.TrustedProxies, "10.0.3.4") || containsAddr(cfg.TrustedProxies, "203.0.113.7") {
+		t.Fatalf("default trusted proxies = %v", cfg.TrustedProxies)
+	}
+
+	t.Setenv("TRUSTED_PROXY_CIDRS", "10.0.9.0/24, 192.0.2.10")
+	cfg, err = Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !containsAddr(cfg.TrustedProxies, "10.0.9.200") || !containsAddr(cfg.TrustedProxies, "192.0.2.10") || containsAddr(cfg.TrustedProxies, "10.0.3.4") {
+		t.Fatalf("configured trusted proxies = %v", cfg.TrustedProxies)
+	}
+
+	t.Setenv("TRUSTED_PROXY_CIDRS", "traefik")
+	if _, err := Load(); err == nil {
+		t.Fatal("expected error for an invalid CIDR")
+	}
+}
+
+func containsAddr(prefixes []netip.Prefix, addr string) bool {
+	for _, prefix := range prefixes {
+		if prefix.Contains(netip.MustParseAddr(addr)) {
+			return true
+		}
+	}
+	return false
 }
