@@ -41,7 +41,7 @@ SECURE_COOKIES=false
 PORT=4600
 ```
 
-Do not commit this file. `AUTH_GOOGLE_ALLOWED_DOMAINS` can replace or supplement the email allowlist.
+Do not commit this file. `AUTH_GOOGLE_ALLOWED_DOMAINS` can replace or supplement the email allowlist. A domain entry only admits Google Workspace accounts whose `hd` (hosted domain) claim names that domain; list consumer addresses such as Gmail individually. Every request re-checks the signed-in user's email against the allowlist, so removing an address or domain ends that user's existing sessions.
 
 | Setting | Required | Purpose |
 | --- | --- | --- |

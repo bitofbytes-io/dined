@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -16,13 +17,17 @@ import (
 type Service struct {
 	repo       Repository
 	sessionTTL time.Duration
+	allowed    func(string) bool
 }
 
-func NewService(repo Repository, sessionTTL time.Duration) *Service {
+// NewService validates sessions against allowed on every request, so removing
+// an account from the allowlist revokes its existing sessions. A nil allowed
+// admits every user.
+func NewService(repo Repository, sessionTTL time.Duration, allowed func(string) bool) *Service {
 	if sessionTTL <= 0 {
 		sessionTTL = 90 * 24 * time.Hour
 	}
-	return &Service{repo: repo, sessionTTL: sessionTTL}
+	return &Service{repo: repo, sessionTTL: sessionTTL, allowed: allowed}
 }
 
 func (s *Service) CreateOrUpdateUser(ctx context.Context, claims *GoogleClaims) (*User, error) {
@@ -100,6 +105,11 @@ func (s *Service) ValidateSession(ctx context.Context, token string) (*User, err
 		return nil, nil
 	}
 	if time.Now().After(session.ExpiresAt) {
+		_ = s.repo.DeleteSession(ctx, session.ID)
+		return nil, nil
+	}
+	if s.allowed != nil && !s.allowed(user.Email) {
+		slog.Info("session revoked", "reason", "email_not_allowed", "user_id", user.ID)
 		_ = s.repo.DeleteSession(ctx, session.ID)
 		return nil, nil
 	}

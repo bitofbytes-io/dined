@@ -71,7 +71,7 @@ func (f *fakeGoogleAuthenticator) Exchange(context.Context, string) (*auth.Googl
 	return f.claims, nil
 }
 
-func (f *fakeGoogleAuthenticator) IsEmailAllowed(string) bool {
+func (f *fakeGoogleAuthenticator) IsAllowed(*auth.GoogleClaims) bool {
 	return f.allowed
 }
 
@@ -137,7 +137,7 @@ func TestGoogleCallback(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			googleAuth := &fakeGoogleAuthenticator{claims: tt.claims, allowed: tt.allowed}
-			authService := auth.NewService(auth.NewMemoryRepository(), time.Hour)
+			authService := auth.NewService(auth.NewMemoryRepository(), time.Hour, nil)
 			h := New(&config.Config{AuthSessionTTL: time.Hour}, nil, nil, authService, googleAuth)
 			query := url.Values{
 				"state": {encodedOAuthState(t, oauthStatePayload{State: tt.paramState, Redirect: "/log"})},

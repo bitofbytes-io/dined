@@ -102,6 +102,40 @@ func TestAuthAllowsSessionCookie(t *testing.T) {
 	}
 }
 
+func TestAuthRejectsSessionRemovedFromAllowlist(t *testing.T) {
+	repo := auth.NewMemoryRepository()
+	loginService := auth.NewService(repo, time.Hour, nil)
+	user, err := loginService.CreateOrUpdateUser(t.Context(), &auth.GoogleClaims{Sub: "google-user-id", Email: "removed@example.com", EmailVerified: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	token, err := loginService.CreateSession(t.Context(), user.ID, "test", "127.0.0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	authService := auth.NewService(repo, time.Hour, auth.NewAllowlist([]string{"family@example.com"}, nil).Allowed)
+
+	req := httptest.NewRequest(http.MethodGet, "/log", nil)
+	req.AddCookie(&http.Cookie{Name: CookieName, Value: token})
+	rec := httptest.NewRecorder()
+	Auth(authService, false)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("handler should not be called for a user removed from the allowlist")
+	})).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusSeeOther || !strings.HasPrefix(rec.Header().Get("Location"), "/login") {
+		t.Fatalf("status = %d, location = %q, want redirect to login", rec.Code, rec.Header().Get("Location"))
+	}
+	cleared := false
+	for _, cookie := range rec.Result().Cookies() {
+		if cookie.Name == CookieName && cookie.MaxAge < 0 {
+			cleared = true
+		}
+	}
+	if !cleared {
+		t.Fatal("session cookie was not cleared")
+	}
+}
+
 func TestSameOriginAllowsSafeMethodsWithoutOrigin(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "http://dined.example/dines", nil)
 	rec := httptest.NewRecorder()
@@ -248,7 +282,7 @@ func TestLoggerElevatesClientAndServerErrors(t *testing.T) {
 
 func testAuthService(t *testing.T) *auth.Service {
 	t.Helper()
-	return auth.NewService(auth.NewMemoryRepository(), time.Hour)
+	return auth.NewService(auth.NewMemoryRepository(), time.Hour, nil)
 }
 
 func testAuthServiceWithSession(t *testing.T) (*auth.Service, string) {

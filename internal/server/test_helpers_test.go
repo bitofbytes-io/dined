@@ -14,7 +14,7 @@ import (
 
 func newAuthenticatedTestRouter(t *testing.T, store repository.DinerStore) (http.Handler, string) {
 	t.Helper()
-	authService := auth.NewService(auth.NewMemoryRepository(), time.Hour)
+	authService := auth.NewService(auth.NewMemoryRepository(), time.Hour, nil)
 	user, err := authService.CreateOrUpdateUser(context.Background(), &auth.GoogleClaims{
 		Sub:           "test-google-user",
 		Email:         "family@example.com",

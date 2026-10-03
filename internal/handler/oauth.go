@@ -24,7 +24,7 @@ const (
 type googleAuthenticator interface {
 	AuthURL(state string) string
 	Exchange(ctx context.Context, code string) (*auth.GoogleClaims, error)
-	IsEmailAllowed(email string) bool
+	IsAllowed(claims *auth.GoogleClaims) bool
 }
 
 type oauthStatePayload struct {
@@ -123,7 +123,7 @@ func (h *Handler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		h.redirectLoginError(w, r, "Please verify your Google email address before logging in.")
 		return
 	}
-	if !h.googleAuth.IsEmailAllowed(claims.Email) {
+	if !h.googleAuth.IsAllowed(claims) {
 		slog.Warn("oauth email not allowed", "email", claims.Email)
 		h.redirectLoginError(w, r, "That Google account is not allowed to access Dined.")
 		return

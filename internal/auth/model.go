@@ -33,4 +33,5 @@ type GoogleClaims struct {
 	EmailVerified bool   `json:"email_verified"`
 	Name          string `json:"name"`
 	Picture       string `json:"picture"`
+	HostedDomain  string `json:"hd"`
 }

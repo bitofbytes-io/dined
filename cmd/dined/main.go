@@ -27,14 +27,14 @@ func main() {
 	store, authRepo, cleanup := openStores(cfg)
 	defer cleanup()
 
-	authService := auth.NewService(authRepo, cfg.AuthSessionTTL)
+	allowlist := auth.NewAllowlist(cfg.GoogleAllowedEmails, cfg.GoogleAllowedDomains)
+	authService := auth.NewService(authRepo, cfg.AuthSessionTTL, allowlist.Allowed)
 	googleAuth, err := auth.NewGoogleAuthenticator(
 		context.Background(),
 		cfg.GoogleClientID,
 		cfg.GoogleClientSecret,
 		cfg.GoogleRedirectURL,
-		cfg.GoogleAllowedDomains,
-		cfg.GoogleAllowedEmails,
+		allowlist,
 	)
 	if err != nil {
 		slog.Error("initialize google auth", "error", err)
