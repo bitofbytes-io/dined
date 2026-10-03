@@ -47,9 +47,12 @@ func (s *Service) CreateOrUpdateUser(ctx context.Context, claims *GoogleClaims) 
 	}
 
 	if existing != nil {
-		if err := s.repo.UpdateUserLogin(ctx, existing.ID, claims.Name, claims.Picture); err != nil {
+		// Keep the stored email current: sessions are re-checked against the
+		// allowlist by this email, and Google lets an account's email change.
+		if err := s.repo.UpdateUserLogin(ctx, existing.ID, email, claims.Name, claims.Picture); err != nil {
 			return nil, fmt.Errorf("update user login: %w", err)
 		}
+		existing.Email = email
 		existing.Name = claims.Name
 		existing.AvatarURL = claims.Picture
 		existing.LastLoginAt = time.Now()

@@ -51,12 +51,12 @@ func (r *PostgresRepository) CreateUser(ctx context.Context, user User) (User, e
 	return user, err
 }
 
-func (r *PostgresRepository) UpdateUserLogin(ctx context.Context, id uuid.UUID, name, avatarURL string) error {
+func (r *PostgresRepository) UpdateUserLogin(ctx context.Context, id uuid.UUID, email, name, avatarURL string) error {
 	now := time.Now()
 	_, err := r.pool.Exec(ctx, `
 		UPDATE users
-		SET name = $2, avatar_url = $3, last_login_at = $4, updated_at = $4
-		WHERE id = $1`, id, name, avatarURL, now)
+		SET email = $2, name = $3, avatar_url = $4, last_login_at = $5, updated_at = $5
+		WHERE id = $1`, id, email, name, avatarURL, now)
 	return err
 }
 

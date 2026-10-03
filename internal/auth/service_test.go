@@ -139,3 +139,30 @@ func TestScheduleSessionCleanupDeletesExpiredSessionsAtStartup(t *testing.T) {
 		t.Fatalf("live session was removed: user = %#v, err = %v", validUser, err)
 	}
 }
+
+func TestServiceLoginUpdatesChangedEmailForAllowlistCheck(t *testing.T) {
+	repo := NewMemoryRepository()
+	service := NewService(repo, time.Hour, NewAllowlist([]string{"new@example.com"}, nil).Allowed)
+	if _, err := service.CreateOrUpdateUser(t.Context(), &GoogleClaims{Sub: "google-user-id", Email: "old@example.com", EmailVerified: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Same Google account (sub), new address: only the new address is allowed.
+	user, err := service.CreateOrUpdateUser(t.Context(), &GoogleClaims{Sub: "google-user-id", Email: "New@Example.com", EmailVerified: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if user.Email != "new@example.com" {
+		t.Fatalf("user email = %q, want the new address", user.Email)
+	}
+	token, err := service.CreateSession(t.Context(), user.ID, "test", "127.0.0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if validUser, err := service.ValidateSession(t.Context(), token); err != nil || validUser == nil || validUser.Email != "new@example.com" {
+		t.Fatalf("session for the new address did not validate: user = %#v, err = %v", validUser, err)
+	}
+	if byEmail, err := repo.FindUserByEmail(t.Context(), "new@example.com"); err != nil || byEmail == nil || byEmail.ID != user.ID {
+		t.Fatalf("user not found by new email: %#v, err = %v", byEmail, err)
+	}
+}
