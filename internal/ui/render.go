@@ -8,9 +8,9 @@ import (
 	"math"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/bitofbytes-io/dined/internal/apptime"
@@ -21,6 +21,13 @@ import (
 
 //go:embed templates/*.html
 var templates embed.FS
+
+// pageTemplates is parsed once; html/template is safe for concurrent use.
+var pageTemplates = template.Must(template.New("dined").Funcs(funcs()).ParseFS(templates, "templates/*.html"))
+
+// assetVersions maps each /static/ URL to its cache-busted form. It is set
+// once at startup by LoadAssetVersions.
+var assetVersions atomic.Pointer[map[string]string]
 
 type PageData struct {
 	Title                   string
@@ -95,11 +102,7 @@ func Render(w io.Writer, name string, data PageData) error {
 	if data.NowLocal == "" {
 		data.NowLocal = apptime.FormatDatetimeLocal(time.Now())
 	}
-	tpl, err := template.New("dined").Funcs(funcs()).ParseFS(templates, "templates/*.html")
-	if err != nil {
-		return err
-	}
-	return tpl.ExecuteTemplate(w, name, data)
+	return pageTemplates.ExecuteTemplate(w, name, data)
 }
 
 func funcs() template.FuncMap {
@@ -248,31 +251,39 @@ func prefillHasRating(ratings map[string]string) bool {
 	return false
 }
 
+// LoadAssetVersions records a ?v=<modification time> version for each file
+// directly in dir, which is served at /static/. Call it once at startup so
+// asset() can version URLs without touching the filesystem per request.
+func LoadAssetVersions(dir string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	versions := make(map[string]string, len(entries))
+	for _, entry := range entries {
+		if !entry.Type().IsRegular() {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		path := "/static/" + entry.Name()
+		versions[path] = fmt.Sprintf("%s?v=%d", path, info.ModTime().Unix())
+	}
+	assetVersions.Store(&versions)
+	return nil
+}
+
+// asset returns the versioned URL for a static file, or the path unchanged
+// when it has no recorded version.
 func asset(assetPath string) template.URL {
-	const staticPrefix = "/static/"
-	if !strings.HasPrefix(assetPath, staticPrefix) {
-		return template.URL(assetPath)
+	if versions := assetVersions.Load(); versions != nil {
+		if versioned, ok := (*versions)[assetPath]; ok {
+			return template.URL(versioned)
+		}
 	}
-
-	rel := strings.TrimPrefix(assetPath, staticPrefix)
-	filePath := filepath.Join("static", filepath.FromSlash(rel))
-	staticRoot, err := filepath.Abs("static")
-	if err != nil {
-		return template.URL(assetPath)
-	}
-	candidate, err := filepath.Abs(filePath)
-	if err != nil {
-		return template.URL(assetPath)
-	}
-	if candidate != staticRoot && !strings.HasPrefix(candidate, staticRoot+string(os.PathSeparator)) {
-		return template.URL(assetPath)
-	}
-
-	info, err := os.Stat(candidate)
-	if err != nil {
-		return template.URL(assetPath)
-	}
-	return template.URL(fmt.Sprintf("%s?v=%d", assetPath, info.ModTime().Unix()))
+	return template.URL(assetPath)
 }
 
 func avatar(name string) string {

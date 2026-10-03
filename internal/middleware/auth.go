@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -11,6 +12,27 @@ import (
 )
 
 const CookieName = "dined_session"
+
+type userContextKey struct{}
+
+// CurrentUser returns the signed-in user for r, or nil. Auth stores the user
+// in the request context on protected routes, so this only reads the session
+// store for public pages and routes outside Auth.
+func CurrentUser(r *http.Request, authService *auth.Service) *auth.User {
+	if user, ok := r.Context().Value(userContextKey{}).(*auth.User); ok {
+		return user
+	}
+	cookie, err := r.Cookie(CookieName)
+	if err != nil || cookie.Value == "" || authService == nil {
+		return nil
+	}
+	user, err := authService.ValidateSession(r.Context(), cookie.Value)
+	if err != nil {
+		slog.Error("validate session", "error", err)
+		return nil
+	}
+	return user
+}
 
 func Auth(authService *auth.Service, secureCookies bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -46,7 +68,7 @@ func Auth(authService *auth.Service, secureCookies bool) func(http.Handler) http
 				return
 			}
 
-			next.ServeHTTP(w, r)
+			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userContextKey{}, user)))
 		})
 	}
 }
@@ -65,15 +87,6 @@ func SetSessionCookie(w http.ResponseWriter, token string, secure bool, ttl time
 
 func ClearSessionCookie(w http.ResponseWriter, secure bool) {
 	clearCookie(w, secure)
-}
-
-func IsAuthenticated(r *http.Request, authService *auth.Service) bool {
-	cookie, err := r.Cookie(CookieName)
-	if err != nil || cookie.Value == "" || authService == nil {
-		return false
-	}
-	user, err := authService.ValidateSession(r.Context(), cookie.Value)
-	return err == nil && user != nil
 }
 
 func isPublicReadRequest(r *http.Request) bool {

@@ -42,7 +42,7 @@ func (h *Handler) placesConfigured() bool {
 }
 
 func (h *Handler) render(w http.ResponseWriter, name string, r *http.Request, data ui.PageData) {
-	data.Authenticated = middleware.IsAuthenticated(r, h.authService)
+	data.Authenticated = middleware.CurrentUser(r, h.authService) != nil
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := ui.Render(w, name, data); err != nil {
 		slog.Error("render page", "page", name, "error", err)

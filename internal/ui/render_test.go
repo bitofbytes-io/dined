@@ -16,17 +16,15 @@ import (
 const testPhotoDataURI = "data:image/jpeg;base64,aGVsbG8="
 
 func TestAssetAppendsStaticFileVersion(t *testing.T) {
-	withWorkingDir(t)
-	if err := os.Mkdir("static", 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join("static", "styles.css"), []byte("body{}"), 0o644); err != nil {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "styles.css"), []byte("body{}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	modTime := time.Unix(1715451234, 0)
-	if err := os.Chtimes(filepath.Join("static", "styles.css"), modTime, modTime); err != nil {
+	if err := os.Chtimes(filepath.Join(dir, "styles.css"), modTime, modTime); err != nil {
 		t.Fatal(err)
 	}
+	loadTestAssetVersions(t, dir)
 
 	got := string(asset("/static/styles.css"))
 	want := "/static/styles.css?v=1715451234"
@@ -36,7 +34,7 @@ func TestAssetAppendsStaticFileVersion(t *testing.T) {
 }
 
 func TestAssetFallsBackWhenFileMissing(t *testing.T) {
-	withWorkingDir(t)
+	loadTestAssetVersions(t, t.TempDir())
 
 	got := string(asset("/static/missing.css"))
 	want := "/static/missing.css"
@@ -46,34 +44,31 @@ func TestAssetFallsBackWhenFileMissing(t *testing.T) {
 }
 
 func TestAssetDoesNotVersionPathsOutsideStatic(t *testing.T) {
-	withWorkingDir(t)
-	if err := os.Mkdir("static", 0o755); err != nil {
+	root := t.TempDir()
+	dir := filepath.Join(root, "static")
+	if err := os.Mkdir(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile("go.mod", []byte("module example"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	loadTestAssetVersions(t, dir)
 
 	got := string(asset("/static/../go.mod"))
 	if got != "/static/../go.mod" {
 		t.Fatalf("asset() = %q, want original path", got)
 	}
-	if strings.Contains(got, "?v=") {
-		t.Fatalf("asset() versioned a path outside static: %q", got)
-	}
 }
 
 func TestRenderUsesVersionedStylesheetAndScript(t *testing.T) {
-	withWorkingDir(t)
-	if err := os.Mkdir("static", 0o755); err != nil {
-		t.Fatal(err)
-	}
+	dir := t.TempDir()
 	files := []string{"styles.css", "htmx.min.js"}
 	for _, file := range files {
-		if err := os.WriteFile(filepath.Join("static", file), []byte(file), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, file), []byte(file), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
+	loadTestAssetVersions(t, dir)
 
 	var out strings.Builder
 	if err := Render(&out, "login", PageData{}); err != nil {
@@ -85,6 +80,14 @@ func TestRenderUsesVersionedStylesheetAndScript(t *testing.T) {
 			t.Fatalf("rendered HTML missing %q:\n%s", fragment, rendered)
 		}
 	}
+}
+
+func loadTestAssetVersions(t *testing.T, dir string) {
+	t.Helper()
+	if err := LoadAssetVersions(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { assetVersions.Store(nil) })
 }
 
 func TestRenderLoginOAuthLinkOptsOutOfBoost(t *testing.T) {
@@ -719,21 +722,4 @@ func TestRenderSearchDoesNotShowGooglePlacesWarningForEmptySavedSearch(t *testin
 	if strings.Contains(rendered, "Google Places results will appear here") {
 		t.Fatalf("rendered search showed Google Places warning:\n%s", rendered)
 	}
-}
-
-func withWorkingDir(t *testing.T) {
-	t.Helper()
-	original, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	dir := t.TempDir()
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		if err := os.Chdir(original); err != nil {
-			t.Fatal(err)
-		}
-	})
 }

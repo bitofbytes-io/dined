@@ -17,6 +17,7 @@ import (
 	"github.com/bitofbytes-io/dined/internal/places"
 	"github.com/bitofbytes-io/dined/internal/repository"
 	"github.com/bitofbytes-io/dined/internal/server"
+	"github.com/bitofbytes-io/dined/internal/ui"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -65,6 +66,10 @@ func run() error {
 	)
 	if err != nil {
 		return err
+	}
+
+	if err := ui.LoadAssetVersions("static"); err != nil {
+		slog.Warn("static asset versions unavailable; serving unversioned URLs", "error", err)
 	}
 
 	placesClient := places.NewClient(cfg.GooglePlacesAPIKey)
