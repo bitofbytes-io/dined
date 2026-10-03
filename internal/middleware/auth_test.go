@@ -49,6 +49,34 @@ func TestAuthAllowsPublicPhotos(t *testing.T) {
 	}
 }
 
+func TestAuthPublicRestaurantRouteIsExact(t *testing.T) {
+	tests := []struct {
+		path       string
+		wantPublic bool
+	}{
+		{path: "/restaurants/0b1d5a9e-7b6f-4a53-9d6e-6f3c1f9d2a10", wantPublic: true},
+		{path: "/restaurants/0b1d5a9e-7b6f-4a53-9d6e-6f3c1f9d2a10/edit", wantPublic: false},
+		{path: "/restaurants/0b1d5a9e-7b6f-4a53-9d6e-6f3c1f9d2a10/", wantPublic: false},
+		{path: "/restaurants/", wantPublic: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tt.path, nil)
+			rec := httptest.NewRecorder()
+			called := false
+			Auth(testAuthService(t), false)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				called = true
+			})).ServeHTTP(rec, req)
+			if called != tt.wantPublic {
+				t.Fatalf("handler called = %v, want %v (status %d)", called, tt.wantPublic, rec.Code)
+			}
+			if !tt.wantPublic && rec.Code != http.StatusSeeOther {
+				t.Fatalf("status = %d, want redirect to login", rec.Code)
+			}
+		})
+	}
+}
+
 func TestAuthBlocksMutationsWithoutSession(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/visits", nil)
 	rec := httptest.NewRecorder()

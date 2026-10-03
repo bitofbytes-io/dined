@@ -90,8 +90,15 @@ func isPublicReadRequest(r *http.Request) bool {
 		path == "/favicon.ico" ||
 		// Dine photos appear on the public home, dines, and restaurant pages.
 		strings.HasPrefix(path, "/photos/") ||
-		strings.HasPrefix(path, "/restaurants/") ||
+		isRestaurantPagePath(path) ||
 		strings.HasPrefix(path, "/static/")
+}
+
+// isRestaurantPagePath matches only the read-only /restaurants/{id} page, so
+// sub-pages such as /restaurants/{id}/edit still require a session.
+func isRestaurantPagePath(path string) bool {
+	id, ok := strings.CutPrefix(path, "/restaurants/")
+	return ok && id != "" && !strings.Contains(id, "/")
 }
 
 func isSafeMethod(method string) bool {
