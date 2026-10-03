@@ -14,6 +14,9 @@ import (
 	"github.com/google/uuid"
 )
 
+// SessionCleanupInterval is how often expired sessions are purged.
+const SessionCleanupInterval = 24 * time.Hour
+
 type Service struct {
 	repo       Repository
 	sessionTTL time.Duration
@@ -132,6 +135,30 @@ func (s *Service) DeleteSession(ctx context.Context, token string) error {
 
 func (s *Service) CleanupExpiredSessions(ctx context.Context) (int64, error) {
 	return s.repo.DeleteExpiredSessions(ctx)
+}
+
+// ScheduleSessionCleanup deletes expired sessions at startup and then every
+// interval until ctx is canceled.
+func (s *Service) ScheduleSessionCleanup(ctx context.Context, interval time.Duration) {
+	if interval <= 0 {
+		interval = SessionCleanupInterval
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		if deleted, err := s.CleanupExpiredSessions(ctx); err != nil {
+			if ctx.Err() == nil {
+				slog.Error("expired session cleanup failed", "error", err)
+			}
+		} else if deleted > 0 {
+			slog.Info("expired sessions deleted", "count", deleted)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
 }
 
 func (s *Service) SessionTTL() time.Duration {

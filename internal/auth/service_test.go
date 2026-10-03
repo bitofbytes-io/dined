@@ -1,8 +1,11 @@
 package auth
 
 import (
+	"context"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 func TestServiceCreatesAndValidatesSession(t *testing.T) {
@@ -87,5 +90,52 @@ func TestServiceRevokesSessionWhenEmailLeavesAllowlist(t *testing.T) {
 	}
 	if session, _, err := repo.FindSessionByTokenHash(t.Context(), hashToken(token)); err != nil || session != nil {
 		t.Fatalf("revoked session was not deleted: session = %#v, err = %v", session, err)
+	}
+}
+
+func TestScheduleSessionCleanupDeletesExpiredSessionsAtStartup(t *testing.T) {
+	repo := NewMemoryRepository()
+	service := NewService(repo, time.Hour, nil)
+	user, err := service.CreateOrUpdateUser(t.Context(), &GoogleClaims{Sub: "google-user-id", Email: "family@example.com", EmailVerified: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	expired := Session{ID: uuid.New(), UserID: user.ID, CreatedAt: time.Now().Add(-2 * time.Hour), ExpiresAt: time.Now().Add(-time.Hour)}
+	if err := repo.CreateSession(t.Context(), expired, "expired-hash"); err != nil {
+		t.Fatal(err)
+	}
+	liveToken, err := service.CreateSession(t.Context(), user.ID, "test", "127.0.0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan struct{})
+	go func() {
+		service.ScheduleSessionCleanup(ctx, time.Hour)
+		close(done)
+	}()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		session, _, err := repo.FindSessionByTokenHash(t.Context(), "expired-hash")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if session == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("expired session was not deleted at startup")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("cleanup scheduler did not stop after cancel")
+	}
+	if validUser, err := service.ValidateSession(t.Context(), liveToken); err != nil || validUser == nil {
+		t.Fatalf("live session was removed: user = %#v, err = %v", validUser, err)
 	}
 }
