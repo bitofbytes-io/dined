@@ -320,12 +320,40 @@ func TestRenderLogPreservesPrefillCity(t *testing.T) {
 	if !strings.Contains(got, `name="city" value="Apex"`) {
 		t.Fatalf("rendered log missing city hidden input:\n%s", got)
 	}
-	if strings.Contains(got, `if (city) city.value = "";`) {
-		t.Fatalf("rendered log clears hidden city on unmatched datalist input:\n%s", got)
+	script := appScript(t)
+	if strings.Contains(script, `if (city) city.value = "";`) {
+		t.Fatal("app.js clears hidden city on unmatched datalist input")
 	}
-	if !strings.Contains(got, `if (city) city.value = option.dataset.city || "";`) {
-		t.Fatalf("rendered log does not overwrite city on matched datalist input:\n%s", got)
+	if !strings.Contains(script, `if (city) city.value = option.dataset.city || "";`) {
+		t.Fatal("app.js does not overwrite city on matched datalist input")
 	}
+}
+
+func TestAppScriptIsStaticAndHandlesPageBehaviour(t *testing.T) {
+	script := appScript(t)
+	if strings.Contains(script, "{{") {
+		t.Fatal("app.js contains template actions, but it is served as a static file")
+	}
+	for _, fragment := range []string{
+		`function dinedUpdateLogValidation(form)`,
+		`function dinedCompressPhoto(file, maxBytes)`,
+		`uploader.dataset.photoMaxBytes`,
+		`function dinedConfirmDelete(event, form)`,
+		`document.addEventListener("htmx:load", dinedInitializePage);`,
+	} {
+		if !strings.Contains(script, fragment) {
+			t.Fatalf("app.js missing %q", fragment)
+		}
+	}
+}
+
+func appScript(t *testing.T) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("..", "..", "static", "app.js"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
 }
 
 func TestRenderLogCarriesGoogleMetadataPrefill(t *testing.T) {
@@ -418,7 +446,7 @@ func TestRenderLogValidationAndPreservedState(t *testing.T) {
 		`Dinner notes</textarea>`,
 		`name="is_chain" value="true" checked`,
 		`data-log-submit`,
-		`dinedUpdateLogValidation`,
+		`<script src="/static/app.js"></script>`,
 	} {
 		if !strings.Contains(rendered, fragment) {
 			t.Fatalf("rendered log missing %q:\n%s", fragment, rendered)
@@ -451,12 +479,12 @@ func TestRenderLogIncludesPhotoUploadAndPrefilledPhotos(t *testing.T) {
 	}
 	rendered := out.String()
 	for _, fragment := range []string{
-		`data-photo-uploader data-photo-limit="4"`,
+		`data-photo-uploader data-photo-limit="4" data-photo-max-bytes="512000"`,
 		`Food, fun, memories. Up to 4.`,
 		`name="photo_data_uri" value="` + testPhotoDataURI + `"`,
 		`type="file" accept="image/*" multiple data-photo-input`,
 		`id="photo-preview-modal"`,
-		`dinedCompressPhoto`,
+		`<script src="/static/app.js"></script>`,
 	} {
 		if !strings.Contains(rendered, fragment) {
 			t.Fatalf("rendered log missing %q:\n%s", fragment, rendered)

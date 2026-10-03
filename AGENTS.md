@@ -1,6 +1,6 @@
 # Agent Guidance
 
-- Edit `static/styles.css` directly; it is served as-is, with no CSS build step.
+- Edit `static/styles.css` and `static/app.js` directly; they are served as-is, with no build step. Pass server values to `app.js` through `data-` attributes, not template actions.
 - Keep the memory store as an ephemeral preview path and use Postgres behavior as the production reference.
 - Keep the Google Places key server-side. Do not render it into HTML or client JavaScript.
 - Preserve the application-level email/domain allowlist in addition to Google OAuth configuration.

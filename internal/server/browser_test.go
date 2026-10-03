@@ -26,6 +26,8 @@ func TestSearchRemoveCancelDoesNotDeleteRestaurant(t *testing.T) {
 	if chromePath == "" {
 		t.Skip("Chrome or Chromium executable not found")
 	}
+	// Serve static/app.js, which handles the delete dialog.
+	t.Chdir(filepath.Join("..", ".."))
 
 	storeCtx := context.Background()
 	store := repository.NewMemoryStore()
