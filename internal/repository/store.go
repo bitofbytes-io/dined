@@ -319,6 +319,9 @@ func checkPicker(ctx context.Context, tx pgx.Tx, pickerID *uuid.UUID) error {
 // it is missing from the input.
 func resolveRestaurant(ctx context.Context, tx pgx.Tx, input model.VisitInput) (uuid.UUID, error) {
 	if input.RestaurantID != nil {
+		if err := checkChosenRestaurantPlace(ctx, tx, *input.RestaurantID, input.GooglePlaceID); err != nil {
+			return uuid.Nil, err
+		}
 		return *input.RestaurantID, fillRestaurantDetails(ctx, tx, *input.RestaurantID, input)
 	}
 
@@ -391,6 +394,42 @@ func resolveRestaurant(ctx context.Context, tx pgx.Tx, input model.VisitInput) (
 		return uuid.Nil, fmt.Errorf("create restaurant: %w", err)
 	}
 	return id, nil
+}
+
+// checkChosenRestaurantPlace returns a *model.PlaceConflictError when a visit
+// chooses restaurant id but submits a Google place ID that is not its own:
+// one another restaurant owns, or any other one when the chosen restaurant is
+// already linked. The input's Places metadata describes that place, so it must
+// not be filled onto the chosen restaurant.
+func checkChosenRestaurantPlace(ctx context.Context, tx pgx.Tx, id uuid.UUID, googlePlaceID string) error {
+	placeID := nullableString(googlePlaceID)
+	if placeID == nil {
+		return nil
+	}
+	var name string
+	var chosenPlaceID *string
+	err := tx.QueryRow(ctx, `SELECT name, google_place_id FROM restaurants WHERE id = $1`, id).Scan(&name, &chosenPlaceID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("find chosen restaurant: %w", err)
+	}
+	if chosenPlaceID != nil && *chosenPlaceID == *placeID {
+		return nil
+	}
+	var owner string
+	err = tx.QueryRow(ctx, `SELECT name FROM restaurants WHERE google_place_id = $1 AND id <> $2`, *placeID, id).Scan(&owner)
+	if err == nil {
+		return &model.PlaceConflictError{Restaurant: name, Owner: owner}
+	}
+	if !errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("find place id owner: %w", err)
+	}
+	if chosenPlaceID != nil {
+		return &model.PlaceConflictError{Restaurant: name}
+	}
+	return nil
 }
 
 // fillRestaurantDetails copies the input's address, city, place ID, category

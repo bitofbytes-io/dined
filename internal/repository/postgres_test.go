@@ -814,3 +814,19 @@ func TestPostgresAggregatesNeedTwoRaters(t *testing.T) {
 func TestPostgresNoAggregatesWithoutTwoRaters(t *testing.T) {
 	assertNoAggregatesWithoutTwoRaters(t, postgresStore(t))
 }
+
+func TestPostgresRejectsPlaceIDOwnedByAnotherRestaurant(t *testing.T) {
+	assertChosenRestaurantPlaceOwnedElsewhereRejected(t, postgresStore(t))
+}
+
+func TestPostgresRejectsDifferentPlaceForLinkedRestaurant(t *testing.T) {
+	assertChosenRestaurantDifferentPlaceRejected(t, postgresStore(t))
+}
+
+func TestPostgresAcceptsMatchingPlaceForChosenRestaurant(t *testing.T) {
+	assertChosenRestaurantMatchingPlaceAccepted(t, postgresStore(t))
+}
+
+func TestPostgresEditVisitIgnoresPlaceID(t *testing.T) {
+	assertEditVisitIgnoresPlaceID(t, postgresStore(t))
+}
