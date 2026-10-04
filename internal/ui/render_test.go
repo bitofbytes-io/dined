@@ -118,13 +118,29 @@ func TestRenderDefaultsNowLocalToEasternTime(t *testing.T) {
 	}
 }
 
-func TestRenderHomeShowsNextUp(t *testing.T) {
+func TestRenderHomeHasNoPickerTurn(t *testing.T) {
 	var out strings.Builder
-	if err := Render(&out, "home", PageData{PickerTurn: model.PickerTurn{NextPicker: model.Person{Name: "Jen"}}}); err != nil {
+	if err := Render(&out, "home", PageData{}); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "Next Up: Jen") {
-		t.Fatalf("rendered home missing next up copy:\n%s", out.String())
+	if strings.Contains(out.String(), "Next Up") {
+		t.Fatalf("rendered home still shows a picker turn:\n%s", out.String())
+	}
+}
+
+func TestRenderVisitListShowsEverybodyPicker(t *testing.T) {
+	var out strings.Builder
+	err := Render(&out, "dines", PageData{Visits: []model.Visit{
+		{ID: uuid.New(), Restaurant: model.Restaurant{Name: "Hank's"}, Picker: &model.Person{Name: "Daniel"}, PriceLevel: 2},
+		{ID: uuid.New(), Restaurant: model.Restaurant{Name: "Amigos"}, PriceLevel: 2},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, fragment := range []string{"Picked by Daniel", "Picked by Everybody"} {
+		if !strings.Contains(out.String(), fragment) {
+			t.Fatalf("rendered dines missing %q:\n%s", fragment, out.String())
+		}
 	}
 }
 
@@ -148,7 +164,6 @@ func TestRenderTrophyShowsRedesignedRecordsAndTopRestaurants(t *testing.T) {
 				{Cuisine: "Southern", Name: "Tupelo Honey", AverageRating: 8.2, RatingCount: 4, VisitCount: 1},
 			},
 		},
-		PickerTurn: model.PickerTurn{NextPicker: model.Person{Name: "Caleb"}},
 	}
 	if err := Render(&out, "trophy", data); err != nil {
 		t.Fatal(err)
@@ -161,7 +176,6 @@ func TestRenderTrophyShowsRedesignedRecordsAndTopRestaurants(t *testing.T) {
 		"Worst Picker",
 		"Daniel",
 		"6.9 average",
-		"Next Up",
 		"New Places",
 		"Cities Explored",
 		"All-Time Top Restaurants",
@@ -177,10 +191,10 @@ func TestRenderTrophyShowsRedesignedRecordsAndTopRestaurants(t *testing.T) {
 			t.Fatalf("rendered trophy missing %q:\n%s", fragment, rendered)
 		}
 	}
-	if got := strings.Count(rendered, `class="record"`); got != 7 {
-		t.Fatalf("rendered %d trophy records, want 7:\n%s", got, rendered)
+	if got := strings.Count(rendered, `class="record"`); got != 6 {
+		t.Fatalf("rendered %d trophy records, want 6:\n%s", got, rendered)
 	}
-	for _, oldAward := range []string{"Safe Bet", "The Regular", "Table Divided"} {
+	for _, oldAward := range []string{"Safe Bet", "The Regular", "Table Divided", "Next Up"} {
 		if strings.Contains(rendered, oldAward) {
 			t.Fatalf("rendered retired duplicate award %q:\n%s", oldAward, rendered)
 		}
@@ -258,7 +272,7 @@ func TestRenderRestaurantIsReadOnlyForAuthenticatedUsers(t *testing.T) {
 			ID:         visitID,
 			Restaurant: model.Restaurant{ID: restaurantID, Name: "Tupelo Honey Southern Kitchen & Bar"},
 			VisitedAt:  time.Date(2026, 5, 16, 12, 0, 0, 0, time.UTC),
-			Picker:     model.Person{Name: "Daniel"},
+			Picker:     &model.Person{Name: "Daniel"},
 			PriceLevel: 2,
 			Ratings:    []model.Rating{{Person: model.Person{Name: "Daniel"}, Score: 8}},
 		}},
@@ -290,23 +304,38 @@ func TestRenderRestaurantIsReadOnlyForAuthenticatedUsers(t *testing.T) {
 	}
 }
 
-func TestRenderLogPreselectsNextPicker(t *testing.T) {
+func TestRenderLogPickerOffersEverybodyAndEachPerson(t *testing.T) {
+	danielID := uuid.New()
 	jenID := uuid.New()
 	var out strings.Builder
 	err := Render(&out, "log", PageData{
 		People: []model.Person{
-			{ID: uuid.New(), Name: "Daniel"},
+			{ID: danielID, Name: "Daniel"},
 			{ID: jenID, Name: "Jen"},
 		},
-		PrefillPickerID: jenID.String(),
+		PrefillPickerID: EverybodyPickerValue,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	got := out.String()
-	want := `value="` + jenID.String() + `" selected>Jen</option>`
-	if !strings.Contains(got, want) {
-		t.Fatalf("rendered log missing selected picker %q:\n%s", want, got)
+	for _, fragment := range []string{
+		`<fieldset class="picker-field">`,
+		`name="picker_id" value="everybody" checked>`,
+		`name="picker_id" value="` + danielID.String() + `" >`,
+		`name="picker_id" value="` + jenID.String() + `" >`,
+		`<span class="chip-name">Everybody</span>`,
+		`<span class="chip-name">Jen</span>`,
+	} {
+		if !strings.Contains(got, fragment) {
+			t.Fatalf("rendered log missing %q:\n%s", fragment, got)
+		}
+	}
+	if strings.Count(got, `name="picker_id"`) != 3 || strings.Count(got, " checked>") != 1 {
+		t.Fatalf("rendered log should offer three picker radios with only Everybody checked:\n%s", got)
+	}
+	if strings.Contains(got, `<select name="picker_id"`) {
+		t.Fatalf("rendered log still uses a picker select:\n%s", got)
 	}
 }
 
@@ -436,7 +465,7 @@ func TestRenderLogValidationAndPreservedState(t *testing.T) {
 		`name="google_place_id" placeholder="Optional" value="place-1"`,
 		`<option selected>American</option>`,
 		`name="visited_at" value="2026-05-17T20:50" required`,
-		`value="` + personID.String() + `" selected>Jen</option>`,
+		`name="picker_id" value="` + personID.String() + `" checked>`,
 		`value="3" selected>$$$</option>`,
 		`data-rating-message aria-live="polite" hidden`,
 		`min="0" max="10" step="0.5"`,
@@ -507,7 +536,7 @@ func TestRenderAuthenticatedDinesUsesEditLinkAndDeleteConfirmationModal(t *testi
 			ID:         visitID,
 			Restaurant: model.Restaurant{ID: restaurantID, Name: "Hank's"},
 			VisitedAt:  time.Date(2026, 5, 16, 12, 0, 0, 0, time.UTC),
-			Picker:     model.Person{Name: "Daniel"},
+			Picker:     &model.Person{Name: "Daniel"},
 			PriceLevel: 2,
 			Ratings:    []model.Rating{{Person: model.Person{Name: "Daniel"}, Score: 8}},
 		}},
@@ -546,7 +575,7 @@ func TestRenderDinesShowsPhotoStripAndPreviewHooks(t *testing.T) {
 			ID:         visitID,
 			Restaurant: model.Restaurant{ID: restaurantID, Name: "Hank's"},
 			VisitedAt:  time.Date(2026, 5, 16, 12, 0, 0, 0, time.UTC),
-			Picker:     model.Person{Name: "Daniel"},
+			Picker:     &model.Person{Name: "Daniel"},
 			PriceLevel: 2,
 			Ratings:    []model.Rating{{Person: model.Person{Name: "Daniel"}, Score: 8}},
 			Photos:     photos,
@@ -588,7 +617,7 @@ func TestRenderVisitEditPrefillsRatingsTagsAndNotes(t *testing.T) {
 			ID:         visitID,
 			Restaurant: model.Restaurant{ID: restaurantID, Name: "Hank's"},
 			VisitedAt:  visitedAt,
-			Picker:     model.Person{ID: jenID, Name: "Jen"},
+			Picker:     &model.Person{ID: jenID, Name: "Jen"},
 			PriceLevel: 3,
 			Notes:      &note,
 			Ratings:    []model.Rating{{Person: model.Person{ID: danielID, Name: "Daniel"}, Score: 8.5}},
@@ -606,7 +635,7 @@ func TestRenderVisitEditPrefillsRatingsTagsAndNotes(t *testing.T) {
 		`action="/visits/` + visitID.String() + `"`,
 		`name="restaurant_id" value="` + restaurantID.String() + `"`,
 		`value="` + apptime.FormatDatetimeLocal(visitedAt) + `"`,
-		`value="` + jenID.String() + `" selected>Jen</option>`,
+		`name="picker_id" value="` + jenID.String() + `" checked>`,
 		`name="rating_` + danielID.String() + `" type="number" min="0" max="10" step="0.5" inputmode="decimal" placeholder="0-10" value="8.5"`,
 		`value="` + tagID.String() + `" checked>`,
 		`href="/restaurants/` + restaurantID.String() + `/edit?return_visit_id=` + visitID.String() + `"`,
@@ -694,11 +723,12 @@ func TestRenderSearchShowsRemoveOnlyForZeroVisitSavedSpots(t *testing.T) {
 				Restaurant: model.Restaurant{ID: visitedID, Name: "Tupelo Honey"},
 				LatestVisit: &model.Visit{
 					VisitedAt:  time.Date(2026, 5, 16, 18, 30, 0, 0, time.UTC),
-					Picker:     model.Person{Name: "Daniel"},
+					Picker:     &model.Person{Name: "Daniel"},
 					PriceLevel: 2,
 				},
 				VisitCount:    1,
 				AverageRating: 7.9,
+				HasAverage:    true,
 			},
 		},
 	})
@@ -706,6 +736,9 @@ func TestRenderSearchShowsRemoveOnlyForZeroVisitSavedSpots(t *testing.T) {
 		t.Fatal(err)
 	}
 	rendered := out.String()
+	if !strings.Contains(rendered, "<span>Avg 7.9</span>") || !strings.Contains(rendered, "<span>Avg -</span>") {
+		t.Fatalf("rendered search should show an average only where one counts:\n%s", rendered)
+	}
 	if got := strings.Count(rendered, "history-remove-button"); got != 1 {
 		t.Fatalf("rendered %d remove buttons, want 1:\n%s", got, rendered)
 	}

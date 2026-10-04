@@ -13,7 +13,6 @@ func TestVisitInputValidateRequiresRating(t *testing.T) {
 	err := VisitInput{
 		RestaurantName: "Hank's",
 		VisitedAt:      time.Now(),
-		PickerID:       uuid.New(),
 		PriceLevel:     2,
 		Ratings:        map[uuid.UUID]float64{},
 	}.Validate()
@@ -26,7 +25,6 @@ func TestVisitInputValidateAcceptsZeroRating(t *testing.T) {
 	err := VisitInput{
 		RestaurantName: "Hank's",
 		VisitedAt:      time.Now(),
-		PickerID:       uuid.New(),
 		PriceLevel:     2,
 		Ratings:        map[uuid.UUID]float64{uuid.New(): 0},
 	}.Validate()
@@ -39,7 +37,6 @@ func TestVisitInputValidateAcceptsHalfPoint(t *testing.T) {
 	err := VisitInput{
 		RestaurantName: "Hank's",
 		VisitedAt:      time.Now(),
-		PickerID:       uuid.New(),
 		PriceLevel:     2,
 		Ratings:        map[uuid.UUID]float64{uuid.New(): 8.5},
 	}.Validate()
@@ -52,7 +49,6 @@ func TestVisitInputValidateRejectsFiveDollarPrice(t *testing.T) {
 	err := VisitInput{
 		RestaurantName: "Hank's",
 		VisitedAt:      time.Now(),
-		PickerID:       uuid.New(),
 		PriceLevel:     5,
 		Ratings:        map[uuid.UUID]float64{uuid.New(): 8.5},
 	}.Validate()
@@ -65,7 +61,6 @@ func TestVisitInputValidateAcceptsJPEGPhoto(t *testing.T) {
 	err := VisitInput{
 		RestaurantName: "Hank's",
 		VisitedAt:      time.Now(),
-		PickerID:       uuid.New(),
 		PriceLevel:     2,
 		Ratings:        map[uuid.UUID]float64{uuid.New(): 8.5},
 		Photos:         []VisitPhotoInput{{DataURI: visitPhotoDataURI([]byte("jpeg"))}},
@@ -79,7 +74,6 @@ func TestVisitInputValidateRejectsInvalidPhotoData(t *testing.T) {
 	err := VisitInput{
 		RestaurantName: "Hank's",
 		VisitedAt:      time.Now(),
-		PickerID:       uuid.New(),
 		PriceLevel:     2,
 		Ratings:        map[uuid.UUID]float64{uuid.New(): 8.5},
 		Photos:         []VisitPhotoInput{{DataURI: "data:image/jpeg;base64,%%%"}},
@@ -93,7 +87,6 @@ func TestVisitInputValidateRejectsWrongPhotoMIME(t *testing.T) {
 	err := VisitInput{
 		RestaurantName: "Hank's",
 		VisitedAt:      time.Now(),
-		PickerID:       uuid.New(),
 		PriceLevel:     2,
 		Ratings:        map[uuid.UUID]float64{uuid.New(): 8.5},
 		Photos:         []VisitPhotoInput{{DataURI: "data:image/png;base64," + base64.StdEncoding.EncodeToString([]byte("png"))}},
@@ -107,7 +100,6 @@ func TestVisitInputValidateRejectsOversizedPhoto(t *testing.T) {
 	err := VisitInput{
 		RestaurantName: "Hank's",
 		VisitedAt:      time.Now(),
-		PickerID:       uuid.New(),
 		PriceLevel:     2,
 		Ratings:        map[uuid.UUID]float64{uuid.New(): 8.5},
 		Photos:         []VisitPhotoInput{{DataURI: visitPhotoDataURI(make([]byte, MaxVisitPhotoBytes+1))}},
@@ -121,7 +113,6 @@ func TestVisitInputValidateRejectsTooManyPhotos(t *testing.T) {
 	err := VisitInput{
 		RestaurantName: "Hank's",
 		VisitedAt:      time.Now(),
-		PickerID:       uuid.New(),
 		PriceLevel:     2,
 		Ratings:        map[uuid.UUID]float64{uuid.New(): 8.5},
 		Photos:         []VisitPhotoInput{{DataURI: visitPhotoDataURI([]byte("1"))}, {DataURI: visitPhotoDataURI([]byte("2"))}, {DataURI: visitPhotoDataURI([]byte("3"))}, {DataURI: visitPhotoDataURI([]byte("4"))}, {DataURI: visitPhotoDataURI([]byte("5"))}},
@@ -136,7 +127,6 @@ func TestVisitInputValidateRejectsDuplicateKeptPhotoIDs(t *testing.T) {
 	err := VisitInput{
 		RestaurantID: &id,
 		VisitedAt:    time.Now(),
-		PickerID:     uuid.New(),
 		PriceLevel:   2,
 		Ratings:      map[uuid.UUID]float64{uuid.New(): 8.5},
 		KeepPhotoIDs: []uuid.UUID{id, id},
@@ -183,7 +173,6 @@ func TestVisitInputValidateChecksGoogleMetadata(t *testing.T) {
 			err := VisitInput{
 				RestaurantName: "Hank's",
 				VisitedAt:      time.Now(),
-				PickerID:       uuid.New(),
 				PriceLevel:     2,
 				Ratings:        map[uuid.UUID]float64{uuid.New(): 8},
 				GoogleMetadata: tt.metadata,

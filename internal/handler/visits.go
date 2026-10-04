@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -20,12 +21,7 @@ func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
 		h.error(w, "home visits", err)
 		return
 	}
-	pickerTurn, err := h.store.PickerTurn(r.Context())
-	if err != nil {
-		h.error(w, "picker turn", err)
-		return
-	}
-	h.render(w, "home", r, ui.PageData{Visits: visits, PickerTurn: pickerTurn})
+	h.render(w, "home", r, ui.PageData{Visits: visits})
 }
 
 const (
@@ -34,7 +30,12 @@ const (
 	// saveVisitFailedMessage is shown when the store rejects a validated dine;
 	// the underlying error is logged rather than shown.
 	saveVisitFailedMessage = "Could not save this dine. Please try again."
+	// invalidPickerMessage answers a picker that is neither Everybody nor one of the people.
+	invalidPickerMessage = "Picked by must be Everybody or one of the family."
 )
+
+// errInvalidPicker means the picker form value is neither Everybody nor a UUID.
+var errInvalidPicker = errors.New("invalid picker")
 
 func (h *Handler) Dines(w http.ResponseWriter, r *http.Request) {
 	page, ok := dinesPage(r.URL.Query().Get("page"))
@@ -103,6 +104,10 @@ func (h *Handler) CreateVisit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	input, err := h.visitInput(r)
+	if errors.Is(err, errInvalidPicker) {
+		http.Error(w, invalidPickerMessage, http.StatusBadRequest)
+		return
+	}
 	if err != nil {
 		h.renderLogError(w, r, err.Error())
 		return
@@ -118,12 +123,16 @@ func (h *Handler) CreateVisit(w http.ResponseWriter, r *http.Request) {
 		input = enrichedInput
 	}
 	visitID, err := h.store.CreateVisit(r.Context(), input)
+	if errors.Is(err, model.ErrUnknownPicker) {
+		http.Error(w, invalidPickerMessage, http.StatusBadRequest)
+		return
+	}
 	if err != nil {
 		slog.Error("create visit", "error", err)
 		h.renderLogError(w, r, saveVisitFailedMessage)
 		return
 	}
-	slog.Info("visit created", "visit_id", visitID, "picker_id", input.PickerID, "rating_count", len(input.Ratings), "tag_count", len(input.TagIDs), "photo_count", len(input.Photos))
+	slog.Info("visit created", "visit_id", visitID, "picker_id", pickerLogValue(input.PickerID), "rating_count", len(input.Ratings), "tag_count", len(input.TagIDs), "photo_count", len(input.Photos))
 	http.Redirect(w, r, h.dinesVisitURL(r, *visitID), http.StatusSeeOther)
 }
 
@@ -156,6 +165,10 @@ func (h *Handler) UpdateVisit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	input, err := h.visitInput(r)
+	if errors.Is(err, errInvalidPicker) {
+		http.Error(w, invalidPickerMessage, http.StatusBadRequest)
+		return
+	}
 	if err != nil {
 		h.renderVisitEditError(w, r, id, err.Error())
 		return
@@ -168,12 +181,17 @@ func (h *Handler) UpdateVisit(w http.ResponseWriter, r *http.Request) {
 		h.renderVisitEditError(w, r, id, "restaurant is required")
 		return
 	}
-	if err := h.store.UpdateVisit(r.Context(), id, input); err != nil {
+	err = h.store.UpdateVisit(r.Context(), id, input)
+	if errors.Is(err, model.ErrUnknownPicker) {
+		http.Error(w, invalidPickerMessage, http.StatusBadRequest)
+		return
+	}
+	if err != nil {
 		slog.Error("update visit", "visit_id", id, "error", err)
 		h.renderVisitEditError(w, r, id, saveVisitFailedMessage)
 		return
 	}
-	slog.Info("visit updated", "visit_id", id, "picker_id", input.PickerID, "rating_count", len(input.Ratings), "tag_count", len(input.TagIDs), "photo_count", len(input.Photos))
+	slog.Info("visit updated", "visit_id", id, "picker_id", pickerLogValue(input.PickerID), "rating_count", len(input.Ratings), "tag_count", len(input.TagIDs), "photo_count", len(input.Photos))
 	http.Redirect(w, r, h.dinesVisitURL(r, id), http.StatusSeeOther)
 }
 
@@ -205,10 +223,6 @@ func (h *Handler) logData(r *http.Request) (ui.PageData, error) {
 		return ui.PageData{}, err
 	}
 	prefillPrice, _ := strconv.Atoi(r.URL.Query().Get("price_level"))
-	pickerTurn, err := h.store.PickerTurn(r.Context())
-	if err != nil {
-		return ui.PageData{}, err
-	}
 	return ui.PageData{
 		Title:                   "Log a Dine",
 		People:                  people,
@@ -226,7 +240,7 @@ func (h *Handler) logData(r *http.Request) (ui.PageData, error) {
 		PrefillGooglePriceLevel: r.URL.Query().Get("google_price_level"),
 		PrefillCategory:         r.URL.Query().Get("category"),
 		PrefillPriceLevel:       prefillPrice,
-		PrefillPickerID:         pickerTurn.NextPicker.ID.String(),
+		PrefillPickerID:         ui.EverybodyPickerValue,
 		PrefillRestaurantID:     r.URL.Query().Get("restaurant_id"),
 	}, nil
 }
@@ -236,7 +250,7 @@ func (h *Handler) visitInput(r *http.Request) (model.VisitInput, error) {
 	if err != nil {
 		return model.VisitInput{}, err
 	}
-	pickerID, err := uuid.Parse(r.FormValue("picker_id"))
+	pickerID, err := parsePickerID(r.FormValue("picker_id"))
 	if err != nil {
 		return model.VisitInput{}, err
 	}
@@ -323,6 +337,28 @@ func (h *Handler) visitInput(r *http.Request) (model.VisitInput, error) {
 	return input, nil
 }
 
+// parsePickerID reads the picker form value: Everybody (or no value) is nil,
+// and anything else must be a person's UUID.
+func parsePickerID(value string) (*uuid.UUID, error) {
+	value = strings.TrimSpace(value)
+	if value == "" || value == ui.EverybodyPickerValue {
+		return nil, nil
+	}
+	id, err := uuid.Parse(value)
+	if err != nil {
+		return nil, errInvalidPicker
+	}
+	return &id, nil
+}
+
+// pickerLogValue names a picker in logs without dereferencing a nil (Everybody) picker.
+func pickerLogValue(id *uuid.UUID) string {
+	if id == nil {
+		return ui.EverybodyPickerValue
+	}
+	return id.String()
+}
+
 func (h *Handler) renderLogError(w http.ResponseWriter, r *http.Request, message string) {
 	data, err := h.logData(r)
 	if err != nil {
@@ -349,6 +385,9 @@ func overlayLogPostForm(data *ui.PageData, r *http.Request) {
 	data.PrefillCategory = r.FormValue("category")
 	data.NowLocal = r.FormValue("visited_at")
 	data.PrefillPickerID = r.FormValue("picker_id")
+	if strings.TrimSpace(data.PrefillPickerID) == "" {
+		data.PrefillPickerID = ui.EverybodyPickerValue
+	}
 	data.PrefillNotes = r.FormValue("notes")
 	data.PrefillNewTag = r.FormValue("new_tag")
 	data.PrefillIsChain = r.FormValue("is_chain") == "true"

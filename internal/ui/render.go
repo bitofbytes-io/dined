@@ -46,7 +46,6 @@ type PageData struct {
 	SearchResults           []RestaurantResult
 	Restaurant              *model.Restaurant
 	Stats                   model.Stats
-	PickerTurn              model.PickerTurn
 	TrophyMapPoints         []model.RestaurantMapPoint
 	TrophyMapLabels         []TrophyMapLabel
 	TrophyMapReady          bool
@@ -88,7 +87,24 @@ type RestaurantResult struct {
 	LatestVisit   *model.Visit
 	VisitCount    int
 	AverageRating float64
-	Tags          []model.Tag
+	// HasAverage is false when no visit has enough ratings to count in AverageRating.
+	HasAverage bool
+	Tags       []model.Tag
+}
+
+// EverybodyPickerValue is the picker form value for a visit that Everybody picked.
+const EverybodyPickerValue = "everybody"
+
+// PickerField is the data for the "picker-field" template: the people to
+// choose from and the picker form value that starts checked.
+type PickerField struct {
+	People   []model.Person
+	Selected string
+}
+
+// Everybody is the form value of the Everybody choice.
+func (PickerField) Everybody() string {
+	return EverybodyPickerValue
 }
 
 type TrophyMapLabel struct {
@@ -212,7 +228,12 @@ func funcs() template.FuncMap {
 			}
 			return fmt.Sprintf("%.0f mi", miles)
 		},
-		"avatar":             avatar,
+		"avatar":      avatar,
+		"pickerName":  pickerName,
+		"pickerValue": pickerValue,
+		"pickerField": func(people []model.Person, selected string) PickerField {
+			return PickerField{People: people, Selected: selected}
+		},
 		"placeCategory":      places.Category,
 		"placeCity":          places.City,
 		"prefillRatingValue": prefillRatingValue,
@@ -299,6 +320,22 @@ func avatar(name string) string {
 	default:
 		return ""
 	}
+}
+
+// pickerName labels a visit's picker; a nil picker means Everybody picked.
+func pickerName(picker *model.Person) string {
+	if picker == nil {
+		return "Everybody"
+	}
+	return picker.Name
+}
+
+// pickerValue is the picker form value for a visit's picker.
+func pickerValue(picker *model.Person) string {
+	if picker == nil {
+		return EverybodyPickerValue
+	}
+	return picker.ID.String()
 }
 
 func title(value string) string {

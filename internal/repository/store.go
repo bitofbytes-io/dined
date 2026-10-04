@@ -38,7 +38,6 @@ type DinerStore interface {
 	UpdateRestaurant(context.Context, uuid.UUID, model.RestaurantInput) error
 	ToggleChain(context.Context, uuid.UUID, bool) error
 	Stats(context.Context) (model.Stats, error)
-	PickerTurn(context.Context) (model.PickerTurn, error)
 }
 
 func New(pool *pgxpool.Pool) *Store {
@@ -266,6 +265,9 @@ func (s *Store) CreateVisit(ctx context.Context, input model.VisitInput) (*uuid.
 	}
 	defer tx.Rollback(ctx)
 
+	if err := checkPicker(ctx, tx, input.PickerID); err != nil {
+		return nil, err
+	}
 	restaurantID, err := resolveRestaurant(ctx, tx, input)
 	if err != nil {
 		return nil, err
@@ -293,6 +295,22 @@ func (s *Store) CreateVisit(ctx context.Context, input model.VisitInput) (*uuid.
 		return nil, fmt.Errorf("commit create visit: %w", err)
 	}
 	return &visitID, nil
+}
+
+// checkPicker returns model.ErrUnknownPicker when a picker is set but is not
+// one of the people. A nil picker (Everybody) is always valid.
+func checkPicker(ctx context.Context, tx pgx.Tx, pickerID *uuid.UUID) error {
+	if pickerID == nil {
+		return nil
+	}
+	var exists bool
+	if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM persons WHERE id = $1)`, *pickerID).Scan(&exists); err != nil {
+		return fmt.Errorf("check picker: %w", err)
+	}
+	if !exists {
+		return model.ErrUnknownPicker
+	}
+	return nil
 }
 
 // resolveRestaurant returns the restaurant a new visit belongs to: the chosen
@@ -489,6 +507,9 @@ func (s *Store) UpdateVisit(ctx context.Context, id uuid.UUID, input model.Visit
 	}
 	defer tx.Rollback(ctx)
 
+	if err := checkPicker(ctx, tx, input.PickerID); err != nil {
+		return err
+	}
 	notes := nullableString(input.Notes)
 	result, err := tx.Exec(ctx, `
 		UPDATE dining_visits
@@ -581,12 +602,27 @@ func (s *Store) ToggleChain(ctx context.Context, id uuid.UUID, isChain bool) err
 	return err
 }
 
+// aggregateRatingsCTE names the ratings that count in averages and rankings
+// across visits: those on visits that at least $1 people rated.
+const aggregateRatingsCTE = `
+	aggregate_ratings AS (
+		SELECT visit_id, rating
+		FROM visit_participant_ratings
+		WHERE visit_id IN (
+			SELECT visit_id
+			FROM visit_participant_ratings
+			GROUP BY visit_id
+			HAVING COUNT(*) >= $1
+		)
+	)`
+
 func (s *Store) Stats(ctx context.Context) (model.Stats, error) {
 	var stats model.Stats
 	if err := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM dining_visits`).Scan(&stats.TotalDines); err != nil {
 		return stats, fmt.Errorf("count dines: %w", err)
 	}
-	if err := s.pool.QueryRow(ctx, `SELECT COALESCE(AVG(rating), 0) FROM visit_participant_ratings`).Scan(&stats.AverageRating); err != nil {
+	if err := s.pool.QueryRow(ctx, `WITH`+aggregateRatingsCTE+`
+		SELECT COALESCE(AVG(rating), 0) FROM aggregate_ratings`, model.MinAggregateRaters).Scan(&stats.AverageRating); err != nil {
 		return stats, fmt.Errorf("average rating: %w", err)
 	}
 	if err := s.pool.QueryRow(ctx, `
@@ -601,23 +637,24 @@ func (s *Store) Stats(ctx context.Context) (model.Stats, error) {
 		WHERE r.city IS NOT NULL AND btrim(r.city) <> ''`).Scan(&stats.CitiesExplored); err != nil {
 		return stats, fmt.Errorf("count cities explored: %w", err)
 	}
-	err := s.pool.QueryRow(ctx, `
+	// Everybody visits have no picker, so the join to persons leaves them out.
+	err := s.pool.QueryRow(ctx, `WITH`+aggregateRatingsCTE+`
 		SELECT p.name, AVG(vr.rating) FROM persons p
 		JOIN dining_visits v ON v.picked_by_person_id = p.id
-		JOIN visit_participant_ratings vr ON vr.visit_id = v.id
+		JOIN aggregate_ratings vr ON vr.visit_id = v.id
 		GROUP BY p.id, p.name
 		ORDER BY AVG(vr.rating) DESC, p.name
-		LIMIT 1`).Scan(&stats.BestPicker, &stats.BestPickerAverage)
+		LIMIT 1`, model.MinAggregateRaters).Scan(&stats.BestPicker, &stats.BestPickerAverage)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return stats, fmt.Errorf("best picker: %w", err)
 	}
-	err = s.pool.QueryRow(ctx, `
+	err = s.pool.QueryRow(ctx, `WITH`+aggregateRatingsCTE+`
 		SELECT p.name, AVG(vr.rating) FROM persons p
 		JOIN dining_visits v ON v.picked_by_person_id = p.id
-		JOIN visit_participant_ratings vr ON vr.visit_id = v.id
+		JOIN aggregate_ratings vr ON vr.visit_id = v.id
 		GROUP BY p.id, p.name
 		ORDER BY AVG(vr.rating) ASC, p.name
-		LIMIT 1`).Scan(&stats.WorstPicker, &stats.WorstPickerAverage)
+		LIMIT 1`, model.MinAggregateRaters).Scan(&stats.WorstPicker, &stats.WorstPickerAverage)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return stats, fmt.Errorf("worst picker: %w", err)
 	}
@@ -633,15 +670,15 @@ func (s *Store) Stats(ctx context.Context) (model.Stats, error) {
 }
 
 func (s *Store) topRestaurants(ctx context.Context) ([]model.RestaurantRatingStat, error) {
-	rows, err := s.pool.Query(ctx, `
+	rows, err := s.pool.Query(ctx, `WITH`+aggregateRatingsCTE+`
 		SELECT r.name, AVG(vr.rating), COUNT(vr.rating), COUNT(DISTINCT v.id)
 		FROM restaurants r
 		JOIN dining_visits v ON v.restaurant_id = r.id
-		JOIN visit_participant_ratings vr ON vr.visit_id = v.id
+		JOIN aggregate_ratings vr ON vr.visit_id = v.id
 		GROUP BY r.id, r.name
 		HAVING COUNT(vr.rating) >= 2
 		ORDER BY AVG(vr.rating) DESC, COUNT(vr.rating) DESC, r.name
-		LIMIT 5`)
+		LIMIT 5`, model.MinAggregateRaters)
 	if err != nil {
 		return nil, fmt.Errorf("top restaurants: %w", err)
 	}
@@ -659,8 +696,8 @@ func (s *Store) topRestaurants(ctx context.Context) ([]model.RestaurantRatingSta
 }
 
 func (s *Store) topRestaurantsByCuisine(ctx context.Context) ([]model.CuisineRestaurantStat, error) {
-	rows, err := s.pool.Query(ctx, `
-		WITH rated_restaurants AS (
+	rows, err := s.pool.Query(ctx, `WITH`+aggregateRatingsCTE+`,
+		rated_restaurants AS (
 			SELECT btrim(r.category) AS cuisine,
 			       r.name,
 			       AVG(vr.rating) AS average_rating,
@@ -668,7 +705,7 @@ func (s *Store) topRestaurantsByCuisine(ctx context.Context) ([]model.CuisineRes
 			       COUNT(DISTINCT v.id) AS visit_count
 			FROM restaurants r
 			JOIN dining_visits v ON v.restaurant_id = r.id
-			JOIN visit_participant_ratings vr ON vr.visit_id = v.id
+			JOIN aggregate_ratings vr ON vr.visit_id = v.id
 			WHERE r.category IS NOT NULL AND btrim(r.category) <> ''
 			GROUP BY lower(btrim(r.category)), btrim(r.category), r.id, r.name
 			HAVING COUNT(vr.rating) >= 1
@@ -688,7 +725,7 @@ func (s *Store) topRestaurantsByCuisine(ctx context.Context) ([]model.CuisineRes
 		SELECT cuisine, name, average_rating, rating_count, visit_count
 		FROM ranked_restaurants
 		WHERE cuisine_rank = 1
-		ORDER BY cuisine`)
+		ORDER BY cuisine`, model.MinAggregateRaters)
 	if err != nil {
 		return nil, fmt.Errorf("top restaurants by cuisine: %w", err)
 	}
@@ -705,39 +742,6 @@ func (s *Store) topRestaurantsByCuisine(ctx context.Context) ([]model.CuisineRes
 	return restaurants, rows.Err()
 }
 
-func (s *Store) PickerTurn(ctx context.Context) (model.PickerTurn, error) {
-	people, err := s.People(ctx)
-	if err != nil {
-		return model.PickerTurn{}, err
-	}
-	if len(people) == 0 {
-		return model.PickerTurn{}, nil
-	}
-
-	var last model.Person
-	err = s.pool.QueryRow(ctx, `
-		SELECT p.id, p.name, p.avatar_color
-		FROM dining_visits v
-		JOIN persons p ON p.id = v.picked_by_person_id
-		ORDER BY v.visited_at DESC, v.created_at DESC
-		LIMIT 1`).Scan(&last.ID, &last.Name, &last.AvatarColor)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return model.PickerTurn{NextPicker: people[0]}, nil
-		}
-		return model.PickerTurn{}, fmt.Errorf("latest picker: %w", err)
-	}
-
-	next := people[0]
-	for i, person := range people {
-		if person.ID == last.ID {
-			next = people[(i+1)%len(people)]
-			break
-		}
-	}
-	return model.PickerTurn{LastPicker: last, NextPicker: next}, nil
-}
-
 // photoDetail controls how much photo data scanVisits loads alongside each visit.
 type photoDetail int
 
@@ -752,6 +756,8 @@ func (s *Store) scanVisits(ctx context.Context, rows pgx.Rows, photos photoDetai
 	var visits []model.Visit
 	for rows.Next() {
 		var visit model.Visit
+		var pickerID *uuid.UUID
+		var pickerName, pickerAvatarColor *string
 		err := rows.Scan(
 			&visit.ID,
 			&visit.VisitedAt,
@@ -759,9 +765,9 @@ func (s *Store) scanVisits(ctx context.Context, rows pgx.Rows, photos photoDetai
 			&visit.Notes,
 			&visit.CreatedAt,
 			&visit.UpdatedAt,
-			&visit.Picker.ID,
-			&visit.Picker.Name,
-			&visit.Picker.AvatarColor,
+			&pickerID,
+			&pickerName,
+			&pickerAvatarColor,
 			&visit.Restaurant.ID,
 			&visit.Restaurant.Name,
 			&visit.Restaurant.Address,
@@ -780,6 +786,9 @@ func (s *Store) scanVisits(ctx context.Context, rows pgx.Rows, photos photoDetai
 		)
 		if err != nil {
 			return nil, fmt.Errorf("scan visit: %w", err)
+		}
+		if pickerID != nil {
+			visit.Picker = &model.Person{ID: *pickerID, Name: valueOrEmpty(pickerName), AvatarColor: valueOrEmpty(pickerAvatarColor)}
 		}
 		visits = append(visits, visit)
 	}
@@ -1026,7 +1035,7 @@ func visitSelectSQL() string {
 		       r.google_place_id, r.google_rating, r.google_price_level, r.category,
 		       r.is_chain, r.created_at, r.updated_at
 		FROM dining_visits v
-		JOIN persons p ON p.id = v.picked_by_person_id
+		LEFT JOIN persons p ON p.id = v.picked_by_person_id
 		JOIN restaurants r ON r.id = v.restaurant_id`
 }
 

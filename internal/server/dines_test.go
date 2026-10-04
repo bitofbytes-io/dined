@@ -54,7 +54,7 @@ func seedVisits(t *testing.T, store *repository.MemoryStore, count int) {
 		_, err := store.CreateVisit(ctx, model.VisitInput{
 			RestaurantName: fmt.Sprintf("Seed Diner %02d", i),
 			VisitedAt:      time.Now().Add(-time.Duration(i) * time.Minute),
-			PickerID:       people[0].ID,
+			PickerID:       &people[0].ID,
 			PriceLevel:     2,
 			Ratings:        map[uuid.UUID]float64{people[0].ID: 7},
 		})
@@ -135,7 +135,7 @@ func TestRouterServesPublicPhotosByURL(t *testing.T) {
 	visitID, err := store.CreateVisit(ctx, model.VisitInput{
 		RestaurantName: "Photo Diner",
 		VisitedAt:      time.Now(),
-		PickerID:       people[0].ID,
+		PickerID:       &people[0].ID,
 		PriceLevel:     2,
 		Ratings:        map[uuid.UUID]float64{people[0].ID: 9},
 		Photos:         []model.VisitPhotoInput{{DataURI: photoDataURI}},
@@ -225,7 +225,7 @@ func TestRouterEditVisitKeepsInlinePhotoPreview(t *testing.T) {
 	visitID, err := store.CreateVisit(ctx, model.VisitInput{
 		RestaurantName: "Edit Photo Diner",
 		VisitedAt:      time.Now(),
-		PickerID:       people[0].ID,
+		PickerID:       &people[0].ID,
 		PriceLevel:     2,
 		Ratings:        map[uuid.UUID]float64{people[0].ID: 9},
 		Photos:         []model.VisitPhotoInput{{DataURI: photoDataURI}},

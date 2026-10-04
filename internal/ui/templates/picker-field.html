@@ -1,0 +1,7 @@
+{{define "picker-field"}}
+<fieldset class="picker-field">
+  <legend>Picked by</legend>
+  <label class="picker-chip picker-chip-everybody"><input type="radio" name="picker_id" value="{{.Everybody}}" {{if eq .Selected .Everybody}}checked{{end}}><span class="chip-body"><span class="avatar-group" aria-hidden="true">{{range .People}}{{if avatar .Name}}<img src="{{avatar .Name}}" alt="">{{else}}<span class="avatar-group-dot">{{slice .Name 0 1}}</span>{{end}}{{end}}</span><span class="chip-name">Everybody</span></span></label>
+  {{range .People}}<label class="picker-chip"><input type="radio" name="picker_id" value="{{.ID}}" {{if eq $.Selected .ID.String}}checked{{end}}><span class="chip-body">{{if avatar .Name}}<img class="avatar-face" src="{{avatar .Name}}" alt="">{{else}}<span class="avatar-dot">{{slice .Name 0 1}}</span>{{end}}<span class="chip-name">{{.Name}}</span></span></label>{{end}}
+</fieldset>
+{{end}}

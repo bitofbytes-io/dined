@@ -38,7 +38,7 @@ func TestSearchRemoveCancelDoesNotDeleteRestaurant(t *testing.T) {
 	visitID, err := store.CreateVisit(storeCtx, model.VisitInput{
 		RestaurantName: "Amigos",
 		VisitedAt:      time.Now(),
-		PickerID:       people[0].ID,
+		PickerID:       &people[0].ID,
 		PriceLevel:     2,
 		Ratings:        map[uuid.UUID]float64{people[0].ID: 8},
 	})
@@ -139,7 +139,7 @@ func TestHomeRecentDinesFitInsideDesktopBoothScene(t *testing.T) {
 			RestaurantName: name,
 			Address:        "123 Long Menu Lane, Raleigh, NC 27601, USA",
 			VisitedAt:      now.Add(-time.Duration(i) * time.Hour),
-			PickerID:       people[i%len(people)].ID,
+			PickerID:       &people[i%len(people)].ID,
 			PriceLevel:     2,
 			Notes:          longNote,
 			Ratings: map[uuid.UUID]float64{
@@ -254,7 +254,7 @@ func TestEditVisitPhotoAddTileIsFirstAndFullSizeOnMobile(t *testing.T) {
 	visitID, err := store.CreateVisit(storeCtx, model.VisitInput{
 		RestaurantName: "Long Wait",
 		VisitedAt:      time.Now(),
-		PickerID:       people[0].ID,
+		PickerID:       &people[0].ID,
 		PriceLevel:     2,
 		Ratings:        map[uuid.UUID]float64{people[0].ID: 8},
 		Photos: []model.VisitPhotoInput{

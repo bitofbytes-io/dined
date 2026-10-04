@@ -520,21 +520,6 @@ a:focus-visible, button:focus-visible {
   font-weight: 900;
   text-transform: uppercase;
 }
-.next-up {
-  display: inline-block;
-  margin: .35rem 0 0;
-  padding: .2rem .46rem;
-  color: var(--night);
-  background: var(--butter);
-  border: 2px solid var(--night);
-  border-radius: var(--radius);
-  font-family: var(--condensed);
-  font-size: .82rem;
-  font-weight: 900;
-  line-height: 1;
-  text-transform: uppercase;
-  box-shadow: 3px 3px 0 rgba(6, 21, 22, .28);
-}
 .booth-recent .section-head a {
   color: var(--milk);
   font-family: var(--condensed);
@@ -938,6 +923,84 @@ fieldset {
 .rating-card input {
   margin-top: .35rem;
   text-align: center;
+}
+.picker-field {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: .8rem;
+}
+.picker-chip {
+  position: relative;
+  display: block;
+  cursor: pointer;
+}
+.picker-chip input {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  opacity: 0;
+}
+.picker-chip .chip-body {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: .35rem;
+  height: 100%;
+  min-height: 7.4rem;
+  padding: .7rem .4rem .6rem;
+  color: var(--night);
+  text-align: center;
+  background: var(--tile);
+  border: 3px solid var(--night);
+  border-radius: var(--radius);
+  box-shadow: 4px 4px 0 rgba(6, 21, 22, .14);
+  transition: transform .16s ease, background .16s ease, box-shadow .16s ease;
+}
+.picker-chip:hover .chip-body {
+  transform: translateY(-2px);
+  box-shadow: 6px 6px 0 rgba(6, 21, 22, .2);
+}
+.picker-chip input:focus-visible + .chip-body {
+  outline: 3px solid var(--aqua);
+  outline-offset: 3px;
+}
+.picker-chip input:checked + .chip-body {
+  color: var(--milk);
+  background: var(--red);
+  box-shadow: 5px 5px 0 var(--red-dark);
+  transform: rotate(-1deg);
+}
+.picker-chip .avatar-face {
+  width: 3.5rem;
+}
+.chip-name {
+  font-family: var(--condensed);
+  font-size: 1rem;
+  font-weight: 900;
+  line-height: 1;
+  text-transform: uppercase;
+}
+.avatar-group {
+  display: grid;
+  grid-template-columns: repeat(2, 1.75rem);
+  width: 3.5rem;
+  height: 3.5rem;
+}
+.avatar-group img, .avatar-group-dot {
+  width: 1.75rem;
+  aspect-ratio: 1;
+  object-fit: contain;
+  filter: drop-shadow(2px 3px 0 rgba(6, 21, 22, .2));
+}
+.avatar-group-dot {
+  display: grid;
+  place-items: center;
+  color: var(--milk);
+  background: var(--aqua);
+  border: 2px solid var(--night);
+  border-radius: 50%;
+  font-family: var(--display);
+  font-size: .8rem;
 }
 .chip-field {
   grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
@@ -1441,6 +1504,8 @@ fieldset {
   --record-size: 10.4rem;
   --record-row-gap: 1rem;
   --record-to-list-gap: var(--record-row-gap);
+  /* Rows of records in .record-grid: six records in three columns. */
+  --record-rows: 2;
   position: relative;
   width: min(100%, 1180px);
   min-height: 880px;
@@ -1743,7 +1808,7 @@ fieldset {
 .track-list {
   position: relative;
   z-index: 1;
-  margin: calc(var(--record-grid-top) + var(--record-size) + var(--record-size) + var(--record-size) + var(--record-row-gap) + var(--record-row-gap) + var(--record-to-list-gap)) 3rem 2rem;
+  margin: calc(var(--record-grid-top) + var(--record-rows) * var(--record-size) + (var(--record-rows) - 1) * var(--record-row-gap) + var(--record-to-list-gap)) 3rem 2rem;
   padding: .95rem 1rem;
   color: var(--milk);
   background: rgba(6, 21, 22, .92);
@@ -2092,6 +2157,40 @@ fieldset {
   }
   .rating-card {
     min-height: 0;
+  }
+  .picker-field {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: .6rem;
+  }
+  .picker-chip-everybody {
+    grid-column: 1 / -1;
+  }
+  .picker-chip .chip-body {
+    min-height: 0;
+    padding: .55rem .25rem .5rem;
+  }
+  .picker-chip-everybody .chip-body {
+    grid-auto-flow: column;
+    justify-content: center;
+    gap: .7rem;
+  }
+  .picker-chip .avatar-face {
+    width: 2.75rem;
+  }
+  .picker-chip .avatar-dot {
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+  .avatar-group {
+    grid-template-columns: repeat(2, 1.4rem);
+    width: 2.8rem;
+    height: 2.8rem;
+  }
+  .avatar-group img, .avatar-group-dot {
+    width: 1.4rem;
+  }
+  .chip-name {
+    font-size: .88rem;
   }
   .chip-field .new-tag {
     grid-column: auto;

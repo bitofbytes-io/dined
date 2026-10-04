@@ -5,7 +5,7 @@
     {{$visit := .}}<article class="visit-card" id="{{.ID}}">
       <div class="visit-main">
         <h3><a href="/restaurants/{{.Restaurant.ID}}">{{.Restaurant.Name}}</a>{{if .Restaurant.IsChain}} <span class="badge">Chain</span>{{end}}</h3>
-        <p class="visit-meta">{{date .VisitedAt}} · Picked by {{.Picker.Name}} · {{dollars .PriceLevel}}</p>
+        <p class="visit-meta">{{date .VisitedAt}} · Picked by {{pickerName .Picker}} · {{dollars .PriceLevel}}</p>
         {{if .Restaurant.Address}}<p class="muted">{{.Restaurant.Address}}</p>{{end}}
       </div>
       <div class="score-disc">{{avg .}}</div>

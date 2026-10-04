@@ -31,9 +31,10 @@ Updated from Daniel's answers on May 10, 2026.
 
 - Most likely logging moment: at the restaurant or shortly after eating.
 - Required minimum useful log: restaurant, date, picker, and at least one rating.
-- Picker: one of the four family members.
+- Picker: one of the four family members, or "Everybody" for an outing that is no one person's pick. The log form starts on Everybody. Anyone can pick at any time, including twice in a row; there is no turn order.
 - Ratings: support 0.5 increments.
 - Participant ratings: nobody is required to rate individually, but a saved visit should have at least one rating.
+- Aggregates: a visit's ratings count in averages and rankings across visits (family average, best and worst picker, top restaurants, best by cuisine, restaurant averages) only when at least two people rated it. The visit's own card always shows its ratings. Everybody visits count in no one's picker stats.
 - Price level: structured 1-5 dollar-sign rating.
 - Wait time: not structured; use a tag such as "Long Wait".
 - Would return: do not add as a separate structured field yet. Cover this through tags.
@@ -75,7 +76,7 @@ Google can populate the starting category, but the category should remain editab
 
 ## Clarified Open Item
 
-The earlier "Everyone", "Kids", and "Random" picker idea meant non-person picker labels for cases where no single person chose the restaurant. For this family-only version, keep picker as one of Daniel, Jen, Caleb, or Aiden unless a real need appears later.
+The earlier "Everyone", "Kids", and "Random" picker idea meant non-person picker labels for cases where no single person chose the restaurant. "Everybody" now covers that case: it is stored as a NULL picker (migration 006). "Kids" and "Random" are still out.
 
 ## Google Places Cost Note
 

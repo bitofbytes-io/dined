@@ -2,7 +2,7 @@
 {{template "top" .}}
 <main class="page-band order-page">
   {{with .Visit}}{{$visit := .}}
-  {{$visitedAt := datetime .VisitedAt}}{{$pickerID := .Picker.ID.String}}{{$priceLevel := .PriceLevel}}{{$notes := str .Notes}}
+  {{$visitedAt := datetime .VisitedAt}}{{$pickerID := pickerValue .Picker}}{{$priceLevel := .PriceLevel}}{{$notes := str .Notes}}
   {{if $.PrefillFromPost}}{{$visitedAt = $.NowLocal}}{{$pickerID = $.PrefillPickerID}}{{$priceLevel = $.PrefillPriceLevel}}{{$notes = $.PrefillNotes}}{{end}}
   <form class="wide-ticket log-form order-pad console-pad" method="post" action="/visits/{{.ID}}">
     <div class="section-head console-head">
@@ -13,10 +13,10 @@
     <section class="form-section visit-console">
       <div class="form-grid visit-form-grid">
         <label>Date and time<input type="datetime-local" name="visited_at" value="{{$visitedAt}}"></label>
-        <label>Picked by<select name="picker_id" required>{{range $.People}}<option value="{{.ID}}" {{if eq $pickerID .ID.String}}selected{{end}}>{{.Name}}</option>{{end}}</select></label>
         <label>Price Level<select name="price_level"><option value="1" {{if eq $priceLevel 1}}selected{{end}}>$</option><option value="2" {{if eq $priceLevel 2}}selected{{end}}>$$</option><option value="3" {{if eq $priceLevel 3}}selected{{end}}>$$$</option><option value="4" {{if eq $priceLevel 4}}selected{{end}}>$$$$</option></select></label>
       </div>
     </section>
+    {{template "picker-field" (pickerField $.People $pickerID)}}
     <fieldset class="ratings-field score-console"><legend>Rate Your Experience</legend>{{range $.People}}<label class="rating-card">{{if avatar .Name}}<img class="avatar-face" src="{{avatar .Name}}" alt="">{{else}}<span class="avatar-dot">{{slice .Name 0 1}}</span>{{end}}<span>{{.Name}}</span><input name="rating_{{.ID}}" type="number" min="0" max="10" step="0.5" inputmode="decimal" placeholder="0-10" value="{{if $.PrefillFromPost}}{{prefillRatingValue $.PrefillRatings .ID}}{{else}}{{ratingValue $visit .}}{{end}}" data-half-step-rating></label>{{end}}</fieldset>
     <fieldset class="tags-field chip-field"><legend>Tags</legend>{{range $.Tags}}<label><input type="checkbox" name="tag_id" value="{{.ID}}" {{if $.PrefillFromPost}}{{if prefillTagChecked $.PrefillTagIDs .ID}}checked{{end}}{{else if hasVisitTag $visit .}}checked{{end}}> <span>{{.Name}}</span></label>{{end}}<label class="new-tag">New tag<input name="new_tag" placeholder="Great fries" value="{{$.PrefillNewTag}}"></label></fieldset>
     <label class="notes-field">Notes<textarea name="notes" rows="4" placeholder="What should we remember next time?">{{$notes}}</textarea></label>

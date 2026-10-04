@@ -28,7 +28,7 @@ func TestRouterDeletesUnvisitedRestaurantAndPreservesSearch(t *testing.T) {
 	visitID, err := store.CreateVisit(ctx, model.VisitInput{
 		RestaurantName: "Amigos",
 		VisitedAt:      time.Now(),
-		PickerID:       people[0].ID,
+		PickerID:       &people[0].ID,
 		PriceLevel:     2,
 		Ratings:        map[uuid.UUID]float64{people[0].ID: 8},
 	})
@@ -112,7 +112,7 @@ func TestRouterUpdateRestaurantReturnsToEditDine(t *testing.T) {
 	visitID, err := store.CreateVisit(ctx, model.VisitInput{
 		RestaurantName: "Return Flow Diner",
 		VisitedAt:      time.Now(),
-		PickerID:       people[0].ID,
+		PickerID:       &people[0].ID,
 		PriceLevel:     2,
 		Ratings:        map[uuid.UUID]float64{people[0].ID: 8},
 	})
@@ -166,7 +166,7 @@ func TestRouterUpdateRestaurantIgnoresMismatchedReturnVisitID(t *testing.T) {
 	firstVisitID, err := store.CreateVisit(ctx, model.VisitInput{
 		RestaurantName: "First Diner",
 		VisitedAt:      time.Now(),
-		PickerID:       people[0].ID,
+		PickerID:       &people[0].ID,
 		PriceLevel:     2,
 		Ratings:        map[uuid.UUID]float64{people[0].ID: 8},
 	})
@@ -176,7 +176,7 @@ func TestRouterUpdateRestaurantIgnoresMismatchedReturnVisitID(t *testing.T) {
 	secondVisitID, err := store.CreateVisit(ctx, model.VisitInput{
 		RestaurantName: "Second Diner",
 		VisitedAt:      time.Now(),
-		PickerID:       people[0].ID,
+		PickerID:       &people[0].ID,
 		PriceLevel:     2,
 		Ratings:        map[uuid.UUID]float64{people[0].ID: 7},
 	})
@@ -224,7 +224,7 @@ func TestRouterGoogleRefreshRedirectsToEditWithReturnVisitIDWhenUnconfigured(t *
 		RestaurantName: "Google Return Diner",
 		GooglePlaceID:  "place-1",
 		VisitedAt:      time.Now(),
-		PickerID:       people[0].ID,
+		PickerID:       &people[0].ID,
 		PriceLevel:     2,
 		Ratings:        map[uuid.UUID]float64{people[0].ID: 8},
 	})
@@ -311,7 +311,7 @@ func TestRouterCreateVisitWithoutRatingPreservesPostedForm(t *testing.T) {
 		`name="google_place_id" placeholder="Optional" value="place-1"`,
 		`<option selected>American</option>`,
 		`name="visited_at" value="2026-05-17T20:50" required`,
-		`value="` + people[1].ID.String() + `" selected>` + people[1].Name + `</option>`,
+		`name="picker_id" value="` + people[1].ID.String() + `" checked>`,
 		`value="3" selected>$$$</option>`,
 		`name="tag_id" value="` + tags[0].ID.String() + `" checked`,
 		`name="new_tag" placeholder="Great fries" value="Patio"`,
@@ -447,7 +447,7 @@ func TestRouterUpdateVisitErrorPreservesPostedForm(t *testing.T) {
 	visitID, err := store.CreateVisit(ctx, model.VisitInput{
 		RestaurantName: "Edit Error Diner",
 		VisitedAt:      time.Date(2026, 5, 10, 18, 0, 0, 0, time.UTC),
-		PickerID:       people[0].ID,
+		PickerID:       &people[0].ID,
 		PriceLevel:     1,
 		Notes:          "Saved notes",
 		Ratings:        map[uuid.UUID]float64{people[0].ID: 6},
@@ -495,7 +495,7 @@ func TestRouterUpdateVisitErrorPreservesPostedForm(t *testing.T) {
 	for _, fragment := range []string{
 		"at least one rating is required",
 		`name="visited_at" value="2026-05-17T20:50"`,
-		`value="` + people[1].ID.String() + `" selected>` + people[1].Name + `</option>`,
+		`name="picker_id" value="` + people[1].ID.String() + `" checked>`,
 		`value="4" selected>$$$$</option>`,
 		`name="tag_id" value="` + tags[1].ID.String() + `" checked`,
 		`name="new_tag" placeholder="Great fries" value="Patio"`,
@@ -610,7 +610,7 @@ func TestRouterUpdateVisitShowsGenericErrorWhenStoreFails(t *testing.T) {
 	visitID, err := store.CreateVisit(ctx, model.VisitInput{
 		RestaurantName: "Store Error Diner",
 		VisitedAt:      time.Date(2026, 5, 10, 18, 0, 0, 0, time.UTC),
-		PickerID:       people[0].ID,
+		PickerID:       &people[0].ID,
 		PriceLevel:     1,
 		Ratings:        map[uuid.UUID]float64{people[0].ID: 6},
 	})

@@ -306,9 +306,11 @@ func restaurantResult(restaurant model.Restaurant, visits []model.Visit) ui.Rest
 			visitCopy := visit
 			result.LatestVisit = &visitCopy
 		}
-		for _, rating := range visit.Ratings {
-			ratingSum += rating.Score
-			ratingCount++
+		if visit.CountsInAggregates() {
+			for _, rating := range visit.Ratings {
+				ratingSum += rating.Score
+				ratingCount++
+			}
 		}
 		for _, tag := range visit.Tags {
 			tagNames[strings.ToLower(tag.Name)] = tag
@@ -316,6 +318,7 @@ func restaurantResult(restaurant model.Restaurant, visits []model.Visit) ui.Rest
 	}
 	if ratingCount > 0 {
 		result.AverageRating = ratingSum / float64(ratingCount)
+		result.HasAverage = true
 	}
 	for _, tag := range tagNames {
 		result.Tags = append(result.Tags, tag)
