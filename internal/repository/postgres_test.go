@@ -92,7 +92,7 @@ func createPostgresVisit(t *testing.T, store *Store) (uuid.UUID, uuid.UUID) {
 	}
 	id, err := store.CreateVisit(ctx, model.VisitInput{
 		RestaurantName: "Single connection diner",
-		VisitedAt:      time.Now(), PickerID: people[0].ID, PriceLevel: 2,
+		VisitedAt:      time.Now(), PickerID: &people[0].ID, PriceLevel: 2,
 		Ratings: map[uuid.UUID]float64{people[0].ID: 8.5}, TagIDs: []uuid.UUID{tags[0].ID},
 		Photos: []model.VisitPhotoInput{{DataURI: testVisitPhotoDataURI}},
 	})
@@ -239,7 +239,7 @@ func TestPostgresVisitListsBatchRelatedQueries(t *testing.T) {
 		id, err := store.CreateVisit(ctx, model.VisitInput{
 			RestaurantName: "Batch diner " + strconv.Itoa(i),
 			VisitedAt:      base.Add(time.Duration(i) * time.Minute),
-			PickerID:       people[0].ID,
+			PickerID:       &people[0].ID,
 			PriceLevel:     2,
 			Ratings:        map[uuid.UUID]float64{people[0].ID: float64(i), people[1].ID: 9},
 			TagIDs:         []uuid.UUID{tags[i%len(tags)].ID},
@@ -324,7 +324,7 @@ func TestPostgresVisitsPageOffsets(t *testing.T) {
 		id, err := store.CreateVisit(ctx, model.VisitInput{
 			RestaurantName: "Page diner " + strconv.Itoa(i),
 			VisitedAt:      base.Add(-time.Duration(i) * time.Minute),
-			PickerID:       people[0].ID,
+			PickerID:       &people[0].ID,
 			PriceLevel:     2,
 			Ratings:        map[uuid.UUID]float64{people[0].ID: 7},
 		})
@@ -369,7 +369,7 @@ func postgresVisitInput(t *testing.T, store *Store, name string) model.VisitInpu
 	return model.VisitInput{
 		RestaurantName: name,
 		VisitedAt:      time.Now().Add(-time.Hour),
-		PickerID:       people[0].ID,
+		PickerID:       &people[0].ID,
 		PriceLevel:     2,
 		Ratings:        map[uuid.UUID]float64{people[0].ID: 8},
 	}
@@ -793,4 +793,24 @@ func TestPostgresVisitPositionMatchesVisitsPageOrder(t *testing.T) {
 	if _, found, err := store.VisitPosition(ctx, uuid.New()); err != nil || found {
 		t.Fatalf("missing visit found = %v, err = %v", found, err)
 	}
+}
+
+func TestPostgresAllowsBackToBackPicks(t *testing.T) {
+	assertBackToBackPicks(t, postgresStore(t))
+}
+
+func TestPostgresEverybodyPicks(t *testing.T) {
+	assertEverybodyPicks(t, postgresStore(t))
+}
+
+func TestPostgresRejectsUnknownPicker(t *testing.T) {
+	assertUnknownPickerRejected(t, postgresStore(t))
+}
+
+func TestPostgresAggregatesNeedTwoRaters(t *testing.T) {
+	assertAggregatesNeedTwoRaters(t, postgresStore(t))
+}
+
+func TestPostgresNoAggregatesWithoutTwoRaters(t *testing.T) {
+	assertNoAggregatesWithoutTwoRaters(t, postgresStore(t))
 }

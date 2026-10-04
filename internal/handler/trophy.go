@@ -36,11 +36,6 @@ func (h *Handler) Trophy(w http.ResponseWriter, r *http.Request) {
 		h.error(w, "stats", err)
 		return
 	}
-	pickerTurn, err := h.store.PickerTurn(r.Context())
-	if err != nil {
-		h.error(w, "picker turn", err)
-		return
-	}
 	mapPoints, err := h.store.VisitedRestaurantMapPoints(r.Context())
 	if err != nil {
 		h.error(w, "visited restaurant map points", err)
@@ -49,7 +44,6 @@ func (h *Handler) Trophy(w http.ResponseWriter, r *http.Request) {
 	data := ui.PageData{
 		Title:           "Trophy Case",
 		Stats:           stats,
-		PickerTurn:      pickerTurn,
 		TrophyMapPoints: mapPoints,
 		TrophyMapLabels: trophyMapLabels(mapPoints),
 	}

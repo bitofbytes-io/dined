@@ -35,7 +35,7 @@ func TestMemoryStoreVisitsZeroReturnsAllVisits(t *testing.T) {
 func TestMemoryStoreVisitsNewestFirstUsesCreatedAtTieBreaker(t *testing.T) {
 	store := NewMemoryStore()
 	restaurant := store.restaurants[0]
-	picker := store.people[0]
+	picker := &store.people[0]
 	visitedAt := time.Date(2026, 5, 15, 18, 0, 0, 0, time.UTC)
 	olderCreated := demoVisit(restaurant, picker, visitedAt, 2, "older", nil, nil)
 	olderCreated.CreatedAt = visitedAt.Add(time.Minute)
@@ -127,10 +127,10 @@ func TestMemoryStoreVisitedRestaurantMapPointsDistinctVisitedRestaurants(t *test
 	patio := store.restaurants[1]
 	noCoordinates := model.Restaurant{ID: uuid.New(), Name: "Mystery Counter"}
 	store.visits = []model.Visit{
-		demoVisit(hanks, store.people[0], now.Add(-2*time.Hour), 2, "", nil, nil),
-		demoVisit(patio, store.people[1], now.Add(-1*time.Hour), 2, "", nil, nil),
-		demoVisit(hanks, store.people[2], now, 2, "", nil, nil),
-		demoVisit(noCoordinates, store.people[3], now.Add(time.Hour), 2, "", nil, nil),
+		demoVisit(hanks, &store.people[0], now.Add(-2*time.Hour), 2, "", nil, nil),
+		demoVisit(patio, &store.people[1], now.Add(-1*time.Hour), 2, "", nil, nil),
+		demoVisit(hanks, &store.people[2], now, 2, "", nil, nil),
+		demoVisit(noCoordinates, &store.people[3], now.Add(time.Hour), 2, "", nil, nil),
 	}
 
 	points, err := store.VisitedRestaurantMapPoints(context.Background())
@@ -151,75 +151,32 @@ func TestMemoryStoreVisitedRestaurantMapPointsDistinctVisitedRestaurants(t *test
 	}
 }
 
-func TestMemoryStorePickerTurnNoVisitsStartsWithDaniel(t *testing.T) {
+// emptyMemoryStore is the memory store with its seeded people but no visits.
+func emptyMemoryStore() *MemoryStore {
 	store := NewMemoryStore()
 	store.visits = nil
-
-	turn, err := store.PickerTurn(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if turn.LastPicker.Name != "" {
-		t.Fatalf("expected no last picker, got %q", turn.LastPicker.Name)
-	}
-	if turn.NextPicker.Name != "Daniel" {
-		t.Fatalf("expected Daniel next, got %q", turn.NextPicker.Name)
-	}
+	store.restaurants = nil
+	return store
 }
 
-func TestMemoryStorePickerTurnAdvancesRoundRobin(t *testing.T) {
-	store := NewMemoryStore()
-	store.visits = []model.Visit{
-		demoVisit(store.restaurants[0], store.people[0], time.Date(2026, 5, 15, 18, 0, 0, 0, time.UTC), 2, "", nil, nil),
-	}
-
-	turn, err := store.PickerTurn(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if turn.LastPicker.Name != "Daniel" {
-		t.Fatalf("expected Daniel last, got %q", turn.LastPicker.Name)
-	}
-	if turn.NextPicker.Name != "Jen" {
-		t.Fatalf("expected Jen next, got %q", turn.NextPicker.Name)
-	}
+func TestMemoryStoreAllowsBackToBackPicks(t *testing.T) {
+	assertBackToBackPicks(t, emptyMemoryStore())
 }
 
-func TestMemoryStorePickerTurnWrapsAfterAiden(t *testing.T) {
-	store := NewMemoryStore()
-	store.visits = []model.Visit{
-		demoVisit(store.restaurants[0], store.people[3], time.Date(2026, 5, 15, 18, 0, 0, 0, time.UTC), 2, "", nil, nil),
-	}
-
-	turn, err := store.PickerTurn(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if turn.LastPicker.Name != "Aiden" {
-		t.Fatalf("expected Aiden last, got %q", turn.LastPicker.Name)
-	}
-	if turn.NextPicker.Name != "Daniel" {
-		t.Fatalf("expected Daniel next, got %q", turn.NextPicker.Name)
-	}
+func TestMemoryStoreEverybodyPicks(t *testing.T) {
+	assertEverybodyPicks(t, emptyMemoryStore())
 }
 
-func TestMemoryStorePickerTurnUsesNewestVisitTime(t *testing.T) {
-	store := NewMemoryStore()
-	store.visits = []model.Visit{
-		demoVisit(store.restaurants[0], store.people[3], time.Date(2026, 5, 1, 18, 0, 0, 0, time.UTC), 2, "", nil, nil),
-		demoVisit(store.restaurants[0], store.people[1], time.Date(2026, 5, 15, 18, 0, 0, 0, time.UTC), 2, "", nil, nil),
-	}
+func TestMemoryStoreRejectsUnknownPicker(t *testing.T) {
+	assertUnknownPickerRejected(t, emptyMemoryStore())
+}
 
-	turn, err := store.PickerTurn(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if turn.LastPicker.Name != "Jen" {
-		t.Fatalf("expected Jen last, got %q", turn.LastPicker.Name)
-	}
-	if turn.NextPicker.Name != "Caleb" {
-		t.Fatalf("expected Caleb next, got %q", turn.NextPicker.Name)
-	}
+func TestMemoryStoreAggregatesNeedTwoRaters(t *testing.T) {
+	assertAggregatesNeedTwoRaters(t, emptyMemoryStore())
+}
+
+func TestMemoryStoreNoAggregatesWithoutTwoRaters(t *testing.T) {
+	assertNoAggregatesWithoutTwoRaters(t, emptyMemoryStore())
 }
 
 func TestMemoryStoreCreateVisitDoesNotReuseNameOnlyMatch(t *testing.T) {
@@ -232,7 +189,7 @@ func TestMemoryStoreCreateVisitDoesNotReuseNameOnlyMatch(t *testing.T) {
 		RestaurantName: "Hank's Downtown Diner",
 		Address:        "202 Other Street",
 		VisitedAt:      time.Now(),
-		PickerID:       people[0].ID,
+		PickerID:       &people[0].ID,
 		PriceLevel:     2,
 		Ratings:        map[uuid.UUID]float64{people[0].ID: 8},
 	}
@@ -266,7 +223,7 @@ func TestMemoryStoreCreateVisitStoresPhotos(t *testing.T) {
 	input := model.VisitInput{
 		RestaurantName: "Photo Counter",
 		VisitedAt:      time.Now(),
-		PickerID:       people[0].ID,
+		PickerID:       &people[0].ID,
 		PriceLevel:     2,
 		Ratings:        map[uuid.UUID]float64{people[0].ID: 8},
 		Photos: []model.VisitPhotoInput{
@@ -329,7 +286,7 @@ func TestMemoryStoreCreateVisitReusesNameAddressWithPlaceID(t *testing.T) {
 		RestaurantName: "Manual Cafe",
 		Address:        "1 Test Way",
 		VisitedAt:      time.Now(),
-		PickerID:       people[0].ID,
+		PickerID:       &people[0].ID,
 		PriceLevel:     2,
 		Ratings:        map[uuid.UUID]float64{people[0].ID: 8},
 	}
@@ -387,7 +344,7 @@ func TestMemoryStoreCreateVisitUpdatesExistingRestaurantIDGoogleMetadata(t *test
 		GooglePlaceID:  "manual-cafe-place",
 		Category:       "Coffee",
 		VisitedAt:      time.Now(),
-		PickerID:       people[0].ID,
+		PickerID:       &people[0].ID,
 		PriceLevel:     2,
 		Ratings:        map[uuid.UUID]float64{people[0].ID: 8},
 	}
@@ -490,7 +447,7 @@ func TestMemoryStoreCreateVisitStoresGoogleMetadata(t *testing.T) {
 		},
 		Category:   "American",
 		VisitedAt:  time.Now(),
-		PickerID:   people[0].ID,
+		PickerID:   &people[0].ID,
 		PriceLevel: 2,
 		Ratings:    map[uuid.UUID]float64{people[0].ID: 8},
 	}
@@ -526,7 +483,7 @@ func TestMemoryStoreUpdateVisitReplacesRatingsTagsAndNotes(t *testing.T) {
 	input := model.VisitInput{
 		RestaurantID: &restaurantID,
 		VisitedAt:    visitedAt,
-		PickerID:     store.people[2].ID,
+		PickerID:     &store.people[2].ID,
 		PriceLevel:   4,
 		Notes:        "Updated after the table talked it through.",
 		Ratings: map[uuid.UUID]float64{
@@ -571,7 +528,7 @@ func TestMemoryStoreUpdateVisitReconcilesPhotos(t *testing.T) {
 	input := model.VisitInput{
 		RestaurantID: &restaurantID,
 		VisitedAt:    visit.VisitedAt,
-		PickerID:     visit.Picker.ID,
+		PickerID:     &visit.Picker.ID,
 		PriceLevel:   visit.PriceLevel,
 		Ratings:      map[uuid.UUID]float64{store.people[0].ID: 9},
 		KeepPhotoIDs: []uuid.UUID{visit.Photos[1].ID},
@@ -655,7 +612,7 @@ func TestMemoryStoreCreateVisitPreservesRestaurantOverrides(t *testing.T) {
 		},
 		Category:   "American",
 		VisitedAt:  time.Now(),
-		PickerID:   people[0].ID,
+		PickerID:   &people[0].ID,
 		PriceLevel: 2,
 		Ratings:    map[uuid.UUID]float64{people[0].ID: 8},
 	}
@@ -796,6 +753,7 @@ func TestMemoryStoreStatsIncludesTrophyMetrics(t *testing.T) {
 }
 
 func TestMemoryStoreTopRestaurantsRequireTwoRatingsAndSortDeterministically(t *testing.T) {
+	// Solo's only visit has one rater, so it counts in no ranking.
 	store := NewMemoryStore()
 	people := store.people
 	now := time.Now()
@@ -805,10 +763,10 @@ func TestMemoryStoreTopRestaurantsRequireTwoRatingsAndSortDeterministically(t *t
 	solo := model.Restaurant{ID: uuid.New(), Name: "Solo", City: strPtr("Raleigh"), Category: strPtr("Indian")}
 	store.restaurants = []model.Restaurant{abacus, alpha, bravo, solo}
 	store.visits = []model.Visit{
-		demoVisit(alpha, people[0], now, 2, "", []model.Rating{{Person: people[0], Score: 9}, {Person: people[1], Score: 8}}, nil),
-		demoVisit(bravo, people[1], now, 2, "", []model.Rating{{Person: people[0], Score: 8.5}, {Person: people[1], Score: 8.5}, {Person: people[2], Score: 8.5}}, nil),
-		demoVisit(abacus, people[2], now, 2, "", []model.Rating{{Person: people[0], Score: 8.5}, {Person: people[1], Score: 8.5}}, nil),
-		demoVisit(solo, people[3], now, 2, "", []model.Rating{{Person: people[0], Score: 10}}, nil),
+		demoVisit(alpha, &people[0], now, 2, "", []model.Rating{{Person: people[0], Score: 9}, {Person: people[1], Score: 8}}, nil),
+		demoVisit(bravo, &people[1], now, 2, "", []model.Rating{{Person: people[0], Score: 8.5}, {Person: people[1], Score: 8.5}, {Person: people[2], Score: 8.5}}, nil),
+		demoVisit(abacus, &people[2], now, 2, "", []model.Rating{{Person: people[0], Score: 8.5}, {Person: people[1], Score: 8.5}}, nil),
+		demoVisit(solo, &people[3], now, 2, "", []model.Rating{{Person: people[0], Score: 10}}, nil),
 	}
 
 	stats, err := store.Stats(context.Background())
@@ -828,7 +786,6 @@ func TestMemoryStoreTopRestaurantsRequireTwoRatingsAndSortDeterministically(t *t
 		t.Fatalf("CitiesExplored = %d, want 3", stats.CitiesExplored)
 	}
 	wantCuisine := []model.CuisineRestaurantStat{
-		{Cuisine: "Indian", Name: "Solo"},
 		{Cuisine: "Italian", Name: "Abacus"},
 		{Cuisine: "Mexican", Name: "Bravo"},
 	}

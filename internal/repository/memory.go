@@ -81,9 +81,9 @@ func NewMemoryStore() *MemoryStore {
 		},
 	}
 	visits := []model.Visit{
-		demoVisit(restaurants[0], people[0], now.AddDate(0, 0, -2), 2, "Still the safest fries order.", []model.Rating{{Person: people[0], Score: 8.5}, {Person: people[1], Score: 7}, {Person: people[2], Score: 8}, {Person: people[3], Score: 7.5}}, []model.Tag{tags[0], tags[1]}),
-		demoVisit(restaurants[1], people[1], now.AddDate(0, 0, -9), 2, "Great salsa. Table was split on the enchiladas.", []model.Rating{{Person: people[0], Score: 9}, {Person: people[1], Score: 7}, {Person: people[2], Score: 8.5}, {Person: people[3], Score: 9}}, []model.Tag{tags[0], tags[2]}),
-		demoVisit(restaurants[2], people[2], now.AddDate(0, 0, -15), 3, "Good bowls, but everyone wanted more naan.", []model.Rating{{Person: people[0], Score: 8}, {Person: people[1], Score: 8.5}, {Person: people[2], Score: 8}}, []model.Tag{tags[4]}),
+		demoVisit(restaurants[0], &people[0], now.AddDate(0, 0, -2), 2, "Still the safest fries order.", []model.Rating{{Person: people[0], Score: 8.5}, {Person: people[1], Score: 7}, {Person: people[2], Score: 8}, {Person: people[3], Score: 7.5}}, []model.Tag{tags[0], tags[1]}),
+		demoVisit(restaurants[1], &people[1], now.AddDate(0, 0, -9), 2, "Great salsa. Table was split on the enchiladas.", []model.Rating{{Person: people[0], Score: 9}, {Person: people[1], Score: 7}, {Person: people[2], Score: 8.5}, {Person: people[3], Score: 9}}, []model.Tag{tags[0], tags[2]}),
+		demoVisit(restaurants[2], &people[2], now.AddDate(0, 0, -15), 3, "Good bowls, but everyone wanted more naan.", []model.Rating{{Person: people[0], Score: 8}, {Person: people[1], Score: 8.5}, {Person: people[2], Score: 8}}, []model.Tag{tags[4]}),
 	}
 	return &MemoryStore{people: people, tags: tags, restaurants: restaurants, visits: visits}
 }
@@ -278,6 +278,11 @@ func (m *MemoryStore) CreateVisit(_ context.Context, input model.VisitInput) (*u
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	// Check the picker before creating a restaurant, as Postgres rolls both back.
+	picker, err := m.pickerFromInput(input.PickerID)
+	if err != nil {
+		return nil, err
+	}
 	restaurant, ok := m.findRestaurant(input.RestaurantID)
 	if !ok {
 		restaurant, ok = m.findRestaurantByInput(input)
@@ -307,7 +312,6 @@ func (m *MemoryStore) CreateVisit(_ context.Context, input model.VisitInput) (*u
 		restaurant, _ = m.findRestaurant(input.RestaurantID)
 	}
 
-	picker := m.personByID(input.PickerID)
 	visit := model.Visit{
 		ID:         uuid.New(),
 		Restaurant: restaurant,
@@ -361,9 +365,9 @@ func (m *MemoryStore) UpdateVisit(_ context.Context, id uuid.UUID, input model.V
 	if !ok {
 		return errors.New("restaurant not found")
 	}
-	picker := m.personByID(input.PickerID)
-	if picker.ID == uuid.Nil {
-		return errors.New("picker not found")
+	picker, err := m.pickerFromInput(input.PickerID)
+	if err != nil {
+		return err
 	}
 	visitIndex := -1
 	for i := range m.visits {
@@ -527,6 +531,9 @@ func (m *MemoryStore) Stats(context.Context) (model.Stats, error) {
 			}
 			cuisineAggregate.visitCount++
 		}
+		if !visit.CountsInAggregates() {
+			continue
+		}
 		for _, rating := range visit.Ratings {
 			sum += rating.Score
 			count++
@@ -534,7 +541,10 @@ func (m *MemoryStore) Stats(context.Context) (model.Stats, error) {
 			if cuisineAggregate != nil {
 				cuisineAggregate.ratings = append(cuisineAggregate.ratings, rating.Score)
 			}
-			ratingByPicker[visit.Picker.Name] = append(ratingByPicker[visit.Picker.Name], rating.Score)
+			// Everybody visits have no picker and count toward no one's average.
+			if visit.Picker != nil {
+				ratingByPicker[visit.Picker.Name] = append(ratingByPicker[visit.Picker.Name], rating.Score)
+			}
 		}
 	}
 	if count > 0 {
@@ -547,29 +557,6 @@ func (m *MemoryStore) Stats(context.Context) (model.Stats, error) {
 	stats.TopRestaurants = topRestaurantStats(ratingsByRestaurantID)
 	stats.TopRestaurantsByCuisine = topRestaurantStatsByCuisine(ratingsByCuisineRestaurantID)
 	return stats, nil
-}
-
-func (m *MemoryStore) PickerTurn(context.Context) (model.PickerTurn, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	if len(m.people) == 0 {
-		return model.PickerTurn{}, nil
-	}
-	if len(m.visits) == 0 {
-		return model.PickerTurn{NextPicker: m.people[0]}, nil
-	}
-
-	visits := append([]model.Visit(nil), m.visits...)
-	sortVisitsNewestFirst(visits)
-	last := visits[0].Picker
-	next := m.people[0]
-	for i, person := range m.people {
-		if person.ID == last.ID {
-			next = m.people[(i+1)%len(m.people)]
-			break
-		}
-	}
-	return model.PickerTurn{LastPicker: last, NextPicker: next}, nil
 }
 
 func sortVisitsNewestFirst(visits []model.Visit) {
@@ -681,6 +668,21 @@ func (m *MemoryStore) personByID(id uuid.UUID) model.Person {
 	return model.Person{}
 }
 
+// pickerFromInput returns the picker a visit input names: nil for Everybody,
+// or model.ErrUnknownPicker when the ID is not one of the people.
+func (m *MemoryStore) pickerFromInput(id *uuid.UUID) (*model.Person, error) {
+	if id == nil {
+		return nil, nil
+	}
+	for _, person := range m.people {
+		if person.ID == *id {
+			picker := person
+			return &picker, nil
+		}
+	}
+	return nil, model.ErrUnknownPicker
+}
+
 func (m *MemoryStore) ratingsFromInput(input model.VisitInput) []model.Rating {
 	var ratings []model.Rating
 	seen := map[uuid.UUID]struct{}{}
@@ -746,7 +748,8 @@ func (m *MemoryStore) tagByID(id uuid.UUID) (model.Tag, bool) {
 	return model.Tag{}, false
 }
 
-func demoVisit(restaurant model.Restaurant, picker model.Person, visitedAt time.Time, price int, notes string, ratings []model.Rating, tags []model.Tag) model.Visit {
+// demoVisit builds a seeded visit; a nil picker means Everybody picked.
+func demoVisit(restaurant model.Restaurant, picker *model.Person, visitedAt time.Time, price int, notes string, ratings []model.Rating, tags []model.Tag) model.Visit {
 	now := time.Now()
 	return model.Visit{
 		ID:         uuid.New(),

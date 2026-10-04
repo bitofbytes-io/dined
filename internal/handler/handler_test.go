@@ -409,3 +409,20 @@ func (f *fakeGooglePlacesClient) StaticMap(_ context.Context, request places.Sta
 	}
 	return &places.StaticMapImage{Data: []byte("png"), ContentType: "image/png"}, nil
 }
+
+func TestRestaurantResultAveragesOnlyVisitsWithTwoRaters(t *testing.T) {
+	daniel := model.Person{ID: uuid.New(), Name: "Daniel"}
+	jen := model.Person{ID: uuid.New(), Name: "Jen"}
+	solo := model.Visit{Ratings: []model.Rating{{Person: daniel, Score: 10}}}
+	pair := model.Visit{Ratings: []model.Rating{{Person: daniel, Score: 6}, {Person: jen, Score: 7}}}
+
+	result := restaurantResult(model.Restaurant{Name: "Solo Spot"}, []model.Visit{solo})
+	if result.VisitCount != 1 || result.HasAverage || result.AverageRating != 0 {
+		t.Fatalf("single-rater result = %#v, want one visit and no average", result)
+	}
+
+	result = restaurantResult(model.Restaurant{Name: "Solo Spot"}, []model.Visit{solo, pair})
+	if result.VisitCount != 2 || !result.HasAverage || math.Abs(result.AverageRating-6.5) > 0.001 {
+		t.Fatalf("mixed result = %#v, want two visits averaging 6.5", result)
+	}
+}

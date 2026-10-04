@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -49,11 +50,19 @@ type GoogleRestaurantMetadata struct {
 	Category         string
 }
 
+// MinAggregateRaters is how many people must rate a visit before its ratings
+// count in averages and rankings across visits.
+const MinAggregateRaters = 2
+
+// ErrUnknownPicker means a visit names a picker who is not one of the people.
+var ErrUnknownPicker = errors.New("picker not found")
+
 type Visit struct {
 	ID         uuid.UUID
 	Restaurant Restaurant
 	VisitedAt  time.Time
-	Picker     Person
+	// Picker is the person who chose the restaurant, or nil when Everybody did.
+	Picker     *Person
 	PriceLevel int
 	Notes      *string
 	Ratings    []Rating
@@ -61,6 +70,12 @@ type Visit struct {
 	Photos     []VisitPhoto
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
+}
+
+// CountsInAggregates reports whether enough people rated the visit for its
+// ratings to count in averages and rankings across visits.
+func (v Visit) CountsInAggregates() bool {
+	return len(v.Ratings) >= MinAggregateRaters
 }
 
 type VisitPhoto struct {
@@ -93,14 +108,15 @@ type VisitInput struct {
 	Category       string
 	IsChain        bool
 	VisitedAt      time.Time
-	PickerID       uuid.UUID
-	PriceLevel     int
-	Notes          string
-	Ratings        map[uuid.UUID]float64
-	TagIDs         []uuid.UUID
-	NewTag         string
-	KeepPhotoIDs   []uuid.UUID
-	Photos         []VisitPhotoInput
+	// PickerID is the person who chose the restaurant, or nil for Everybody.
+	PickerID     *uuid.UUID
+	PriceLevel   int
+	Notes        string
+	Ratings      map[uuid.UUID]float64
+	TagIDs       []uuid.UUID
+	NewTag       string
+	KeepPhotoIDs []uuid.UUID
+	Photos       []VisitPhotoInput
 }
 
 type VisitPhotoInput struct {
@@ -130,11 +146,6 @@ type Stats struct {
 	CitiesExplored          int
 	TopRestaurants          []RestaurantRatingStat
 	TopRestaurantsByCuisine []CuisineRestaurantStat
-}
-
-type PickerTurn struct {
-	LastPicker Person
-	NextPicker Person
 }
 
 type RestaurantRatingStat struct {
