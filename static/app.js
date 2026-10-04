@@ -11,22 +11,79 @@ function dinedRestaurantOptions(value) {
   return matches;
 }
 
+// The Google place a log form carries: its ID and the Places details that
+// came with it (from a "Log this dine" link).
+var dinedGooglePlaceFields = ["google_place_id", "latitude", "longitude", "phone", "website", "google_rating", "google_price_level"];
+
+function dinedGooglePlaceValues(form) {
+  var values = {};
+  for (var i = 0; i < dinedGooglePlaceFields.length; i += 1) {
+    var field = form.querySelector("input[name='" + dinedGooglePlaceFields[i] + "']");
+    values[dinedGooglePlaceFields[i]] = field ? field.value : "";
+  }
+  return values;
+}
+
+function dinedSetGooglePlaceValues(form, values) {
+  for (var i = 0; i < dinedGooglePlaceFields.length; i += 1) {
+    var field = form.querySelector("input[name='" + dinedGooglePlaceFields[i] + "']");
+    if (field) field.value = values[dinedGooglePlaceFields[i]] || "";
+  }
+}
+
+// dinedPlaceOwner returns the listed restaurant whose Google place ID this is.
+function dinedPlaceOwner(placeID) {
+  if (!placeID) return null;
+  var options = document.querySelectorAll("#restaurant-options option");
+  for (var i = 0; i < options.length; i += 1) {
+    if (options[i].dataset.googlePlaceId === placeID) return options[i];
+  }
+  return null;
+}
+
+// dinedUseRestaurantPlace runs when the user picks an existing restaurant. A
+// Google place left in the form from an earlier choice belongs to the chosen
+// restaurant only if it is that restaurant's place, or the restaurant has none
+// and no other restaurant owns it. Otherwise the place ID becomes the chosen
+// restaurant's own and the other place's details are cleared, so they cannot
+// be saved onto it. The replaced values come back if the user un-picks it.
+function dinedUseRestaurantPlace(form, option) {
+  var place = form.querySelector("input[name='google_place_id']");
+  if (!place) return;
+  var current = place.value.trim();
+  var optionPlace = option.dataset.googlePlaceId || "";
+  if (current === optionPlace) return;
+  if (!optionPlace) {
+    var owner = dinedPlaceOwner(current);
+    if (!current || !owner || owner === option) return;
+  }
+  if (!form.dinedReplacedPlace) form.dinedReplacedPlace = dinedGooglePlaceValues(form);
+  dinedSetGooglePlaceValues(form, { google_place_id: optionPlace });
+  form.dinedReplacedPlace.applied = optionPlace;
+}
+
+// dinedReleaseRestaurantPlace restores the Google place that picking a
+// restaurant replaced, unless the user has since edited the place ID.
+function dinedReleaseRestaurantPlace(form) {
+  var replaced = form.dinedReplacedPlace;
+  if (!replaced) return;
+  form.dinedReplacedPlace = null;
+  var place = form.querySelector("input[name='google_place_id']");
+  if (place && place.value === replaced.applied) dinedSetGooglePlaceValues(form, replaced);
+}
+
 function dinedSyncRestaurantSelection(form) {
   if (!form) return;
   var name = form.querySelector("input[name='restaurant_name']");
   var id = form.querySelector("input[name='restaurant_id']");
   var address = form.querySelector("input[name='address']");
   var city = form.querySelector("input[name='city']");
-  var place = form.querySelector("input[name='google_place_id']");
   var category = form.querySelector("select[name='category']");
   if (!name || !id) return;
+  var previousID = id.value;
 
-  var options = dinedRestaurantOptions(name.value);
-  if (!options.length) {
-    id.value = "";
-    return;
-  }
   var option = null;
+  var options = dinedRestaurantOptions(name.value);
   var currentAddress = address ? address.value.trim() : "";
   if (currentAddress) {
     for (var i = 0; i < options.length; i += 1) {
@@ -38,20 +95,20 @@ function dinedSyncRestaurantSelection(form) {
   } else if (options.length === 1) {
     option = options[0];
   }
+  var optionAddress = option ? option.dataset.address || "" : "";
+  if (option && address && address.value && optionAddress && address.value !== optionAddress) {
+    option = null;
+  }
   if (!option) {
     id.value = "";
-    return;
-  }
-  var optionAddress = option.dataset.address || "";
-  if (address && address.value && optionAddress && address.value !== optionAddress) {
-    id.value = "";
+    if (previousID) dinedReleaseRestaurantPlace(form);
     return;
   }
 
   id.value = option.dataset.restaurantId || "";
   if (address && !address.value) address.value = optionAddress;
   if (city) city.value = option.dataset.city || "";
-  if (place && !place.value) place.value = option.dataset.googlePlaceId || "";
+  if (id.value !== previousID) dinedUseRestaurantPlace(form, option);
   if (category && !category.value) category.value = option.dataset.category || "";
 }
 
