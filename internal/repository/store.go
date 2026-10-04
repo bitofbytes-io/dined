@@ -322,8 +322,7 @@ func resolveRestaurant(ctx context.Context, tx pgx.Tx, input model.VisitInput) (
 		if err := checkChosenRestaurantPlace(ctx, tx, *input.RestaurantID, input.GooglePlaceID); err != nil {
 			return uuid.Nil, err
 		}
-		input.GoogleMetadata = chosenRestaurantMetadata(input)
-		return *input.RestaurantID, fillRestaurantDetails(ctx, tx, *input.RestaurantID, input)
+		return *input.RestaurantID, fillRestaurantDetails(ctx, tx, *input.RestaurantID, withoutPlaceDetails(input))
 	}
 
 	var id uuid.UUID
@@ -433,15 +432,18 @@ func checkChosenRestaurantPlace(ctx context.Context, tx pgx.Tx, id uuid.UUID, go
 	return nil
 }
 
-// chosenRestaurantMetadata returns the Places metadata a visit may fill onto
-// the restaurant it chose. The metadata describes the submitted place, so a
-// visit without a place ID (say, one cleared after a PlaceConflictError) fills
-// none: whatever is left in the form came from another place.
-func chosenRestaurantMetadata(input model.VisitInput) model.GoogleRestaurantMetadata {
+// withoutPlaceDetails drops the Google-derived values a visit would fill onto
+// the restaurant it chose when no place ID is submitted: the Places metadata
+// and the hidden city field describe a place, so without one they are left
+// over from another place (say, after a PlaceConflictError the user answered
+// by clearing the place ID). The visible address and category stay: they are
+// what the user sees and submits.
+func withoutPlaceDetails(input model.VisitInput) model.VisitInput {
 	if strings.TrimSpace(input.GooglePlaceID) == "" {
-		return model.GoogleRestaurantMetadata{}
+		input.GoogleMetadata = model.GoogleRestaurantMetadata{}
+		input.City = ""
 	}
-	return input.GoogleMetadata
+	return input
 }
 
 // fillRestaurantDetails copies the input's address, city, place ID, category
