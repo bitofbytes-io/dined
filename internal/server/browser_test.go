@@ -328,7 +328,8 @@ func TestEditVisitPhotoAddTileIsFirstAndFullSizeOnMobile(t *testing.T) {
 }
 
 // Picking an existing restaurant on a log form opened from another
-// restaurant's Google result must not carry that place's ID or details along.
+// restaurant's Google result must not carry that place's ID, details or
+// category along.
 func TestLogFormPickingRestaurantReplacesOtherGooglePlace(t *testing.T) {
 	chromePath := chromeExecutableForTest()
 	if chromePath == "" {
@@ -389,7 +390,7 @@ func TestLogFormPickingRestaurantReplacesOtherGooglePlace(t *testing.T) {
 		field.value = value;
 		field.dispatchEvent(new Event("input", { bubbles: true }));
 	};
-	window.dinedFields = () => Object.fromEntries(["restaurant_id", "google_place_id", "phone", "website", "latitude", "longitude", "google_rating", "google_price_level"]
+	window.dinedFields = () => Object.fromEntries(["restaurant_id", "google_place_id", "phone", "website", "latitude", "longitude", "google_rating", "google_price_level", "category"]
 		.map((name) => [name, document.querySelector("[name='" + name + "']").value]));`
 	type fields struct {
 		RestaurantID     string `json:"restaurant_id"`
@@ -400,8 +401,9 @@ func TestLogFormPickingRestaurantReplacesOtherGooglePlace(t *testing.T) {
 		Longitude        string `json:"longitude"`
 		GoogleRating     string `json:"google_rating"`
 		GooglePriceLevel string `json:"google_price_level"`
+		Category         string `json:"category"`
 	}
-	hanks := fields{GooglePlaceID: "demo-hanks", Phone: "919-555-0100", Website: "https://hanks.example", Latitude: "35.779600", Longitude: "-78.638200", GoogleRating: "4.3", GooglePriceLevel: "2"}
+	hanks := fields{GooglePlaceID: "demo-hanks", Phone: "919-555-0100", Website: "https://hanks.example", Latitude: "35.779600", Longitude: "-78.638200", GoogleRating: "4.3", GooglePriceLevel: "2", Category: "American"}
 	var picked, unpicked, patio, backToCorner fields
 	err = chromedp.Run(browserCtx,
 		network.Enable(),
@@ -433,7 +435,7 @@ func TestLogFormPickingRestaurantReplacesOtherGooglePlace(t *testing.T) {
 	if unpicked != hanks {
 		t.Fatalf("after un-picking: %#v, want Hank's Google place restored %#v", unpicked, hanks)
 	}
-	if want := (fields{RestaurantID: ids["El Patio Verde"], GooglePlaceID: "demo-patio"}); patio != want {
+	if want := (fields{RestaurantID: ids["El Patio Verde"], GooglePlaceID: "demo-patio", Category: "Mexican"}); patio != want {
 		t.Fatalf("after picking El Patio Verde: %#v, want %#v", patio, want)
 	}
 	if want := (fields{RestaurantID: ids["Corner Noodles"]}); backToCorner != want {

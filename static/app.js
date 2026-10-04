@@ -11,14 +11,18 @@ function dinedRestaurantOptions(value) {
   return matches;
 }
 
-// The Google place a log form carries: its ID and the Places details that
-// came with it (from a "Log this dine" link).
-var dinedGooglePlaceFields = ["google_place_id", "latitude", "longitude", "phone", "website", "google_rating", "google_price_level"];
+// The Google place a log form carries: its ID and the Places details and
+// category that came with it (from a "Log this dine" link).
+var dinedGooglePlaceFields = ["google_place_id", "latitude", "longitude", "phone", "website", "google_rating", "google_price_level", "category"];
+
+function dinedGooglePlaceField(form, name) {
+  return form.querySelector("[name='" + name + "']");
+}
 
 function dinedGooglePlaceValues(form) {
   var values = {};
   for (var i = 0; i < dinedGooglePlaceFields.length; i += 1) {
-    var field = form.querySelector("input[name='" + dinedGooglePlaceFields[i] + "']");
+    var field = dinedGooglePlaceField(form, dinedGooglePlaceFields[i]);
     values[dinedGooglePlaceFields[i]] = field ? field.value : "";
   }
   return values;
@@ -26,7 +30,7 @@ function dinedGooglePlaceValues(form) {
 
 function dinedSetGooglePlaceValues(form, values) {
   for (var i = 0; i < dinedGooglePlaceFields.length; i += 1) {
-    var field = form.querySelector("input[name='" + dinedGooglePlaceFields[i] + "']");
+    var field = dinedGooglePlaceField(form, dinedGooglePlaceFields[i]);
     if (field) field.value = values[dinedGooglePlaceFields[i]] || "";
   }
 }
@@ -44,9 +48,10 @@ function dinedPlaceOwner(placeID) {
 // dinedUseRestaurantPlace runs when the user picks an existing restaurant. A
 // Google place left in the form from an earlier choice belongs to the chosen
 // restaurant only if it is that restaurant's place, or the restaurant has none
-// and no other restaurant owns it. Otherwise the place ID becomes the chosen
-// restaurant's own and the other place's details are cleared, so they cannot
-// be saved onto it. The replaced values come back if the user un-picks it.
+// and no other restaurant owns it. Otherwise the place ID and category become
+// the chosen restaurant's own and the other place's details are cleared, so
+// they cannot be saved onto it. The replaced values come back if the user
+// un-picks it.
 function dinedUseRestaurantPlace(form, option) {
   var place = form.querySelector("input[name='google_place_id']");
   if (!place) return;
@@ -58,7 +63,7 @@ function dinedUseRestaurantPlace(form, option) {
     if (!current || !owner || owner === option) return;
   }
   if (!form.dinedReplacedPlace) form.dinedReplacedPlace = dinedGooglePlaceValues(form);
-  dinedSetGooglePlaceValues(form, { google_place_id: optionPlace });
+  dinedSetGooglePlaceValues(form, { google_place_id: optionPlace, category: option.dataset.category || "" });
   form.dinedReplacedPlace.applied = optionPlace;
 }
 
