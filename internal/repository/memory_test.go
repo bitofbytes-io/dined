@@ -848,3 +848,7 @@ func TestMemoryStoreAcceptsMatchingPlaceForChosenRestaurant(t *testing.T) {
 func TestMemoryStoreEditVisitIgnoresPlaceID(t *testing.T) {
 	assertEditVisitIgnoresPlaceID(t, emptyMemoryStore())
 }
+
+func TestMemoryStoreIgnoresPlaceDetailsWithoutPlaceID(t *testing.T) {
+	assertChosenRestaurantIgnoresDetailsWithoutPlaceID(t, emptyMemoryStore())
+}

@@ -830,3 +830,7 @@ func TestPostgresAcceptsMatchingPlaceForChosenRestaurant(t *testing.T) {
 func TestPostgresEditVisitIgnoresPlaceID(t *testing.T) {
 	assertEditVisitIgnoresPlaceID(t, postgresStore(t))
 }
+
+func TestPostgresIgnoresPlaceDetailsWithoutPlaceID(t *testing.T) {
+	assertChosenRestaurantIgnoresDetailsWithoutPlaceID(t, postgresStore(t))
+}

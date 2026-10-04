@@ -313,6 +313,7 @@ func (m *MemoryStore) CreateVisit(_ context.Context, input model.VisitInput) (*u
 			m.restaurants = append(m.restaurants, restaurant)
 		}
 	} else if input.RestaurantID != nil {
+		input.GoogleMetadata = chosenRestaurantMetadata(input)
 		m.updateRestaurantMetadataByID(*input.RestaurantID, input)
 		restaurant, _ = m.findRestaurant(input.RestaurantID)
 	}

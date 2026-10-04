@@ -234,3 +234,24 @@ func assertEditVisitIgnoresPlaceID(t *testing.T, store DinerStore) {
 	assertRestaurantUnchanged(t, "chosen restaurant", chosen, storeRestaurantByID(t, store, chosen.ID))
 	assertRestaurantUnchanged(t, "owning restaurant", owner, storeRestaurantByID(t, store, owner.ID))
 }
+
+// assertChosenRestaurantIgnoresDetailsWithoutPlaceID retries a rejected visit
+// the way the conflict message suggests: the Google Place ID is cleared, but
+// the form still carries the other place's hidden details. They describe no
+// submitted place, so the chosen restaurant must not gain them.
+func assertChosenRestaurantIgnoresDetailsWithoutPlaceID(t *testing.T, store DinerStore) {
+	t.Helper()
+	chosen := createPlaceTestRestaurant(t, store, placeTestInput(t, store, "Retry Noodles"))
+
+	retry := placeTestInput(t, store, "Retry Noodles")
+	retry.RestaurantID = &chosen.ID
+	retry.GoogleMetadata = googleOwnedMetadata()
+	id, err := store.CreateVisit(context.Background(), retry)
+	if err != nil {
+		t.Fatalf("CreateVisit: %v", err)
+	}
+	if got := storeRestaurant(t, store, *id); got.ID != chosen.ID {
+		t.Fatalf("visit restaurant = %s, want %s", got.ID, chosen.ID)
+	}
+	assertRestaurantUnchanged(t, "chosen restaurant", chosen, storeRestaurantByID(t, store, chosen.ID))
+}
