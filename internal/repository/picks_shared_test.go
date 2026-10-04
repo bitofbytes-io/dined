@@ -179,6 +179,8 @@ func assertAggregatesNeedTwoRaters(t *testing.T, store DinerStore) {
 	createPickTestVisit(t, store, "Solo Spot", "Indian", 1, &daniel, map[uuid.UUID]float64{daniel.ID: 10})
 	createPickTestVisit(t, store, "Solo Spot", "Indian", 2, &daniel, map[uuid.UUID]float64{jen.ID: 10})
 	createPickTestVisit(t, store, "Pair Place", "Italian", 3, &daniel, map[uuid.UUID]float64{daniel.ID: 6, jen.ID: 7})
+	// A single-rater visit to a ranked restaurant adds nothing to its ranking.
+	createPickTestVisit(t, store, "Pair Place", "Italian", 7, nil, map[uuid.UUID]float64{caleb.ID: 1})
 	createPickTestVisit(t, store, "Group Grill", "American", 4, nil, map[uuid.UUID]float64{daniel.ID: 9, jen.ID: 9, caleb.ID: 9})
 	createPickTestVisit(t, store, "Jen's Pick", "Mexican", 5, &jen, map[uuid.UUID]float64{daniel.ID: 8, jen.ID: 8})
 	createPickTestVisit(t, store, "Taco Two", "Mexican", 6, &jen, map[uuid.UUID]float64{caleb.ID: 7, aiden.ID: 7})
@@ -187,8 +189,8 @@ func assertAggregatesNeedTwoRaters(t *testing.T, store DinerStore) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if stats.TotalDines != 6 || stats.NewPlaces != 5 {
-		t.Fatalf("TotalDines/NewPlaces = %d/%d, want 6/5 (counts include every visit)", stats.TotalDines, stats.NewPlaces)
+	if stats.TotalDines != 7 || stats.NewPlaces != 5 {
+		t.Fatalf("TotalDines/NewPlaces = %d/%d, want 7/5 (counts include every visit)", stats.TotalDines, stats.NewPlaces)
 	}
 	// Pair Place, Group Grill, Jen's Pick and Taco Two: 70 over 9 ratings.
 	if math.Abs(stats.AverageRating-70.0/9.0) > 0.001 {
@@ -214,6 +216,9 @@ func assertAggregatesNeedTwoRaters(t *testing.T, store DinerStore) {
 	if top := stats.TopRestaurants[0]; top.RatingCount != 3 || top.VisitCount != 1 {
 		t.Fatalf("Group Grill counts = %d ratings/%d visits, want 3/1", top.RatingCount, top.VisitCount)
 	}
+	if pair := stats.TopRestaurants[3]; pair.RatingCount != 2 || pair.VisitCount != 1 || math.Abs(pair.AverageRating-6.5) > 0.001 {
+		t.Fatalf("Pair Place = %#v, want 2 ratings over 1 counted visit averaging 6.5", pair)
+	}
 
 	wantCuisine := []string{"American/Group Grill", "Italian/Pair Place", "Mexican/Jen's Pick"}
 	if len(stats.TopRestaurantsByCuisine) != len(wantCuisine) {
@@ -224,6 +229,9 @@ func assertAggregatesNeedTwoRaters(t *testing.T, store DinerStore) {
 		if got.Cuisine+"/"+got.Name != want {
 			t.Fatalf("cuisine winners = %#v, want %v", stats.TopRestaurantsByCuisine, wantCuisine)
 		}
+	}
+	if italian := stats.TopRestaurantsByCuisine[1]; italian.RatingCount != 2 || italian.VisitCount != 1 {
+		t.Fatalf("Italian winner = %#v, want 2 ratings over 1 counted visit", italian)
 	}
 }
 

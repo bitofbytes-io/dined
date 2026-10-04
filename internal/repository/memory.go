@@ -509,6 +509,10 @@ func (m *MemoryStore) Stats(context.Context) (model.Stats, error) {
 		if city != "" {
 			cities[strings.ToLower(city)] = struct{}{}
 		}
+		// Like Postgres, rankings count only the visits whose ratings count.
+		if !visit.CountsInAggregates() {
+			continue
+		}
 		restaurantAggregate := ratingsByRestaurantID[visit.Restaurant.ID]
 		if restaurantAggregate == nil {
 			restaurantAggregate = &restaurantRatingAggregate{name: visit.Restaurant.Name}
@@ -530,9 +534,6 @@ func (m *MemoryStore) Stats(context.Context) (model.Stats, error) {
 				cuisineRestaurants[visit.Restaurant.ID] = cuisineAggregate
 			}
 			cuisineAggregate.visitCount++
-		}
-		if !visit.CountsInAggregates() {
-			continue
 		}
 		for _, rating := range visit.Ratings {
 			sum += rating.Score
