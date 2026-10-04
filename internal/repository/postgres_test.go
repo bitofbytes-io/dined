@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"slices"
@@ -833,4 +834,77 @@ func TestPostgresEditVisitIgnoresPlaceID(t *testing.T) {
 
 func TestPostgresIgnoresPlaceDetailsWithoutPlaceID(t *testing.T) {
 	assertChosenRestaurantIgnoresDetailsWithoutPlaceID(t, postgresStore(t))
+}
+
+// A visit linking a restaurant to one place must not interleave with another
+// linking it to a different place: the second sees the first's place ID and is
+// rejected, rather than keeping that ID and filling its own place's metadata.
+func TestPostgresChosenRestaurantPlaceCheckWaitsForConcurrentLink(t *testing.T) {
+	store := postgresStore(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	firstID, err := store.CreateVisit(ctx, postgresVisitInput(t, store, "Contested Diner"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	chosen := postgresVisitRestaurant(t, store, *firstID)
+
+	racer, err := pgx.ConnectConfig(ctx, store.pool.Config().ConnConfig.Copy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer racer.Close(context.Background())
+	tx, err := racer.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(context.Background())
+	if _, err := tx.Exec(ctx, `UPDATE restaurants SET google_place_id = 'place-first' WHERE id = $1`, chosen.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	input := postgresVisitInput(t, store, "Contested Diner")
+	input.RestaurantID = &chosen.ID
+	input.GooglePlaceID = "place-second"
+	input.GoogleMetadata = googleOwnedMetadata()
+	done := make(chan error, 1)
+	go func() {
+		_, err := store.CreateVisit(ctx, input)
+		done <- err
+	}()
+
+	observer, err := pgx.ConnectConfig(ctx, store.pool.Config().ConnConfig.Copy())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer observer.Close(context.Background())
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		var waiting int
+		if err := observer.QueryRow(ctx, `
+			SELECT COUNT(*) FROM pg_stat_activity
+			WHERE wait_event_type = 'Lock' AND query LIKE '%restaurants%'`).Scan(&waiting); err != nil {
+			t.Fatal(err)
+		}
+		if waiting > 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("CreateVisit never waited on the restaurant being linked")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	var conflict *model.PlaceConflictError
+	if err := <-done; !errors.As(err, &conflict) || conflict.Owner != "" {
+		t.Fatalf("CreateVisit error = %v, want PlaceConflictError for the now-linked restaurant", err)
+	}
+	after := postgresVisitRestaurant(t, store, *firstID)
+	if after.GooglePlaceID == nil || *after.GooglePlaceID != "place-first" || after.Phone != nil || after.Latitude != nil {
+		t.Fatalf("restaurant should keep the first place and gain no other metadata: %#v", after)
+	}
 }

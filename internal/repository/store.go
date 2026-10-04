@@ -408,7 +408,9 @@ func checkChosenRestaurantPlace(ctx context.Context, tx pgx.Tx, id uuid.UUID, go
 	}
 	var name string
 	var chosenPlaceID *string
-	err := tx.QueryRow(ctx, `SELECT name, google_place_id FROM restaurants WHERE id = $1`, id).Scan(&name, &chosenPlaceID)
+	// Lock the row so a concurrent visit that links this restaurant to a place
+	// commits first and is seen here.
+	err := tx.QueryRow(ctx, `SELECT name, google_place_id FROM restaurants WHERE id = $1 FOR UPDATE`, id).Scan(&name, &chosenPlaceID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	}
