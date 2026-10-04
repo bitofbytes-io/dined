@@ -832,3 +832,23 @@ func assertRestaurantGoogleMetadata(t *testing.T, restaurant model.Restaurant, r
 		t.Fatalf("GooglePriceLevel = %#v, want %d", restaurant.GooglePriceLevel, price)
 	}
 }
+
+func TestMemoryStoreRejectsPlaceIDOwnedByAnotherRestaurant(t *testing.T) {
+	assertChosenRestaurantPlaceOwnedElsewhereRejected(t, emptyMemoryStore())
+}
+
+func TestMemoryStoreRejectsDifferentPlaceForLinkedRestaurant(t *testing.T) {
+	assertChosenRestaurantDifferentPlaceRejected(t, emptyMemoryStore())
+}
+
+func TestMemoryStoreAcceptsMatchingPlaceForChosenRestaurant(t *testing.T) {
+	assertChosenRestaurantMatchingPlaceAccepted(t, emptyMemoryStore())
+}
+
+func TestMemoryStoreEditVisitIgnoresPlaceID(t *testing.T) {
+	assertEditVisitIgnoresPlaceID(t, emptyMemoryStore())
+}
+
+func TestMemoryStoreIgnoresPlaceDetailsWithoutPlaceID(t *testing.T) {
+	assertChosenRestaurantIgnoresDetailsWithoutPlaceID(t, emptyMemoryStore())
+}

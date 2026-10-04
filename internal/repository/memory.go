@@ -284,6 +284,11 @@ func (m *MemoryStore) CreateVisit(_ context.Context, input model.VisitInput) (*u
 		return nil, err
 	}
 	restaurant, ok := m.findRestaurant(input.RestaurantID)
+	if ok {
+		if err := m.checkChosenRestaurantPlace(restaurant, input.GooglePlaceID); err != nil {
+			return nil, err
+		}
+	}
 	if !ok {
 		restaurant, ok = m.findRestaurantByInput(input)
 		if !ok {
@@ -308,7 +313,7 @@ func (m *MemoryStore) CreateVisit(_ context.Context, input model.VisitInput) (*u
 			m.restaurants = append(m.restaurants, restaurant)
 		}
 	} else if input.RestaurantID != nil {
-		m.updateRestaurantMetadataByID(*input.RestaurantID, input)
+		m.updateRestaurantMetadataByID(*input.RestaurantID, withoutPlaceDetails(input))
 		restaurant, _ = m.findRestaurant(input.RestaurantID)
 	}
 
@@ -582,6 +587,24 @@ func (m *MemoryStore) findRestaurant(id *uuid.UUID) (model.Restaurant, bool) {
 		}
 	}
 	return model.Restaurant{}, false
+}
+
+// checkChosenRestaurantPlace mirrors the Postgres check: a chosen restaurant
+// only accepts its own Google place ID, or an unowned one when it has none.
+func (m *MemoryStore) checkChosenRestaurantPlace(chosen model.Restaurant, googlePlaceID string) error {
+	placeID := strings.TrimSpace(googlePlaceID)
+	if placeID == "" || (chosen.GooglePlaceID != nil && *chosen.GooglePlaceID == placeID) {
+		return nil
+	}
+	for _, restaurant := range m.restaurants {
+		if restaurant.ID != chosen.ID && restaurant.GooglePlaceID != nil && *restaurant.GooglePlaceID == placeID {
+			return &model.PlaceConflictError{Restaurant: chosen.Name, Owner: restaurant.Name}
+		}
+	}
+	if chosen.GooglePlaceID != nil {
+		return &model.PlaceConflictError{Restaurant: chosen.Name}
+	}
+	return nil
 }
 
 func (m *MemoryStore) findRestaurantByInput(input model.VisitInput) (model.Restaurant, bool) {

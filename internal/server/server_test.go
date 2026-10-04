@@ -641,3 +641,68 @@ func TestRouterUpdateVisitShowsGenericErrorWhenStoreFails(t *testing.T) {
 		t.Fatalf("response leaked the store error:\n%s", rendered)
 	}
 }
+
+// Choosing one restaurant with another restaurant's Google place ID explains
+// the conflict instead of the generic save error, and saves nothing.
+func TestRouterCreateVisitExplainsPlaceIDConflict(t *testing.T) {
+	ctx := context.Background()
+	store := repository.NewMemoryStore()
+	people, err := store.People(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	visitID, err := store.CreateVisit(ctx, model.VisitInput{
+		RestaurantName: "Corner Noodles",
+		VisitedAt:      time.Date(2026, 5, 10, 18, 0, 0, 0, time.UTC),
+		PickerID:       &people[0].ID,
+		PriceLevel:     1,
+		Ratings:        map[uuid.UUID]float64{people[0].ID: 6},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	chosen, err := store.Visit(ctx, *visitID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := store.Visits(ctx, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	form := url.Values{}
+	form.Set("restaurant_id", chosen.Restaurant.ID.String())
+	form.Set("restaurant_name", "Corner Noodles")
+	form.Set("google_place_id", "demo-hanks") // Hank's Downtown Diner's place.
+	form.Set("phone", "919-555-0123")
+	form.Set("visited_at", "2026-05-17T20:50")
+	form.Set("picker_id", people[0].ID.String())
+	form.Set("price_level", "2")
+	form.Set("rating_"+people[0].ID.String(), "7")
+
+	router, token := newAuthenticatedTestRouter(t, store)
+	rec := postVisitForm(t, router, token, "/visits", form)
+
+	rendered := rec.Body.String()
+	want := "That Google place is already saved as Hank&#39;s Downtown Diner. To log this dine at Corner Noodles, clear the Google Place ID"
+	if rec.Code != http.StatusOK || !strings.Contains(rendered, want) {
+		t.Fatalf("status %d, want place conflict message in:\n%s", rec.Code, rendered)
+	}
+	if !strings.Contains(rendered, `name="google_place_id" placeholder="Optional" value="demo-hanks"`) {
+		t.Fatalf("form should keep the submitted place ID for the user to fix:\n%s", rendered)
+	}
+	after, err := store.Visits(ctx, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(after) != len(before) {
+		t.Fatalf("visits = %d, want %d", len(after), len(before))
+	}
+	restaurant, err := store.Restaurant(ctx, chosen.Restaurant.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restaurant.GooglePlaceID != nil || restaurant.Phone != nil {
+		t.Fatalf("chosen restaurant gained another place's details: %#v", restaurant)
+	}
+}

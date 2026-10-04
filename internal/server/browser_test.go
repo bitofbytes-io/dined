@@ -327,6 +327,133 @@ func TestEditVisitPhotoAddTileIsFirstAndFullSizeOnMobile(t *testing.T) {
 	}
 }
 
+// Picking an existing restaurant on a log form opened from another
+// restaurant's Google result must not carry that place's ID, details or
+// category along.
+func TestLogFormPickingRestaurantReplacesOtherGooglePlace(t *testing.T) {
+	chromePath := chromeExecutableForTest()
+	if chromePath == "" {
+		t.Skip("Chrome or Chromium executable not found")
+	}
+	t.Chdir(filepath.Join("..", ".."))
+
+	storeCtx := context.Background()
+	store := repository.NewMemoryStore()
+	people, err := store.People(storeCtx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.CreateVisit(storeCtx, model.VisitInput{
+		RestaurantName: "Corner Noodles",
+		VisitedAt:      time.Now().Add(-48 * time.Hour),
+		PickerID:       &people[0].ID,
+		PriceLevel:     2,
+		Ratings:        map[uuid.UUID]float64{people[0].ID: 8},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ids := map[string]string{}
+	for _, name := range []string{"Corner Noodles", "El Patio Verde"} {
+		restaurants, err := store.Restaurants(storeCtx, name)
+		if err != nil || len(restaurants) != 1 {
+			t.Fatalf("find %s: %#v, %v", name, restaurants, err)
+		}
+		ids[name] = restaurants[0].ID.String()
+	}
+
+	router, token := newAuthenticatedTestRouter(t, store)
+	server := httptest.NewServer(router)
+	defer server.Close()
+
+	options := append(chromedp.DefaultExecAllocatorOptions[:],
+		chromedp.ExecPath(chromePath),
+		chromedp.Headless,
+		chromedp.NoFirstRun,
+		chromedp.NoDefaultBrowserCheck,
+		chromedp.DisableGPU,
+		chromedp.Flag("disable-dev-shm-usage", true),
+	)
+	allocCtx, cancelAlloc := chromedp.NewExecAllocator(context.Background(), options...)
+	defer cancelAlloc()
+	browserCtx, cancelBrowser := chromedp.NewContext(allocCtx, chromedp.WithLogf(func(string, ...any) {}))
+	defer cancelBrowser()
+	browserCtx, cancelTimeout := context.WithTimeout(browserCtx, 20*time.Second)
+	defer cancelTimeout()
+
+	// The "Log this dine" link for Hank's Downtown Diner's Google result.
+	logURL := server.URL + "/log?restaurant_name=Hank%27s+Downtown+Diner&address=101+Main+Street&city=Raleigh" +
+		"&google_place_id=demo-hanks&phone=919-555-0100&website=https%3A%2F%2Fhanks.example&google_rating=4.3" +
+		"&google_price_level=2&latitude=35.779600&longitude=-78.638200&category=American&price_level=2"
+	// dinedType sets a field as a datalist pick does: the whole value, then an input event.
+	const helpers = `window.dinedType = (name, value) => {
+		const field = document.querySelector("[name='" + name + "']");
+		field.value = value;
+		field.dispatchEvent(new Event("input", { bubbles: true }));
+	};
+	window.dinedFields = () => Object.fromEntries(["restaurant_id", "google_place_id", "phone", "website", "latitude", "longitude", "google_rating", "google_price_level", "category"]
+		.map((name) => [name, document.querySelector("[name='" + name + "']").value]));`
+	type fields struct {
+		RestaurantID     string `json:"restaurant_id"`
+		GooglePlaceID    string `json:"google_place_id"`
+		Phone            string `json:"phone"`
+		Website          string `json:"website"`
+		Latitude         string `json:"latitude"`
+		Longitude        string `json:"longitude"`
+		GoogleRating     string `json:"google_rating"`
+		GooglePriceLevel string `json:"google_price_level"`
+		Category         string `json:"category"`
+	}
+	hanks := fields{GooglePlaceID: "demo-hanks", Phone: "919-555-0100", Website: "https://hanks.example", Latitude: "35.779600", Longitude: "-78.638200", GoogleRating: "4.3", GooglePriceLevel: "2", Category: "American"}
+	var picked, unpicked, patio, backToCorner fields
+	err = chromedp.Run(browserCtx,
+		network.Enable(),
+		chromedp.Navigate(server.URL+"/health"),
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			return network.SetCookie(middleware.CookieName, token).WithURL(server.URL).WithPath("/").Do(ctx)
+		}),
+		chromedp.Navigate(logURL),
+		chromedp.WaitVisible(`[data-log-form]`, chromedp.ByQuery),
+		chromedp.Evaluate(helpers, nil),
+		// Pick Corner Noodles from the list, then clear Google's address so it matches.
+		chromedp.Evaluate(`dinedType("restaurant_name", "Corner Noodles"); dinedType("address", ""); dinedFields()`, &picked),
+		// Typing a name that is not listed un-picks it and restores Hank's place.
+		chromedp.Evaluate(`dinedType("restaurant_name", "Corner Noodles Annex"); dinedFields()`, &unpicked),
+		// Pick a restaurant with its own place, then switch to Corner Noodles.
+		chromedp.Evaluate(`dinedType("restaurant_name", "El Patio Verde"); dinedFields()`, &patio),
+		chromedp.Evaluate(`dinedType("restaurant_name", "Corner Noodles"); dinedType("address", ""); dinedFields()`, &backToCorner),
+		chromedp.Evaluate(`dinedType("rating_`+people[0].ID.String()+`", "7")`, nil),
+		chromedp.Click(`[data-log-submit]`, chromedp.ByQuery),
+		chromedp.Poll(`location.pathname === "/dines"`, nil),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if want := (fields{RestaurantID: ids["Corner Noodles"]}); picked != want {
+		t.Fatalf("after picking Corner Noodles: %#v, want %#v", picked, want)
+	}
+	if unpicked != hanks {
+		t.Fatalf("after un-picking: %#v, want Hank's Google place restored %#v", unpicked, hanks)
+	}
+	if want := (fields{RestaurantID: ids["El Patio Verde"], GooglePlaceID: "demo-patio", Category: "Mexican"}); patio != want {
+		t.Fatalf("after picking El Patio Verde: %#v, want %#v", patio, want)
+	}
+	if want := (fields{RestaurantID: ids["Corner Noodles"]}); backToCorner != want {
+		t.Fatalf("after switching to Corner Noodles: %#v, want %#v", backToCorner, want)
+	}
+
+	visits, err := store.Visits(storeCtx, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(visits) != 1 || visits[0].Restaurant.Name != "Corner Noodles" {
+		t.Fatalf("newest visit = %#v, want one at Corner Noodles", visits)
+	}
+	if corner := visits[0].Restaurant; corner.GooglePlaceID != nil || corner.Phone != nil || corner.Latitude != nil {
+		t.Fatalf("Corner Noodles gained Google details: %#v", corner)
+	}
+}
+
 func chromeExecutableForTest() string {
 	if path := os.Getenv("CHROME_BIN"); isExecutable(path) {
 		return path

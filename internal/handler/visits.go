@@ -127,6 +127,12 @@ func (h *Handler) CreateVisit(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, invalidPickerMessage, http.StatusBadRequest)
 		return
 	}
+	var placeConflict *model.PlaceConflictError
+	if errors.As(err, &placeConflict) {
+		slog.Warn("create visit place conflict", "place_id", input.GooglePlaceID, "error", err)
+		h.renderLogError(w, r, placeConflictMessage(placeConflict))
+		return
+	}
 	if err != nil {
 		slog.Error("create visit", "error", err)
 		h.renderLogError(w, r, saveVisitFailedMessage)
@@ -335,6 +341,16 @@ func (h *Handler) visitInput(r *http.Request) (model.VisitInput, error) {
 		input.Photos = append(input.Photos, model.VisitPhotoInput{DataURI: value})
 	}
 	return input, nil
+}
+
+// placeConflictMessage tells the user why a dine at a chosen restaurant was
+// not saved and how to fix the form.
+func placeConflictMessage(conflict *model.PlaceConflictError) string {
+	if conflict.Owner != "" {
+		return "That Google place is already saved as " + conflict.Owner + ". To log this dine at " + conflict.Restaurant +
+			", clear the Google Place ID; to log it at " + conflict.Owner + ", choose " + conflict.Owner + " instead."
+	}
+	return conflict.Restaurant + " is linked to a different Google place. Clear the Google Place ID to log this dine there."
 }
 
 // parsePickerID reads the picker form value: Everybody (or no value) is nil,

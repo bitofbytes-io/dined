@@ -2,6 +2,7 @@ package model
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -56,6 +57,22 @@ const MinAggregateRaters = 2
 
 // ErrUnknownPicker means a visit names a picker who is not one of the people.
 var ErrUnknownPicker = errors.New("picker not found")
+
+// PlaceConflictError means a visit chose an existing restaurant but submitted
+// a Google place ID that is not that restaurant's: another restaurant owns it
+// (Owner is that restaurant's name), or the chosen restaurant is already
+// linked to a different place (Owner is empty). The visit is not saved.
+type PlaceConflictError struct {
+	Restaurant string
+	Owner      string
+}
+
+func (e *PlaceConflictError) Error() string {
+	if e.Owner != "" {
+		return fmt.Sprintf("google place id belongs to %q, not chosen restaurant %q", e.Owner, e.Restaurant)
+	}
+	return fmt.Sprintf("chosen restaurant %q is linked to a different google place", e.Restaurant)
+}
 
 type Visit struct {
 	ID         uuid.UUID
