@@ -14,6 +14,7 @@ import (
 
 	"github.com/bitofbytes-io/dined/internal/auth"
 	"github.com/bitofbytes-io/dined/internal/config"
+	"github.com/bitofbytes-io/dined/internal/migrate"
 	"github.com/bitofbytes-io/dined/internal/places"
 	"github.com/bitofbytes-io/dined/internal/repository"
 	"github.com/bitofbytes-io/dined/internal/server"
@@ -148,6 +149,13 @@ func openStores(ctx context.Context, cfg *config.Config) (repository.DinerStore,
 	if err := pool.Ping(connectCtx); err != nil {
 		pool.Close()
 		return nil, nil, nil, fmt.Errorf("ping database: %w", err)
+	}
+
+	// Apply pending migrations before serving. A failure exits the process, so
+	// a deploy whose migration fails never becomes healthy and stops rolling out.
+	if err := migrate.Apply(ctx, pool); err != nil {
+		pool.Close()
+		return nil, nil, nil, err
 	}
 
 	return repository.New(pool), auth.NewPostgresRepository(pool), pool.Close, nil

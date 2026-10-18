@@ -6,7 +6,7 @@ Dined is a self-hosted restaurant memory ledger for recording visits, who chose 
 
 - Docker 24+
 - PostgreSQL 15+ for persistent deployments
-- Goose for database migrations
+- Goose CLI (optional) for manual migration status and rollbacks
 - A Google Cloud project with billing enabled
 - An [OAuth 2.0 Web application client](https://developers.google.com/identity/protocols/oauth2/web-server)
 - An API key with [Places API (New)](https://developers.google.com/maps/documentation/places/web-service/get-api-key) and [Maps Static API](https://developers.google.com/maps/documentation/maps-static/start) enabled
@@ -76,12 +76,14 @@ docker run -d --name db --network dined \
 until docker exec db pg_isready -U dined -d dined >/dev/null 2>&1; do sleep 1; done
 ```
 
-Apply migrations before starting Dined:
+The SQL files in `migrations/` are embedded in the binary. With `DATA_STORE=postgres`, Dined applies any pending migrations at startup, before it serves traffic. If a migration fails, Dined exits non-zero and never becomes healthy, so a deploy whose migration fails does not finish rolling out. Each migration runs in its own transaction, so a failed migration leaves no partial changes and is not recorded. A Postgres advisory lock serializes startups, so replicas that start together apply each migration once. Versions are recorded in goose's standard `goose_db_version` table, so migrations already applied with the goose CLI are never re-run. No extra configuration is needed.
+
+The goose CLI still works for inspecting or rolling back migrations by hand:
 
 ```bash
 go install github.com/pressly/goose/v3/cmd/goose@latest
 export DATABASE_URL='postgres://dined:change-me@localhost:5432/dined?sslmode=disable'
-goose -dir migrations postgres "$DATABASE_URL" up
+goose -dir migrations postgres "$DATABASE_URL" status
 ```
 
 ## Run with Docker
@@ -112,4 +114,4 @@ make run-postgres # persistent local run
 make test
 ```
 
-Use `make migrate`, `make migrate-status`, and `make migrate-down` for database maintenance when `DATABASE_URL` is configured.
+`make run-postgres` applies pending migrations on startup. Use `make migrate`, `make migrate-status`, and `make migrate-down` for manual database maintenance with the goose CLI when `DATABASE_URL` is configured.
