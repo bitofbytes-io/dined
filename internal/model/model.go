@@ -58,6 +58,9 @@ const MinAggregateRaters = 2
 // ErrUnknownPicker means a visit names a picker who is not one of the people.
 var ErrUnknownPicker = errors.New("picker not found")
 
+// ErrRestaurantNotFound means an input chose a restaurant that does not exist.
+var ErrRestaurantNotFound = errors.New("restaurant not found")
+
 // PlaceConflictError means a visit chose an existing restaurant but submitted
 // a Google place ID that is not that restaurant's: another restaurant owns it
 // (Owner is that restaurant's name), or the chosen restaurant is already
@@ -150,6 +153,33 @@ type RestaurantInput struct {
 	GooglePriceLevel *int
 	Category         string
 	IsChain          bool
+}
+
+// WantToTryItem is a restaurant on the family's Want to Try list.
+type WantToTryItem struct {
+	ID         uuid.UUID
+	Restaurant Restaurant
+	// SuggestedBy is the person whose idea it was, or nil when it was Everybody's.
+	SuggestedBy *Person
+	Note        *string
+	CreatedAt   time.Time
+	// DoneAt is when a dine logged at the restaurant took it off the list.
+	DoneAt *time.Time
+}
+
+// WantToTryInput saves a restaurant to the Want to Try list. Like a visit, it
+// names a chosen restaurant (RestaurantID) or describes one to find or create.
+type WantToTryInput struct {
+	RestaurantID   *uuid.UUID
+	RestaurantName string
+	Address        string
+	City           string
+	GooglePlaceID  string
+	GoogleMetadata GoogleRestaurantMetadata
+	Category       string
+	// SuggestedByID is the person whose idea it was, or nil for Everybody.
+	SuggestedByID *uuid.UUID
+	Note          string
 }
 
 type Stats struct {

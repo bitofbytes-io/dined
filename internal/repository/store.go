@@ -41,6 +41,10 @@ type DinerStore interface {
 	UpdateRestaurant(context.Context, uuid.UUID, model.RestaurantInput) error
 	ToggleChain(context.Context, uuid.UUID, bool) error
 	Stats(context.Context) (model.Stats, error)
+	WantToTry(context.Context) ([]model.WantToTryItem, error)
+	WantToTryItem(context.Context, uuid.UUID) (*model.WantToTryItem, error)
+	SaveWantToTry(context.Context, model.WantToTryInput) (*uuid.UUID, error)
+	DeleteWantToTry(context.Context, uuid.UUID) error
 }
 
 func New(pool *pgxpool.Pool) *Store {
@@ -387,6 +391,10 @@ func (s *Store) CreateVisit(ctx context.Context, input model.VisitInput) (*uuid.
 
 	if err := insertVisitPhotos(ctx, tx, visitID, input.Photos, 0); err != nil {
 		return nil, fmt.Errorf("create visit photos: %w", err)
+	}
+
+	if err := markWantToTryDone(ctx, tx, restaurantID); err != nil {
+		return nil, err
 	}
 
 	if err := tx.Commit(ctx); err != nil {

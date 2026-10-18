@@ -21,6 +21,7 @@ type MemoryStore struct {
 	tags        []model.Tag
 	restaurants []model.Restaurant
 	visits      []model.Visit
+	wantToTry   []memoryWantToTry
 }
 
 func NewMemoryStore() *MemoryStore {
@@ -377,38 +378,9 @@ func (m *MemoryStore) CreateVisit(_ context.Context, input model.VisitInput) (*u
 	if err != nil {
 		return nil, err
 	}
-	restaurant, ok := m.findRestaurant(input.RestaurantID)
-	if ok {
-		if err := m.checkChosenRestaurantPlace(restaurant, input.GooglePlaceID); err != nil {
-			return nil, err
-		}
-	}
-	if !ok {
-		restaurant, ok = m.findRestaurantByInput(input)
-		if !ok {
-			now := time.Now()
-			restaurant = model.Restaurant{
-				ID:               uuid.New(),
-				Name:             strings.TrimSpace(input.RestaurantName),
-				Address:          strPtrOrNil(input.Address),
-				City:             strPtrOrNil(input.City),
-				Latitude:         floatPtrOrNil(input.GoogleMetadata.Latitude),
-				Longitude:        floatPtrOrNil(input.GoogleMetadata.Longitude),
-				Phone:            strPtrOrNil(input.GoogleMetadata.Phone),
-				Website:          strPtrOrNil(input.GoogleMetadata.Website),
-				GooglePlaceID:    strPtrOrNil(input.GooglePlaceID),
-				GoogleRating:     floatPtrOrNil(input.GoogleMetadata.GoogleRating),
-				GooglePriceLevel: intPtrOrNil(input.GoogleMetadata.GooglePriceLevel),
-				Category:         strPtrOrNil(input.Category),
-				IsChain:          input.IsChain,
-				CreatedAt:        now,
-				UpdatedAt:        now,
-			}
-			m.restaurants = append(m.restaurants, restaurant)
-		}
-	} else if input.RestaurantID != nil {
-		m.updateRestaurantMetadataByID(*input.RestaurantID, withoutPlaceDetails(input))
-		restaurant, _ = m.findRestaurant(input.RestaurantID)
+	restaurant, err := m.resolveRestaurant(input)
+	if err != nil {
+		return nil, err
 	}
 
 	visit := model.Visit{
@@ -434,7 +406,45 @@ func (m *MemoryStore) CreateVisit(_ context.Context, input model.VisitInput) (*u
 		visit.Tags = append(visit.Tags, tag)
 	}
 	m.visits = append(m.visits, visit)
+	m.markWantToTryDone(restaurant.ID)
 	return &visit.ID, nil
+}
+
+// resolveRestaurant mirrors the Postgres resolveRestaurant: the chosen
+// restaurant, else one matched by Google place ID, else one matched by name
+// and address, else a newly added one. Callers hold m.mu for writing.
+func (m *MemoryStore) resolveRestaurant(input model.VisitInput) (model.Restaurant, error) {
+	if restaurant, ok := m.findRestaurant(input.RestaurantID); ok {
+		if err := m.checkChosenRestaurantPlace(restaurant, input.GooglePlaceID); err != nil {
+			return model.Restaurant{}, err
+		}
+		m.updateRestaurantMetadataByID(restaurant.ID, withoutPlaceDetails(input))
+		restaurant, _ = m.findRestaurant(input.RestaurantID)
+		return restaurant, nil
+	}
+	if restaurant, ok := m.findRestaurantByInput(input); ok {
+		return restaurant, nil
+	}
+	now := time.Now()
+	restaurant := model.Restaurant{
+		ID:               uuid.New(),
+		Name:             strings.TrimSpace(input.RestaurantName),
+		Address:          strPtrOrNil(input.Address),
+		City:             strPtrOrNil(input.City),
+		Latitude:         floatPtrOrNil(input.GoogleMetadata.Latitude),
+		Longitude:        floatPtrOrNil(input.GoogleMetadata.Longitude),
+		Phone:            strPtrOrNil(input.GoogleMetadata.Phone),
+		Website:          strPtrOrNil(input.GoogleMetadata.Website),
+		GooglePlaceID:    strPtrOrNil(input.GooglePlaceID),
+		GoogleRating:     floatPtrOrNil(input.GoogleMetadata.GoogleRating),
+		GooglePriceLevel: intPtrOrNil(input.GoogleMetadata.GooglePriceLevel),
+		Category:         strPtrOrNil(input.Category),
+		IsChain:          input.IsChain,
+		CreatedAt:        now,
+		UpdatedAt:        now,
+	}
+	m.restaurants = append(m.restaurants, restaurant)
+	return restaurant, nil
 }
 
 func (m *MemoryStore) UpdateRestaurantGoogleMetadata(_ context.Context, id uuid.UUID, metadata model.GoogleRestaurantMetadata) error {
@@ -533,6 +543,7 @@ func (m *MemoryStore) DeleteRestaurantIfUnvisited(_ context.Context, id uuid.UUI
 	for i, restaurant := range m.restaurants {
 		if restaurant.ID == id {
 			m.restaurants = append(m.restaurants[:i], m.restaurants[i+1:]...)
+			m.deleteRestaurantWantToTry(id)
 			return true, nil
 		}
 	}
