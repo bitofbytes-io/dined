@@ -658,6 +658,9 @@ dinedInitializePage();
 // page's "Pick one for us". Each link's href is the save form page, which
 // browsers without the sheet open instead; its query names the place.
 var dinedWantToTrySource = null;
+// dinedWantToTryOpening counts sheet openings, so a save answers only the
+// opening it was sent from and cannot close or flag a later one.
+var dinedWantToTryOpening = 0;
 
 function dinedWantToTrySheet() {
   return document.getElementById("want-to-try-sheet");
@@ -688,7 +691,10 @@ function dinedOpenWantToTrySheet(link) {
     address.hidden = !address.textContent;
   }
   dinedSetWantToTryError(form, "");
+  var save = form.querySelector("[data-want-to-try-save]");
+  if (save) save.disabled = false;
   dinedWantToTrySource = link;
+  dinedWantToTryOpening += 1;
   if (!sheet.open) sheet.showModal();
   return true;
 }
@@ -710,6 +716,14 @@ function dinedMarkWantToTrySaved(link) {
 function dinedSubmitWantToTry(form) {
   var save = form.querySelector("[data-want-to-try-save]");
   var source = dinedWantToTrySource;
+  var opening = dinedWantToTryOpening;
+  function current() {
+    var sheet = dinedWantToTrySheet();
+    return opening === dinedWantToTryOpening && sheet && sheet.open;
+  }
+  function fail(message) {
+    if (current()) dinedSetWantToTryError(form, message);
+  }
   if (save) save.disabled = true;
   dinedSetWantToTryError(form, "");
   fetch(form.action, {
@@ -720,20 +734,20 @@ function dinedSubmitWantToTry(form) {
   }).then(function (response) {
     if (response.ok) {
       dinedMarkWantToTrySaved(source);
-      dinedCloseWantToTrySheet();
+      if (current()) dinedCloseWantToTrySheet();
       return null;
     }
     if (response.status === 401) {
-      dinedSetWantToTryError(form, "Log in again to save places.");
+      fail("Log in again to save places.");
       return null;
     }
     return response.text().then(function (text) {
-      dinedSetWantToTryError(form, text.trim() || "Could not save this place. Please try again.");
+      fail(text.trim() || "Could not save this place. Please try again.");
     });
   }).catch(function () {
-    dinedSetWantToTryError(form, "Could not save this place. Check your connection and try again.");
+    fail("Could not save this place. Check your connection and try again.");
   }).then(function () {
-    if (save) save.disabled = false;
+    if (save && opening === dinedWantToTryOpening) save.disabled = false;
   });
 }
 

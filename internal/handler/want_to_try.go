@@ -307,19 +307,32 @@ func (h *Handler) addWantToTryLogPrefill(r *http.Request, data *ui.PageData) err
 }
 
 // createdVisitURL is where saving a new dine lands: back on the Want to Try
-// list when the dine took the item it was logged from off the list, and on
-// the dine in /dines otherwise.
+// list when the dine was logged at the item it was opened from, which is now
+// off the list, and on the dine in /dines otherwise (say, when the form was
+// switched to another restaurant).
 func (h *Handler) createdVisitURL(r *http.Request, visitID uuid.UUID) string {
-	if id, err := uuid.Parse(strings.TrimSpace(r.PostFormValue("want_to_try"))); err == nil {
-		item, err := h.store.WantToTryItem(r.Context(), id)
-		if err != nil {
-			slog.Warn("want to try after visit", "want_to_try_id", id, "error", err)
-		}
-		if item != nil && item.DoneAt != nil {
-			return "/want-to-try?logged=" + id.String()
-		}
+	if id, err := uuid.Parse(strings.TrimSpace(r.PostFormValue("want_to_try"))); err == nil && h.visitClearedWantToTry(r, visitID, id) {
+		return "/want-to-try?logged=" + id.String()
 	}
 	return h.dinesVisitURL(r, visitID)
+}
+
+// visitClearedWantToTry reports whether the visit is at the item's restaurant
+// and the item is off the list.
+func (h *Handler) visitClearedWantToTry(r *http.Request, visitID, itemID uuid.UUID) bool {
+	item, err := h.store.WantToTryItem(r.Context(), itemID)
+	if err != nil || item == nil || item.DoneAt == nil {
+		if err != nil {
+			slog.Warn("want to try after visit", "want_to_try_id", itemID, "error", err)
+		}
+		return false
+	}
+	visit, err := h.store.Visit(r.Context(), visitID)
+	if err != nil {
+		slog.Warn("visit after want to try", "visit_id", visitID, "error", err)
+		return false
+	}
+	return visit != nil && visit.Restaurant.ID == item.Restaurant.ID
 }
 
 // localPath returns value when it is a path on this site, else fallback.

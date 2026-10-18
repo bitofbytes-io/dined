@@ -217,6 +217,39 @@ func TestRouterWantToTryLogItClearsTheItem(t *testing.T) {
 	}
 }
 
+func TestRouterWantToTryLogItSwitchedToAnotherRestaurant(t *testing.T) {
+	ctx := context.Background()
+	store := repository.NewMemoryStore()
+	people, err := store.People(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	router, token := newAuthenticatedTestRouter(t, store)
+	id, err := store.SaveWantToTry(ctx, model.WantToTryInput{RestaurantName: "Lucky Noodle Bar", Address: "1 Noodle Way"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	item, err := store.WantToTryItem(ctx, *id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Someone else logs Lucky Noodle Bar while this form is open...
+	other := pickForm(people, "Lucky Noodle Bar", "everybody")
+	other.Set("restaurant_id", item.Restaurant.ID.String())
+	if rec := postVisitForm(t, router, token, "/visits", other); rec.Code != http.StatusSeeOther {
+		t.Fatalf("other dine = %d", rec.Code)
+	}
+	// ...and this form, opened from the item, is switched to another restaurant.
+	hank := hankRestaurant(t, store)
+	form := pickForm(people, hank.Name, "everybody")
+	form.Set("restaurant_id", hank.ID.String())
+	form.Set("want_to_try", id.String())
+	rec := postVisitForm(t, router, token, "/visits", form)
+	if location := rec.Header().Get("Location"); rec.Code != http.StatusSeeOther || !strings.HasPrefix(location, "/dines") {
+		t.Fatalf("switched dine = %d %q, want /dines rather than a Want to Try notice about another place", rec.Code, location)
+	}
+}
+
 func TestRouterWantToTryRemove(t *testing.T) {
 	ctx := context.Background()
 	store := repository.NewMemoryStore()
