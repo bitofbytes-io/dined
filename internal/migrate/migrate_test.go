@@ -31,6 +31,10 @@ func postgresSchemaPool(t *testing.T) func() *pgxpool.Pool {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := ensureTestPgcrypto(ctx, admin); err != nil {
+		admin.Close(ctx)
+		t.Fatal(err)
+	}
 	schema := "dined_test_" + strings.ReplaceAll(uuid.NewString(), "-", "")
 	if _, err := admin.Exec(ctx, "CREATE SCHEMA "+schema); err != nil {
 		admin.Close(ctx)
@@ -58,6 +62,20 @@ func postgresSchemaPool(t *testing.T) func() *pgxpool.Pool {
 		t.Cleanup(pool.Close)
 		return pool
 	}
+}
+
+// ensureTestPgcrypto installs pgcrypto once in public so migration 001's
+// CREATE EXTENSION IF NOT EXISTS is a no-op. Otherwise test packages running
+// in parallel race to create it in their own schemas. The lock key matches
+// the repository package's tests.
+func ensureTestPgcrypto(ctx context.Context, conn *pgx.Conn) error {
+	return pgx.BeginFunc(ctx, conn, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtext('dined_test_pgcrypto'))"); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, "CREATE EXTENSION IF NOT EXISTS pgcrypto SCHEMA public")
+		return err
+	})
 }
 
 func appliedVersions(t *testing.T, pool *pgxpool.Pool) []int64 {
