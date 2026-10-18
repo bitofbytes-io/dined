@@ -2461,13 +2461,22 @@ fieldset {
   font-weight: 900;
   text-transform: uppercase;
 }
+/* The place's lines keep to the left column so the link can sit under the button. */
+.place-row:has(> .want-link, > .want-on) > span:not(.want-on) { grid-column: 1; }
+.place-row .small-cta:has(+ .want-link, + .want-on) { grid-row: 1 / span 2; }
 .place-row .want-link, .place-row .want-on {
   grid-column: 2;
+  grid-row: 3;
   justify-self: center;
+  align-self: start;
 }
 .ledger-panel .section-head .want-link,
 .ledger-panel .section-head .want-on {
   margin-top: .35rem;
+}
+.ledger-panel .section-head p + .want-link,
+.ledger-panel .section-head p + .want-on {
+  margin-top: -.65rem;
 }
 .ledger-panel .section-head .want-on { display: block; }
 .want-meta {
@@ -2627,7 +2636,11 @@ fieldset {
 .want-page .want-add { max-width: 32rem; }
 
 @media (max-width: 680px) {
-  .place-row .want-link, .place-row .want-on { grid-column: 1; }
+  .place-row .small-cta:has(+ .want-link, + .want-on) { grid-row: auto; }
+  .place-row .want-link, .place-row .want-on {
+    grid-column: 1;
+    grid-row: auto;
+  }
   .want-head h1 { font-size: 2.15rem; }
   .want-row { padding: .9rem; }
   .want-sheet {
