@@ -77,6 +77,28 @@ func TestLoadRequiresOAuthAllowlist(t *testing.T) {
 	}
 }
 
+func TestLoadMetricsAddr(t *testing.T) {
+	t.Setenv("DATA_STORE", "memory")
+	t.Setenv("AUTH_GOOGLE_CLIENT_ID", "client-id")
+	t.Setenv("AUTH_GOOGLE_CLIENT_SECRET", "client-secret")
+	t.Setenv("AUTH_GOOGLE_ALLOWED_EMAILS", "one@example.com")
+
+	for _, tt := range []struct{ env, want string }{
+		{env: "", want: ":9464"},
+		{env: "127.0.0.1:9500", want: "127.0.0.1:9500"},
+		{env: "off", want: "off"},
+	} {
+		t.Setenv("METRICS_ADDR", tt.env)
+		cfg, err := Load()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.MetricsAddr != tt.want {
+			t.Fatalf("METRICS_ADDR=%q: got %q, want %q", tt.env, cfg.MetricsAddr, tt.want)
+		}
+	}
+}
+
 func TestLoadTrustedProxies(t *testing.T) {
 	t.Setenv("DATA_STORE", "memory")
 	t.Setenv("AUTH_GOOGLE_CLIENT_ID", "client-id")

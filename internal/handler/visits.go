@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/bitofbytes-io/dined/internal/apptime"
+	"github.com/bitofbytes-io/dined/internal/metrics"
 	"github.com/bitofbytes-io/dined/internal/model"
 	"github.com/bitofbytes-io/dined/internal/placesync"
 	"github.com/bitofbytes-io/dined/internal/ui"
@@ -139,6 +140,8 @@ func (h *Handler) CreateVisit(w http.ResponseWriter, r *http.Request) {
 		h.renderLogError(w, r, err.Error())
 		return
 	}
+	uploadResult := metrics.ResultFailure
+	defer func() { metrics.Uploads(len(input.Photos), uploadResult) }()
 	if err := input.Validate(); err != nil {
 		h.renderLogError(w, r, err.Error())
 		return
@@ -165,6 +168,7 @@ func (h *Handler) CreateVisit(w http.ResponseWriter, r *http.Request) {
 		h.renderLogError(w, r, saveVisitFailedMessage)
 		return
 	}
+	uploadResult = metrics.ResultSuccess
 	slog.Info("visit created", "visit_id", visitID, "picker_id", pickerLogValue(input.PickerID), "rating_count", len(input.Ratings), "tag_count", len(input.TagIDs), "photo_count", len(input.Photos))
 	http.Redirect(w, r, h.createdVisitURL(r, *visitID), http.StatusSeeOther)
 }
@@ -206,6 +210,8 @@ func (h *Handler) UpdateVisit(w http.ResponseWriter, r *http.Request) {
 		h.renderVisitEditError(w, r, id, err.Error())
 		return
 	}
+	uploadResult := metrics.ResultFailure
+	defer func() { metrics.Uploads(len(input.Photos), uploadResult) }()
 	if err := input.Validate(); err != nil {
 		h.renderVisitEditError(w, r, id, err.Error())
 		return
@@ -224,6 +230,7 @@ func (h *Handler) UpdateVisit(w http.ResponseWriter, r *http.Request) {
 		h.renderVisitEditError(w, r, id, saveVisitFailedMessage)
 		return
 	}
+	uploadResult = metrics.ResultSuccess
 	slog.Info("visit updated", "visit_id", id, "picker_id", pickerLogValue(input.PickerID), "rating_count", len(input.Ratings), "tag_count", len(input.TagIDs), "photo_count", len(input.Photos))
 	http.Redirect(w, r, h.dinesVisitURL(r, id), http.StatusSeeOther)
 }

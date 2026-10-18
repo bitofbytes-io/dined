@@ -12,6 +12,8 @@ import (
 
 	"github.com/bitofbytes-io/dined/internal/auth"
 	"github.com/bitofbytes-io/dined/internal/config"
+	"github.com/bitofbytes-io/dined/internal/metrics"
+	"github.com/bitofbytes-io/dined/internal/metrics/metricstest"
 	"github.com/bitofbytes-io/dined/internal/middleware"
 )
 
@@ -96,32 +98,38 @@ func TestGoogleCallback(t *testing.T) {
 		wantLocation  string
 		wantExchanges int
 		wantSession   bool
+		// Increases in dined_oauth_failures_total and dined_login_failures_total.
+		wantOAuthFailures float64
+		wantLoginFailures float64
 	}{
 		{
-			name:         "state mismatch",
-			cookieState:  "cookie-state",
-			paramState:   "other-state",
-			claims:       verified,
-			allowed:      true,
-			wantLocation: "/login?message=" + url.QueryEscape("Invalid login state. Please try again."),
+			name:              "state mismatch",
+			cookieState:       "cookie-state",
+			paramState:        "other-state",
+			claims:            verified,
+			allowed:           true,
+			wantLocation:      "/login?message=" + url.QueryEscape("Invalid login state. Please try again."),
+			wantOAuthFailures: 1,
 		},
 		{
-			name:          "unverified email",
-			cookieState:   "state",
-			paramState:    "state",
-			claims:        unverified,
-			allowed:       true,
-			wantLocation:  "/login?message=" + url.QueryEscape("Please verify your Google email address before logging in."),
-			wantExchanges: 1,
+			name:              "unverified email",
+			cookieState:       "state",
+			paramState:        "state",
+			claims:            unverified,
+			allowed:           true,
+			wantLocation:      "/login?message=" + url.QueryEscape("Please verify your Google email address before logging in."),
+			wantExchanges:     1,
+			wantLoginFailures: 1,
 		},
 		{
-			name:          "disallowed email",
-			cookieState:   "state",
-			paramState:    "state",
-			claims:        verified,
-			allowed:       false,
-			wantLocation:  "/login?message=" + url.QueryEscape("That Google account is not allowed to access Dined."),
-			wantExchanges: 1,
+			name:              "disallowed email",
+			cookieState:       "state",
+			paramState:        "state",
+			claims:            verified,
+			allowed:           false,
+			wantLocation:      "/login?message=" + url.QueryEscape("That Google account is not allowed to access Dined."),
+			wantExchanges:     1,
+			wantLoginFailures: 1,
 		},
 		{
 			name:          "allowed verified email",
@@ -146,8 +154,18 @@ func TestGoogleCallback(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/api/auth/google/callback?"+query.Encode(), nil)
 			req.AddCookie(&http.Cookie{Name: oauthStateCookieName, Value: tt.cookieState})
 			rec := httptest.NewRecorder()
+			oauthSeries := map[string]string{"provider": metrics.ProviderGoogle}
+			oauthBefore := metricstest.Value(t, "dined_oauth_failures_total", oauthSeries)
+			loginBefore := metricstest.Value(t, "dined_login_failures_total", nil)
 
 			h.GoogleCallback(rec, req)
+
+			if got := metricstest.Value(t, "dined_oauth_failures_total", oauthSeries) - oauthBefore; got != tt.wantOAuthFailures {
+				t.Fatalf("oauth failures rose by %v, want %v", got, tt.wantOAuthFailures)
+			}
+			if got := metricstest.Value(t, "dined_login_failures_total", nil) - loginBefore; got != tt.wantLoginFailures {
+				t.Fatalf("login failures rose by %v, want %v", got, tt.wantLoginFailures)
+			}
 
 			if rec.Code != http.StatusSeeOther {
 				t.Fatalf("status = %d, want %d", rec.Code, http.StatusSeeOther)

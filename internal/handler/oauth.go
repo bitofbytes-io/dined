@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/bitofbytes-io/dined/internal/auth"
+	"github.com/bitofbytes-io/dined/internal/metrics"
 	"github.com/bitofbytes-io/dined/internal/middleware"
 )
 
@@ -120,12 +121,12 @@ func (h *Handler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 	if !claims.EmailVerified {
 		slog.Warn("oauth email not verified", "email", claims.Email)
-		h.redirectLoginError(w, r, "Please verify your Google email address before logging in.")
+		h.refuseLogin(w, r, "Please verify your Google email address before logging in.")
 		return
 	}
 	if !h.googleAuth.IsAllowed(claims) {
 		slog.Warn("oauth email not allowed", "email", claims.Email)
-		h.redirectLoginError(w, r, "That Google account is not allowed to access Dined.")
+		h.refuseLogin(w, r, "That Google account is not allowed to access Dined.")
 		return
 	}
 
@@ -148,7 +149,21 @@ func (h *Handler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, redirect, http.StatusSeeOther)
 }
 
+// redirectLoginError counts a failed OAuth callback and returns to the login
+// page with message.
 func (h *Handler) redirectLoginError(w http.ResponseWriter, r *http.Request, message string) {
+	metrics.OAuthFailure(metrics.ProviderGoogle)
+	redirectToLogin(w, r, message)
+}
+
+// refuseLogin counts a sign-in refused for an account Google authenticated,
+// and returns to the login page with message.
+func (h *Handler) refuseLogin(w http.ResponseWriter, r *http.Request, message string) {
+	metrics.LoginFailure()
+	redirectToLogin(w, r, message)
+}
+
+func redirectToLogin(w http.ResponseWriter, r *http.Request, message string) {
 	target := "/login?message=" + url.QueryEscape(message)
 	http.Redirect(w, r, target, http.StatusSeeOther)
 }

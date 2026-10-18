@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bitofbytes-io/dined/internal/metrics"
+	"github.com/bitofbytes-io/dined/internal/metrics/metricstest"
 	"github.com/google/uuid"
 )
 
@@ -109,6 +111,9 @@ func TestScheduleSessionCleanupDeletesExpiredSessionsAtStartup(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	jobSeries := map[string]string{"job": metrics.JobSessionCleanup, "result": metrics.ResultSuccess}
+	jobsBefore := metricstest.Value(t, "dined_jobs_total", jobSeries)
+
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan struct{})
 	go func() {
@@ -134,6 +139,9 @@ func TestScheduleSessionCleanupDeletesExpiredSessionsAtStartup(t *testing.T) {
 	case <-done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("cleanup scheduler did not stop after cancel")
+	}
+	if got := metricstest.Value(t, "dined_jobs_total", jobSeries) - jobsBefore; got != 1 {
+		t.Fatalf("successful session cleanup runs rose by %v, want 1", got)
 	}
 	if validUser, err := service.ValidateSession(t.Context(), liveToken); err != nil || validUser == nil {
 		t.Fatalf("live session was removed: user = %#v, err = %v", validUser, err)
