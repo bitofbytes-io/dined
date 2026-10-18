@@ -128,6 +128,35 @@ func TestRenderHomeHasNoPickerTurn(t *testing.T) {
 	}
 }
 
+func TestRenderHomeHeroUsesArrowSignForBothAudiences(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		authenticated bool
+		want          string
+		other         string
+	}{
+		{"logged out", false, `<a class="image-cta" href="/dines"><img src="/static/assets/dined-view-arrow-generated.png" alt="View Dines"></a>`, `href="/log"`},
+		{"logged in", true, `<a class="image-cta" href="/log"><img src="/static/assets/dined-log-arrow-generated.png" alt="Log a Dine"></a>`, `alt="View Dines"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var out strings.Builder
+			if err := Render(&out, "home", PageData{Authenticated: tc.authenticated}); err != nil {
+				t.Fatal(err)
+			}
+			rendered := out.String()
+			if !strings.Contains(rendered, tc.want) {
+				t.Fatalf("rendered home missing %q:\n%s", tc.want, rendered)
+			}
+			if strings.Contains(rendered, tc.other) || strings.Contains(rendered, "public-badge-link") {
+				t.Fatalf("rendered home shows the other audience's hero button:\n%s", rendered)
+			}
+		})
+	}
+	if _, err := os.Stat(filepath.Join("..", "..", "static", "assets", "dined-view-arrow-generated.png")); err != nil {
+		t.Fatalf("View Dines sign asset missing: %v", err)
+	}
+}
+
 func TestRenderVisitListShowsEverybodyPicker(t *testing.T) {
 	var out strings.Builder
 	err := Render(&out, "dines", PageData{Visits: []model.Visit{
