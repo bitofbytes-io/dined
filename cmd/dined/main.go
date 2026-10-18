@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -105,6 +106,13 @@ func run() error {
 		scheduler.Wait()
 	}()
 
+	// Bind the public port before the metrics listener, so a METRICS_ADDR that
+	// collides with PORT costs metrics rather than the app.
+	publicListener, err := net.Listen("tcp", httpServer.Addr)
+	if err != nil {
+		return err
+	}
+
 	// The metrics listener is internal-only and optional: it is never mounted on
 	// the public router, and a bind failure is logged without stopping dined.
 	metricsServer := metrics.Start(cfg.MetricsAddr, metrics.NewRegistry(dbCollectors...))
@@ -121,7 +129,7 @@ func run() error {
 	serveErr := make(chan error, 1)
 	go func() {
 		slog.Info("starting dined", "port", cfg.Port)
-		serveErr <- httpServer.ListenAndServe()
+		serveErr <- httpServer.Serve(publicListener)
 	}()
 
 	select {

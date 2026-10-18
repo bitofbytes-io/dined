@@ -88,11 +88,18 @@ func TestRouterCountsPhotoUploads(t *testing.T) {
 		t.Fatal("create visit with a PNG photo succeeded, want a validation error")
 	}
 
+	// A photo is a failed upload even when a different field rejects the form.
+	form.Set("photo_data_uri", "data:image/jpeg;base64,aGVsbG8=")
+	form.Set("visited_at", "not-a-date")
+	if rec := postVisitForm(t, router, token, "/visits", form); rec.Code == http.StatusSeeOther {
+		t.Fatal("create visit with an invalid date succeeded, want a validation error")
+	}
+
 	if got := metricstest.Value(t, "dined_uploads_total", success) - beforeSuccess; got != 2 {
 		t.Fatalf("successful uploads rose by %v, want 2", got)
 	}
-	if got := metricstest.Value(t, "dined_uploads_total", failure) - beforeFailure; got != 1 {
-		t.Fatalf("failed uploads rose by %v, want 1", got)
+	if got := metricstest.Value(t, "dined_uploads_total", failure) - beforeFailure; got != 2 {
+		t.Fatalf("failed uploads rose by %v, want 2", got)
 	}
 }
 

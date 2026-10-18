@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 )
 
 func scrape(t *testing.T, reg *prometheus.Registry) string {
@@ -55,6 +56,18 @@ func TestMiddlewareLabelsByRoutePattern(t *testing.T) {
 		})
 	})
 
+	// The counters are process-wide, so compare increases rather than totals.
+	want := map[[3]string]float64{
+		{"GET", "/red-test/{id}", "200"}:        2,
+		{"POST", "/red-test/{id}/notes", "418"}: 1,
+		{"GET", unmatchedRoute, "404"}:          1,
+		{"OTHER", unmatchedRoute, "405"}:        1,
+	}
+	before := map[[3]string]float64{}
+	for series := range want {
+		before[series] = testutil.ToFloat64(httpRequests.WithLabelValues(series[:]...))
+	}
+
 	for _, req := range []*http.Request{
 		httptest.NewRequest(http.MethodGet, "/red-test/41?user=alice", nil),
 		httptest.NewRequest(http.MethodGet, "/red-test/42", nil),
@@ -67,14 +80,16 @@ func TestMiddlewareLabelsByRoutePattern(t *testing.T) {
 		r.ServeHTTP(httptest.NewRecorder(), req)
 	}
 
+	for series, rise := range want {
+		if got := testutil.ToFloat64(httpRequests.WithLabelValues(series[:]...)) - before[series]; got != rise {
+			t.Errorf("http_requests_total%v rose by %v, want %v", series, got, rise)
+		}
+	}
 	body := scrape(t, NewRegistry())
 	assertContains(t, body,
-		`http_requests_total{code="200",method="GET",route="/red-test/{id}"} 2`,
-		`http_requests_total{code="418",method="POST",route="/red-test/{id}/notes"} 1`,
-		`http_requests_total{code="404",method="GET",route="unmatched"}`,
-		`http_request_duration_seconds_bucket{code="200",method="GET",route="/red-test/{id}",le="+Inf"} 2`,
-		`http_request_duration_seconds_count{code="200",method="GET",route="/red-test/{id}"} 2`,
-		`http_requests_total{code="405",method="OTHER",route="unmatched"} 1`,
+		`http_requests_total{code="200",method="GET",route="/red-test/{id}"} `,
+		`http_request_duration_seconds_bucket{code="200",method="GET",route="/red-test/{id}",le="+Inf"} `,
+		`http_request_duration_seconds_count{code="418",method="POST",route="/red-test/{id}/notes"} `,
 	)
 	for _, leaked := range []string{"/red-test/41", "/red-test/42", "user=alice", "/no-such-page", `route="/health"`, `route="/ready"`, `method="BREW"`} {
 		if strings.Contains(body, leaked) {
@@ -84,20 +99,34 @@ func TestMiddlewareLabelsByRoutePattern(t *testing.T) {
 }
 
 func TestRegistryExportsDomainAndRuntimeSeries(t *testing.T) {
-	LoginFailure()
-	OAuthFailure(ProviderGoogle)
-	Uploads(2, ResultSuccess)
-	Uploads(0, ResultFailure)
-	Job(JobSessionCleanup, ResultSuccess)
+	counters := []struct {
+		counter prometheus.Counter
+		record  func()
+		rise    float64
+	}{
+		{loginFailures, LoginFailure, 1},
+		{oauthFailures.WithLabelValues(ProviderGoogle), func() { OAuthFailure(ProviderGoogle) }, 1},
+		{uploads.WithLabelValues(ResultSuccess), func() { Uploads(2, ResultSuccess) }, 2},
+		{uploads.WithLabelValues(ResultFailure), func() { Uploads(0, ResultFailure) }, 0},
+		{jobs.WithLabelValues(JobSessionCleanup, ResultSuccess), func() { Job(JobSessionCleanup, ResultSuccess) }, 1},
+	}
+	for i, c := range counters {
+		before := testutil.ToFloat64(c.counter)
+		c.record()
+		if got := testutil.ToFloat64(c.counter) - before; got != c.rise {
+			t.Errorf("counter %d rose by %v, want %v", i, got, c.rise)
+		}
+	}
 
+	// Every known series is exported, including ones still at zero.
 	body := scrape(t, NewRegistry())
 	assertContains(t, body,
-		"dined_login_failures_total 1",
-		`dined_oauth_failures_total{provider="google"} 1`,
-		`dined_uploads_total{result="success"} 2`,
-		`dined_uploads_total{result="failure"} 0`,
-		`dined_jobs_total{job="session_cleanup",result="success"} 1`,
-		`dined_jobs_total{job="session_cleanup",result="failure"} 0`,
+		"dined_login_failures_total ",
+		`dined_oauth_failures_total{provider="google"} `,
+		`dined_uploads_total{result="success"} `,
+		`dined_uploads_total{result="failure"} `,
+		`dined_jobs_total{job="session_cleanup",result="success"} `,
+		`dined_jobs_total{job="session_cleanup",result="failure"} `,
 		"go_goroutines ",
 		"process_start_time_seconds ",
 	)
