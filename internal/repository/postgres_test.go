@@ -258,7 +258,7 @@ func TestPostgresVisitListsBatchRelatedQueries(t *testing.T) {
 
 	var visits []model.Visit
 	queries := counter.queriesDuring(t, func() (err error) {
-		visits, err = store.VisitsPage(ctx, 20, 0)
+		visits, err = store.VisitsPage(ctx, model.VisitFilter{}, 20, 0)
 		return err
 	})
 	// Base visit query plus one query each for ratings, tags, and photos.
@@ -345,7 +345,7 @@ func TestPostgresVisitsPageOffsets(t *testing.T) {
 		{limit: 0, offset: 3, want: ids[3:]},
 	}
 	for _, test := range tests {
-		visits, err := store.VisitsPage(ctx, test.limit, test.offset)
+		visits, err := store.VisitsPage(ctx, model.VisitFilter{}, test.limit, test.offset)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -781,7 +781,7 @@ func TestPostgresVisitPositionMatchesVisitsPageOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	visits, err := store.VisitsPage(ctx, 0, 0)
+	visits, err := store.VisitsPage(ctx, model.VisitFilter{}, 0, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -802,6 +802,14 @@ func TestPostgresAllowsBackToBackPicks(t *testing.T) {
 
 func TestPostgresEverybodyPicks(t *testing.T) {
 	assertEverybodyPicks(t, postgresStore(t))
+}
+
+func TestPostgresVisitFilters(t *testing.T) {
+	assertVisitFilters(t, postgresStore(t))
+}
+
+func TestPostgresNoVisitFilterOptionsWithoutVisits(t *testing.T) {
+	assertNoVisitFilterOptionsWithoutVisits(t, postgresStore(t))
 }
 
 func TestPostgresRejectsUnknownPicker(t *testing.T) {
