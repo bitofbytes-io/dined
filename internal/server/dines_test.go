@@ -126,7 +126,18 @@ func TestRouterDinesSinglePageHasNoPager(t *testing.T) {
 }
 
 func TestRouterDinesFiltersByQuery(t *testing.T) {
-	router, _ := newAuthenticatedTestRouter(t, repository.NewMemoryStore())
+	store := repository.NewMemoryStore()
+	router, _ := newAuthenticatedTestRouter(t, store)
+	hanksYear := ""
+	visits, err := store.Visits(context.Background(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, visit := range visits {
+		if visit.Restaurant.Name == "Hank's Downtown Diner" {
+			hanksYear = strconv.Itoa(visit.VisitedAt.In(apptime.EasternLocation()).Year())
+		}
+	}
 
 	rec := getPublic(router, "/dines?cuisine=mexican")
 	if rec.Code != http.StatusOK {
@@ -156,9 +167,14 @@ func TestRouterDinesFiltersByQuery(t *testing.T) {
 		t.Fatalf("summary should name both filters:\n%s", body)
 	}
 
-	rec = getPublic(router, "/dines?rater=Aiden&city=raleigh&year="+strconv.Itoa(time.Now().In(apptime.EasternLocation()).Year()))
-	if body := rec.Body.String(); strings.Count(body, `class="visit-card"`) != 1 || !strings.Contains(body, "Hank&#39;s Downtown Diner") || !strings.Contains(body, "Rated by Aiden · Raleigh · ") {
+	// A zero-padded year is the same year, and its choice shows selected.
+	rec = getPublic(router, "/dines?rater=Aiden&city=raleigh&year=0"+hanksYear)
+	body = rec.Body.String()
+	if strings.Count(body, `class="visit-card"`) != 1 || !strings.Contains(body, "Hank&#39;s Downtown Diner") || !strings.Contains(body, "Rated by Aiden · Raleigh · "+hanksYear+"<") {
 		t.Fatalf("rater, city and year filters should list only Hank's:\n%s", body)
+	}
+	if !strings.Contains(body, `<option value="`+hanksYear+`" selected>`) || strings.Contains(body, `value="0`+hanksYear+`"`) {
+		t.Fatalf("the year choice should be selected:\n%s", body)
 	}
 
 	// Empty values are Any, as the form submits them without JavaScript.
@@ -196,8 +212,43 @@ func TestRouterDinesFilterWithNoMatches(t *testing.T) {
 	if body := getPublic(router, "/dines?picker=Everybody").Body.String(); !strings.Contains(body, "Everybody&#39;s picks") || !strings.Contains(body, `<option value="everybody" selected>Everybody</option>`) {
 		t.Fatalf("Everybody filter should be named and selected:\n%s", body)
 	}
+	// A value that is not a choice stays selected so resubmitting the dialog keeps it.
+	if body := getPublic(router, "/dines?rater=Zed").Body.String(); !strings.Contains(body, `<option value="Zed" selected>Zed</option></select>`) {
+		t.Fatalf("an unknown rater should stay selected:\n%s", body)
+	}
 	if rec := getPublic(router, "/dines?picker=Everybody&page=2"); rec.Code != http.StatusNotFound {
 		t.Fatalf("page past a filtered end status = %d, want 404", rec.Code)
+	}
+}
+
+func TestRouterDinesFilterTellsTagsApartByCase(t *testing.T) {
+	ctx := context.Background()
+	store := repository.NewMemoryStore()
+	people, err := store.People(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Tag names are unique only case-sensitively, so a second "kid approved" can exist.
+	if _, err := store.CreateVisit(ctx, model.VisitInput{
+		RestaurantName: "Lowercase Tag Diner",
+		VisitedAt:      time.Now(),
+		PickerID:       &people[0].ID,
+		PriceLevel:     2,
+		Ratings:        map[uuid.UUID]float64{people[0].ID: 8},
+		NewTag:         "kid approved",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	router, _ := newAuthenticatedTestRouter(t, store)
+
+	for target, want := range map[string]string{"/dines?tag=kid+approved": "Lowercase Tag Diner", "/dines?tag=Kid+Approved": "Saffron Counter"} {
+		body := getPublic(router, target).Body.String()
+		if strings.Count(body, `class="visit-card"`) != 1 || !strings.Contains(body, want) {
+			t.Fatalf("%s should list only %s:\n%s", target, want, body)
+		}
+		if got := strings.Count(body, " selected>"); got != 1 {
+			t.Fatalf("%s selects %d tag choices, want 1:\n%s", target, got, body)
+		}
 	}
 }
 

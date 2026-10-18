@@ -130,21 +130,33 @@ func (c dinesFilterChoices) filter(values dinesFilterValues, year int) (model.Vi
 }
 
 func (c dinesFilterChoices) person(name string) (model.Person, bool) {
-	for _, person := range c.people {
-		if strings.EqualFold(person.Name, name) {
-			return person, true
-		}
+	if i := matchName(len(c.people), func(i int) string { return c.people[i].Name }, name); i >= 0 {
+		return c.people[i], true
 	}
 	return model.Person{}, false
 }
 
 func (c dinesFilterChoices) tag(name string) (model.Tag, bool) {
-	for _, tag := range c.tags {
-		if strings.EqualFold(tag.Name, name) {
-			return tag, true
-		}
+	if i := matchName(len(c.tags), func(i int) string { return c.tags[i].Name }, name); i >= 0 {
+		return c.tags[i], true
 	}
 	return model.Tag{}, false
+}
+
+// matchName returns the index of the name that equals value, or else of the
+// first that equals it ignoring case, or -1. Exact matches win because tag
+// names are unique only case-sensitively, so "Patio" and "patio" can both exist.
+func matchName(count int, name func(int) string, value string) int {
+	fallback := -1
+	for i := range count {
+		if name(i) == value {
+			return i
+		}
+		if fallback < 0 && strings.EqualFold(name(i), value) {
+			fallback = i
+		}
+	}
+	return fallback
 }
 
 // view builds the /dines count line, Filter dialog, and pager links.
@@ -179,13 +191,16 @@ func (c dinesFilterChoices) view(values dinesFilterValues, matched, total, page,
 		if value == "" {
 			continue
 		}
-		label := value
-		for j := range field.Options {
-			if strings.EqualFold(field.Options[j].Value, value) {
-				field.Options[j].Selected = true
-				label = field.Options[j].Label
-			}
+		options := field.Options
+		j := matchName(len(options), func(i int) string { return options[i].Value }, value)
+		if j < 0 {
+			// Keep a set value that is not a choice, such as a name from an old link,
+			// so the dialog shows it and resubmitting does not drop it.
+			field.Options = append(field.Options, ui.DinesFilterOption{Value: value, Label: value})
+			j = len(field.Options) - 1
 		}
+		field.Options[j].Selected = true
+		label := field.Options[j].Label
 		switch field.Name {
 		case pickerParam:
 			label += "'s picks"

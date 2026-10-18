@@ -50,6 +50,9 @@ func (h *Handler) Dines(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid year", http.StatusBadRequest)
 		return
 	}
+	if year != 0 {
+		params[yearParam] = strconv.Itoa(year) // "02026" is the 2026 choice.
+	}
 	choices, err := h.dinesFilterChoices(r)
 	if err != nil {
 		h.error(w, "dines filter choices", err)
