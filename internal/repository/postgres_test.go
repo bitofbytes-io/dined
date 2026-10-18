@@ -125,6 +125,19 @@ func createPostgresVisit(t *testing.T, store *Store) (uuid.UUID, uuid.UUID) {
 	return *id, restaurantID
 }
 
+func TestPostgresPing(t *testing.T) {
+	store := postgresStore(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := store.Ping(ctx); err != nil {
+		t.Fatalf("ping open pool: %v", err)
+	}
+	store.pool.Close()
+	if err := store.Ping(ctx); err == nil {
+		t.Fatal("expected ping on a closed pool to fail")
+	}
+}
+
 func TestPostgresVisitReadsReleaseBaseConnection(t *testing.T) {
 	store := postgresStore(t)
 	visitID, restaurantID := createPostgresVisit(t, store)

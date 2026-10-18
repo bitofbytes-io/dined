@@ -1,7 +1,11 @@
 package server
 
 import (
+	"context"
+	"encoding/json"
+	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/bitofbytes-io/dined/internal/auth"
 	"github.com/bitofbytes-io/dined/internal/config"
@@ -12,6 +16,9 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 )
+
+// readyTimeout bounds the database ping behind /ready.
+const readyTimeout = 2 * time.Second
 
 type Server struct {
 	cfg         *config.Config
@@ -46,6 +53,7 @@ func (s *Server) Router() http.Handler {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		_, _ = w.Write([]byte("ok"))
 	})
+	r.Get("/ready", s.ready)
 
 	h := handler.New(s.cfg, s.store, s.places, s.authService, s.googleAuth)
 	r.Get("/login", h.LoginPage)
@@ -82,6 +90,28 @@ func (s *Server) Router() http.Handler {
 	})
 
 	return r
+}
+
+// ready reports whether dined's dependencies are reachable, unlike /health,
+// which only reports that the process is up. The response never includes the
+// error, which can name the database host or user.
+func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), readyTimeout)
+	defer cancel()
+
+	status, db, code := "ok", "ok", http.StatusOK
+	if err := s.store.Ping(ctx); err != nil {
+		slog.Error("readiness check failed", "dependency", "db", "error", err)
+		status, db, code = "degraded", "error", http.StatusServiceUnavailable
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(struct {
+		Status string `json:"status"`
+		DB     string `json:"db"`
+	}{status, db})
 }
 
 func serveFile(path string) http.HandlerFunc {

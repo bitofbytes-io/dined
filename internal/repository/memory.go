@@ -91,6 +91,11 @@ func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{people: people, tags: tags, restaurants: restaurants, visits: visits}
 }
 
+// Ping always succeeds because the memory store has no database to reach.
+func (m *MemoryStore) Ping(context.Context) error {
+	return nil
+}
+
 func (m *MemoryStore) People(context.Context) ([]model.Person, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

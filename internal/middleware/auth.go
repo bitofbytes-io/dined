@@ -100,6 +100,7 @@ func isPublicReadRequest(r *http.Request) bool {
 		path == "/trophy-case/map.png" ||
 		path == "/want-to-try" ||
 		path == "/health" ||
+		path == "/ready" ||
 		path == "/site.webmanifest" ||
 		path == "/favicon.ico" ||
 		// Dine photos appear on the public home, dines, and restaurant pages.

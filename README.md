@@ -95,7 +95,10 @@ docker run --rm --name dined --network dined \
   dined:local
 ```
 
-Open <http://localhost:4600>. The health endpoint is <http://localhost:4600/health>.
+Open <http://localhost:4600>. Two unauthenticated probe endpoints report status:
+
+- <http://localhost:4600/health> returns `200 ok` whenever the process is up. It does not check dependencies.
+- <http://localhost:4600/ready> pings the database with a 2 s timeout. It returns `200 {"status":"ok","db":"ok"}`, or `503 {"status":"degraded","db":"error"}` when the database is unreachable. The error itself is logged, not returned. With `DATA_STORE=memory` it always reports ok.
 
 For an ephemeral preview without Postgres, set `DATA_STORE=memory` and omit the database URL and Places key. Google OAuth and an allowlist are still required.
 
