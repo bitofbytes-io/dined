@@ -19,6 +19,8 @@ type Store struct {
 }
 
 type DinerStore interface {
+	// Ping reports whether the backing database is reachable.
+	Ping(context.Context) error
 	People(context.Context) ([]model.Person, error)
 	Tags(context.Context) ([]model.Tag, error)
 	Restaurants(context.Context, string) ([]model.Restaurant, error)
@@ -49,6 +51,10 @@ type DinerStore interface {
 
 func New(pool *pgxpool.Pool) *Store {
 	return &Store{pool: pool}
+}
+
+func (s *Store) Ping(ctx context.Context) error {
+	return s.pool.Ping(ctx)
 }
 
 func (s *Store) People(ctx context.Context) ([]model.Person, error) {
