@@ -453,32 +453,13 @@ a:focus-visible, button:focus-visible {
 .search-row button {
   flex: 0 0 8rem;
 }
-.image-cta, .public-badge-link {
+.image-cta {
   display: grid;
   place-items: center;
   width: 13rem;
   text-decoration: none;
   transition: filter .16s ease, transform .16s ease;
-}
-.image-cta {
   animation: arrowFloat 3.4s ease-in-out infinite;
-}
-.public-badge-link {
-  min-height: 6.2rem;
-  padding: .8rem;
-  color: var(--night);
-  background: var(--butter);
-  border: 4px solid var(--night);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-hard);
-  transform: rotate(-4deg);
-}
-.public-badge-link span {
-  display: block;
-  font-family: var(--display);
-  font-size: 1.7rem;
-  line-height: .95;
-  text-align: center;
 }
 .image-cta img {
   display: block;
@@ -486,12 +467,8 @@ a:focus-visible, button:focus-visible {
   filter: drop-shadow(7px 9px 0 rgba(6, 21, 22, .38));
   transition: filter .16s ease;
 }
-.image-cta:hover, .image-cta:focus-visible,
-.public-badge-link:hover, .public-badge-link:focus-visible {
+.image-cta:hover, .image-cta:focus-visible {
   animation-play-state: paused;
-}
-.public-badge-link:hover, .public-badge-link:focus-visible {
-  transform: rotate(-4deg) translateY(-4px);
 }
 .image-cta:hover img, .image-cta:focus-visible img {
   filter: drop-shadow(0 0 14px rgba(255, 212, 99, .86)) drop-shadow(7px 11px 0 rgba(6, 21, 22, .42));
@@ -2126,7 +2103,7 @@ fieldset {
   .booth-search::after {
     display: none;
   }
-  .image-cta, .public-badge-link {
+  .image-cta {
     display: none;
   }
 }
@@ -2222,7 +2199,7 @@ fieldset {
     font-size: 2.08rem;
     text-shadow: 2px 2px 0 var(--red-dark);
   }
-  .image-cta, .public-badge-link {
+  .image-cta {
     display: none;
   }
   .booth-recent {
