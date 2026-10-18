@@ -1,6 +1,7 @@
 {{define "bottom"}}
 	  </div>
 	  {{if .Authenticated}}{{template "delete-confirm-modal" .}}{{end}}
+	  {{if and .Authenticated .WantToTrySheet}}{{template "want-to-try-sheet" .}}{{end}}
 	  {{template "photo-preview-modal" .}}
 	  {{if .TrophyMapReady}}{{template "trophy-map-modal" .}}{{end}}
 	  <script src="{{asset "/static/app.js"}}"></script>

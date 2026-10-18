@@ -1,0 +1,87 @@
+{{define "want-to-try"}}
+{{template "top" .}}
+<main class="page-band want-page">
+  <section class="wide-ticket want-panel">
+    <div class="want-head">
+      <h1>Want to Try</h1>
+      {{with len .WantToTryItems}}<p class="want-meta">{{.}} {{if eq . 1}}place{{else}}places{{end}} we want to try</p>{{end}}
+    </div>
+    {{if .WantToTryItems}}
+    <ul class="want-card">
+      {{range .WantToTryItems}}<li class="want-row" data-want-to-try-row data-want-to-try-name="{{.Restaurant.Name}}">
+        <div class="want-main">
+          <strong><a href="/restaurants/{{.Restaurant.ID}}">{{.Restaurant.Name}}</a></strong>
+          {{with wantToTryPlaceLine .Restaurant}}<span class="want-meta">{{.}}</span>{{end}}
+          {{if .Note}}<p class="want-note">{{.Note}}</p>{{end}}
+          <span class="want-meta">{{wantToTryIdea .SuggestedBy}} · {{wantToTryAge .CreatedAt}}</span>
+        </div>
+        {{if $.Authenticated}}<div class="want-actions"><a class="want-log" href="/log?want_to_try={{.ID}}">Log it</a><form method="post" action="/want-to-try/{{.ID}}/delete" hx-boost="false" data-delete-title="Remove from Want to Try?" data-delete-message="{{.Restaurant.Name}} comes off the list. Nothing else changes." data-delete-confirm="Remove" onsubmit="return dinedConfirmDelete(event, this)"><button class="want-remove" type="submit" aria-label="Remove {{.Restaurant.Name}} from Want to Try">Remove</button></form></div>{{end}}
+      </li>{{end}}
+    </ul>
+    <p class="want-pick" data-want-to-try-pick-area hidden><span class="want-pick-result" data-want-to-try-pick-result aria-live="polite"></span><button type="button" class="want-link" data-want-to-try-pick>Can't decide? Pick one for us</button></p>
+    {{else}}
+    <div class="want-card want-empty">
+      {{if .Authenticated}}<p>Save a place from Nearby or Search with <b>+ Want to Try</b> and it shows up here.</p>
+      <a class="secondary-button" href="/nearby">Find a place</a>{{else}}<p>Nothing on the list yet.</p>{{end}}
+    </div>
+    {{end}}
+  </section>
+</main>
+{{template "bottom" .}}
+{{end}}
+
+{{define "want-to-try-new"}}
+{{template "top" .}}
+<main class="page-band want-page">
+  <form class="wide-ticket want-panel want-add" method="post" action="/want-to-try" hx-boost="false">
+    <div>
+      <p class="eyebrow">Want to Try</p>
+      <h1>{{.PrefillName}}</h1>
+      {{with .PrefillAddress}}<p class="want-meta">{{.}}</p>{{end}}
+    </div>
+    <input type="hidden" name="return_to" value="{{.WantToTryCancelURL}}">
+    {{template "want-to-try-place-fields" .WantToTryForm}}
+    {{template "want-to-try-fields" .}}
+    <div class="want-form-actions"><a class="want-cancel" href="{{.WantToTryCancelURL}}">Cancel</a><button class="primary-button">Save</button></div>
+  </form>
+</main>
+{{template "bottom" .}}
+{{end}}
+
+{{define "want-to-try-sheet"}}
+  <dialog class="want-sheet" id="want-to-try-sheet" aria-labelledby="want-to-try-sheet-name">
+    <form class="want-sheet-card" method="post" action="/want-to-try" hx-boost="false" data-want-to-try-sheet-form>
+      <div>
+        <p class="eyebrow">Want to Try</p>
+        <h2 id="want-to-try-sheet-name" data-want-to-try-sheet-name></h2>
+        <p class="want-meta" data-want-to-try-sheet-address></p>
+      </div>
+      {{template "want-to-try-place-fields" .WantToTryForm}}
+      {{template "want-to-try-fields" .}}
+      <p class="want-error" role="alert" data-want-to-try-sheet-error hidden></p>
+      <div class="want-form-actions"><button type="button" class="want-cancel" data-want-to-try-cancel>Cancel</button><button class="primary-button" data-want-to-try-save>Save</button></div>
+    </form>
+  </dialog>
+{{end}}
+
+{{define "want-to-try-link"}}{{if .On}}<span class="want-on">✓ On Want to Try</span>{{else}}<a class="want-link" href="{{.URL}}" hx-boost="false" data-want-to-try-open data-want-to-try-name="{{.Name}}" data-want-to-try-address="{{.Address}}" aria-label="Add {{.Name}} to Want to Try">+ Want to Try</a>{{end}}{{end}}
+
+{{define "want-to-try-fields"}}
+      <label class="want-field">Whose idea?<select name="suggested_by"><option value="everybody">Everybody</option>{{range .People}}<option value="{{.ID}}" {{if eq $.PrefillPickerID .ID.String}}selected{{end}}>{{.Name}}</option>{{end}}</select></label>
+      <label class="want-field"><span>Note <span class="want-optional">(optional)</span></span><input name="note" maxlength="{{wantToTryNoteMax}}" placeholder="Why it's worth a try" autocomplete="off" value="{{.PrefillNotes}}"></label>
+{{end}}
+
+{{define "want-to-try-place-fields"}}
+      <input type="hidden" name="restaurant_id" value="{{.Get "restaurant_id"}}" data-want-to-try-field>
+      <input type="hidden" name="restaurant_name" value="{{.Get "restaurant_name"}}" data-want-to-try-field>
+      <input type="hidden" name="address" value="{{.Get "address"}}" data-want-to-try-field>
+      <input type="hidden" name="city" value="{{.Get "city"}}" data-want-to-try-field>
+      <input type="hidden" name="google_place_id" value="{{.Get "google_place_id"}}" data-want-to-try-field>
+      <input type="hidden" name="latitude" value="{{.Get "latitude"}}" data-want-to-try-field>
+      <input type="hidden" name="longitude" value="{{.Get "longitude"}}" data-want-to-try-field>
+      <input type="hidden" name="phone" value="{{.Get "phone"}}" data-want-to-try-field>
+      <input type="hidden" name="website" value="{{.Get "website"}}" data-want-to-try-field>
+      <input type="hidden" name="google_rating" value="{{.Get "google_rating"}}" data-want-to-try-field>
+      <input type="hidden" name="google_price_level" value="{{.Get "google_price_level"}}" data-want-to-try-field>
+      <input type="hidden" name="category" value="{{.Get "category"}}" data-want-to-try-field>
+{{end}}

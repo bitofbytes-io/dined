@@ -41,7 +41,11 @@ func (h *Handler) Search(w http.ResponseWriter, r *http.Request) {
 			slog.Warn("places search failed", "error", err)
 		}
 	}
-	h.render(w, "search", r, ui.PageData{Title: "Search", Query: q, SearchResults: results, Places: found})
+	data := ui.PageData{Title: "Search", Query: q, SearchResults: results, Places: found}
+	if len(found) > 0 {
+		h.addWantToTrySheet(r, &data)
+	}
+	h.render(w, "search", r, data)
 }
 
 func (h *Handler) Nearby(w http.ResponseWriter, r *http.Request) {
@@ -99,6 +103,9 @@ func (h *Handler) Nearby(w http.ResponseWriter, r *http.Request) {
 		data.HasLocation = true
 		data.OriginLatitude = lat
 		data.OriginLongitude = lng
+	}
+	if len(found) > 0 {
+		h.addWantToTrySheet(r, &data)
 	}
 	h.render(w, "nearby", r, data)
 }
