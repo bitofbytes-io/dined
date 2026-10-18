@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -14,12 +15,14 @@ import (
 
 	"github.com/bitofbytes-io/dined/internal/auth"
 	"github.com/bitofbytes-io/dined/internal/config"
+	"github.com/bitofbytes-io/dined/internal/metrics"
 	"github.com/bitofbytes-io/dined/internal/migrate"
 	"github.com/bitofbytes-io/dined/internal/places"
 	"github.com/bitofbytes-io/dined/internal/repository"
 	"github.com/bitofbytes-io/dined/internal/server"
 	"github.com/bitofbytes-io/dined/internal/ui"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 const (
@@ -50,11 +53,16 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	store, authRepo, closeStores, err := openStores(ctx, cfg)
+	store, authRepo, pool, closeStores, err := openStores(ctx, cfg)
 	if err != nil {
 		return err
 	}
 	defer closeStores()
+
+	var dbCollectors []prometheus.Collector
+	if pool != nil {
+		dbCollectors = append(dbCollectors, metrics.NewPoolCollector(pool))
+	}
 
 	allowlist := auth.NewAllowlist(cfg.GoogleAllowedEmails, cfg.GoogleAllowedDomains)
 	authService := auth.NewService(authRepo, cfg.AuthSessionTTL, allowlist.Allowed)
@@ -98,10 +106,30 @@ func run() error {
 		scheduler.Wait()
 	}()
 
+	// Bind the public port before the metrics listener, so a METRICS_ADDR that
+	// collides with PORT costs metrics rather than the app.
+	publicListener, err := net.Listen("tcp", httpServer.Addr)
+	if err != nil {
+		return err
+	}
+
+	// The metrics listener is internal-only and optional: it is never mounted on
+	// the public router, and a bind failure is logged without stopping dined.
+	metricsServer := metrics.Start(cfg.MetricsAddr, metrics.NewRegistry(dbCollectors...))
+	// Runs before the scheduler stops and the store closes, after the public
+	// server has shut down.
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+		defer cancel()
+		if err := metricsServer.Shutdown(shutdownCtx); err != nil {
+			slog.Warn("metrics listener shutdown", "error", err)
+		}
+	}()
+
 	serveErr := make(chan error, 1)
 	go func() {
 		slog.Info("starting dined", "port", cfg.Port)
-		serveErr <- httpServer.ListenAndServe()
+		serveErr <- httpServer.Serve(publicListener)
 	}()
 
 	select {
@@ -132,10 +160,12 @@ func slogLevel(level string) slog.Level {
 	}
 }
 
-func openStores(ctx context.Context, cfg *config.Config) (repository.DinerStore, auth.Repository, func(), error) {
+// openStores also returns the Postgres pool for metrics; it is nil for the
+// memory store.
+func openStores(ctx context.Context, cfg *config.Config) (repository.DinerStore, auth.Repository, *pgxpool.Pool, func(), error) {
 	if cfg.DataStore == config.DataStoreMemory {
 		slog.Info("using in-memory data store")
-		return repository.NewMemoryStore(), auth.NewMemoryRepository(), func() {}, nil
+		return repository.NewMemoryStore(), auth.NewMemoryRepository(), nil, func() {}, nil
 	}
 
 	connectCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -143,20 +173,20 @@ func openStores(ctx context.Context, cfg *config.Config) (repository.DinerStore,
 
 	pool, err := pgxpool.New(connectCtx, cfg.DatabaseURL)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("connect database: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("connect database: %w", err)
 	}
 
 	if err := pool.Ping(connectCtx); err != nil {
 		pool.Close()
-		return nil, nil, nil, fmt.Errorf("ping database: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("ping database: %w", err)
 	}
 
 	// Apply pending migrations before serving. A failure exits the process, so
 	// a deploy whose migration fails never becomes healthy and stops rolling out.
 	if err := migrate.Apply(ctx, pool); err != nil {
 		pool.Close()
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
-	return repository.New(pool), auth.NewPostgresRepository(pool), pool.Close, nil
+	return repository.New(pool), auth.NewPostgresRepository(pool), pool, pool.Close, nil
 }

@@ -11,6 +11,7 @@ import (
 
 type Config struct {
 	Port                 string
+	MetricsAddr          string
 	DataStore            string
 	DatabaseURL          string
 	GooglePlacesAPIKey   string
@@ -42,6 +43,10 @@ func Load() (*Config, error) {
 	var err error
 
 	if cfg.Port, err = getEnv("PORT", "4600"); err != nil {
+		return nil, err
+	}
+	// METRICS_ADDR=off disables the internal Prometheus listener.
+	if cfg.MetricsAddr, err = getEnv("METRICS_ADDR", ":9464"); err != nil {
 		return nil, err
 	}
 	if cfg.DataStore, err = getEnv("DATA_STORE", DataStorePostgres); err != nil {

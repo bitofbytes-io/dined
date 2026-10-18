@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bitofbytes-io/dined/internal/metrics"
 	"github.com/google/uuid"
 )
 
@@ -151,10 +152,14 @@ func (s *Service) ScheduleSessionCleanup(ctx context.Context, interval time.Dura
 	for {
 		if deleted, err := s.CleanupExpiredSessions(ctx); err != nil {
 			if ctx.Err() == nil {
+				metrics.Job(metrics.JobSessionCleanup, metrics.ResultFailure)
 				slog.Error("expired session cleanup failed", "error", err)
 			}
-		} else if deleted > 0 {
-			slog.Info("expired sessions deleted", "count", deleted)
+		} else {
+			metrics.Job(metrics.JobSessionCleanup, metrics.ResultSuccess)
+			if deleted > 0 {
+				slog.Info("expired sessions deleted", "count", deleted)
+			}
 		}
 		select {
 		case <-ctx.Done():

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/bitofbytes-io/dined/internal/apptime"
+	"github.com/bitofbytes-io/dined/internal/metrics"
 	"github.com/bitofbytes-io/dined/internal/model"
 	"github.com/bitofbytes-io/dined/internal/placesync"
 	"github.com/bitofbytes-io/dined/internal/ui"
@@ -130,6 +131,8 @@ func (h *Handler) CreateVisit(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid form", http.StatusBadRequest)
 		return
 	}
+	uploadResult := metrics.ResultFailure
+	defer countPhotoUploads(r, &uploadResult)
 	input, err := h.visitInput(r)
 	if errors.Is(err, errInvalidPicker) {
 		http.Error(w, invalidPickerMessage, http.StatusBadRequest)
@@ -165,6 +168,7 @@ func (h *Handler) CreateVisit(w http.ResponseWriter, r *http.Request) {
 		h.renderLogError(w, r, saveVisitFailedMessage)
 		return
 	}
+	uploadResult = metrics.ResultSuccess
 	slog.Info("visit created", "visit_id", visitID, "picker_id", pickerLogValue(input.PickerID), "rating_count", len(input.Ratings), "tag_count", len(input.TagIDs), "photo_count", len(input.Photos))
 	http.Redirect(w, r, h.createdVisitURL(r, *visitID), http.StatusSeeOther)
 }
@@ -197,6 +201,8 @@ func (h *Handler) UpdateVisit(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid form", http.StatusBadRequest)
 		return
 	}
+	uploadResult := metrics.ResultFailure
+	defer countPhotoUploads(r, &uploadResult)
 	input, err := h.visitInput(r)
 	if errors.Is(err, errInvalidPicker) {
 		http.Error(w, invalidPickerMessage, http.StatusBadRequest)
@@ -224,6 +230,7 @@ func (h *Handler) UpdateVisit(w http.ResponseWriter, r *http.Request) {
 		h.renderVisitEditError(w, r, id, saveVisitFailedMessage)
 		return
 	}
+	uploadResult = metrics.ResultSuccess
 	slog.Info("visit updated", "visit_id", id, "picker_id", pickerLogValue(input.PickerID), "rating_count", len(input.Ratings), "tag_count", len(input.TagIDs), "photo_count", len(input.Photos))
 	http.Redirect(w, r, h.dinesVisitURL(r, id), http.StatusSeeOther)
 }
@@ -369,6 +376,19 @@ func (h *Handler) visitInput(r *http.Request) (model.VisitInput, error) {
 		input.Photos = append(input.Photos, model.VisitPhotoInput{DataURI: value})
 	}
 	return input, nil
+}
+
+// countPhotoUploads records the new photos in a parsed dine form as uploads
+// with *result once the handler returns, so photos are counted even when
+// another field is rejected.
+func countPhotoUploads(r *http.Request, result *string) {
+	count := 0
+	for _, value := range r.PostForm["photo_data_uri"] {
+		if strings.TrimSpace(value) != "" {
+			count++
+		}
+	}
+	metrics.Uploads(count, *result)
 }
 
 // placeConflictMessage tells the user why a dine at a chosen restaurant was
