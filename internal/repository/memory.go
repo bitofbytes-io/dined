@@ -508,6 +508,10 @@ func (m *MemoryStore) UpdateVisit(_ context.Context, id uuid.UUID, input model.V
 		return err
 	}
 
+	// Like Postgres, only a dine moved to another restaurant clears that one's item.
+	if m.visits[visitIndex].Restaurant.ID != restaurant.ID {
+		m.markWantToTryDone(restaurant.ID)
+	}
 	m.visits[visitIndex].Restaurant = restaurant
 	m.visits[visitIndex].VisitedAt = input.VisitedAt
 	m.visits[visitIndex].Picker = picker

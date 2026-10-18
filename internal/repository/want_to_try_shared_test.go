@@ -31,6 +31,14 @@ func TestPostgresWantToTryClearsWhenDineLogged(t *testing.T) {
 	assertWantToTryClearsWhenDineLogged(t, postgresStore(t))
 }
 
+func TestMemoryStoreWantToTryClearsWhenDineMovedThere(t *testing.T) {
+	assertWantToTryClearsWhenDineMovedThere(t, emptyMemoryStore())
+}
+
+func TestPostgresWantToTryClearsWhenDineMovedThere(t *testing.T) {
+	assertWantToTryClearsWhenDineMovedThere(t, postgresStore(t))
+}
+
 func TestMemoryStoreWantToTryRejectsBadInput(t *testing.T) {
 	assertWantToTryRejectsBadInput(t, emptyMemoryStore())
 }
@@ -200,6 +208,47 @@ func assertWantToTryClearsWhenDineLogged(t *testing.T, store DinerStore) {
 	}
 	if item, err := store.WantToTryItem(ctx, keepID); err != nil || item.DoneAt != nil {
 		t.Fatalf("unrelated item = %#v, err = %v; want it still open", item, err)
+	}
+}
+
+func assertWantToTryClearsWhenDineMovedThere(t *testing.T, store DinerStore) {
+	t.Helper()
+	ctx := context.Background()
+	daniel, _, _, _ := storePeople(t, store)
+	ratings := map[uuid.UUID]float64{daniel.ID: 8}
+	visitID := createPickTestVisit(t, store, "Old Haunt", "", 1, &daniel, ratings)
+	visit, err := store.Visit(ctx, visitID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The dine's own restaurant goes back on the list ("want to go back").
+	backID := saveWantToTry(t, store, model.WantToTryInput{RestaurantID: &visit.Restaurant.ID})
+	newID := saveWantToTry(t, store, model.WantToTryInput{RestaurantName: "New Spot", Address: "2 New St"})
+	newItem, err := store.WantToTryItem(ctx, newID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	edit := model.VisitInput{RestaurantID: &visit.Restaurant.ID, VisitedAt: visit.VisitedAt, PickerID: &daniel.ID, PriceLevel: 2, Ratings: ratings, Notes: "Edited"}
+	if err := store.UpdateVisit(ctx, visitID, edit); err != nil {
+		t.Fatal(err)
+	}
+	if got := wantToTryNames(t, store); strings.Join(got, ",") != "New Spot,Old Haunt" {
+		t.Fatalf("editing a dine in place changed the list to %v", got)
+	}
+
+	edit.RestaurantID = &newItem.Restaurant.ID
+	if err := store.UpdateVisit(ctx, visitID, edit); err != nil {
+		t.Fatal(err)
+	}
+	if got := wantToTryNames(t, store); strings.Join(got, ",") != "Old Haunt" {
+		t.Fatalf("list after moving the dine = %v, want New Spot cleared", got)
+	}
+	if item, err := store.WantToTryItem(ctx, newID); err != nil || item.DoneAt == nil {
+		t.Fatalf("moved-to item = %#v, err = %v; want it done", item, err)
+	}
+	if item, err := store.WantToTryItem(ctx, backID); err != nil || item.DoneAt != nil {
+		t.Fatalf("moved-from item = %#v, err = %v; want it still open", item, err)
 	}
 }
 

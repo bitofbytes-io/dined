@@ -671,6 +671,14 @@ func (s *Store) UpdateVisit(ctx context.Context, id uuid.UUID, input model.Visit
 	if err := checkPicker(ctx, tx, input.PickerID); err != nil {
 		return err
 	}
+	var previousRestaurantID uuid.UUID
+	err = tx.QueryRow(ctx, `SELECT restaurant_id FROM dining_visits WHERE id = $1 FOR UPDATE`, id).Scan(&previousRestaurantID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return pgx.ErrNoRows
+	}
+	if err != nil {
+		return fmt.Errorf("find visit restaurant: %w", err)
+	}
 	notes := nullableString(input.Notes)
 	result, err := tx.Exec(ctx, `
 		UPDATE dining_visits
@@ -693,6 +701,15 @@ func (s *Store) UpdateVisit(ctx context.Context, id uuid.UUID, input model.Visit
 
 	if err := reconcileVisitPhotos(ctx, tx, id, input); err != nil {
 		return fmt.Errorf("update visit photos: %w", err)
+	}
+
+	// A dine moved to another restaurant is now logged there. Editing a dine
+	// in place leaves the list alone, so an older dine cannot clear a place
+	// put back on it since.
+	if previousRestaurantID != *input.RestaurantID {
+		if err := markWantToTryDone(ctx, tx, *input.RestaurantID); err != nil {
+			return err
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
