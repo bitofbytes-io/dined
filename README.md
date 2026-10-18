@@ -55,6 +55,7 @@ Do not commit this file. `AUTH_GOOGLE_ALLOWED_DOMAINS` can replace or supplement
 | `AUTH_SESSION_TTL` | No | Go duration for sessions; defaults to `2160h` |
 | `SECURE_COOKIES` | No | Set `false` for local HTTP; defaults to `true` |
 | `PORT` | No | HTTP port; defaults to `4600` |
+| `METRICS_ADDR` | No | Address of the internal Prometheus listener; defaults to `:9464`, and `off` disables it. See [Metrics](#metrics) |
 | `LOG_LEVEL` | No | Application log level; defaults to `info` |
 | `TRUSTED_PROXY_CIDRS` | No | Comma-separated CIDRs of reverse proxies whose `X-Real-IP` / `X-Forwarded-For` headers are trusted for the client IP; defaults to loopback and `10.0.0.0/8` (Docker Swarm's default overlay pool, which holds Traefik's `proxy` network); set it to the proxy's network to narrow it further |
 
@@ -101,6 +102,24 @@ Open <http://localhost:4600>. Two unauthenticated probe endpoints report status:
 - <http://localhost:4600/ready> pings the database with a 2 s timeout. It returns `200 {"status":"ok","db":"ok"}`, or `503 {"status":"degraded","db":"error"}` when the database is unreachable. The error itself is logged, not returned. With `DATA_STORE=memory` it always reports ok.
 
 For an ephemeral preview without Postgres, set `DATA_STORE=memory` and omit the database URL and Places key. Google OAuth and an allowlist are still required.
+
+## Metrics
+
+Dined serves Prometheus metrics at `GET /metrics` on a separate internal listener, `METRICS_ADDR` (default `:9464`). The public router on `PORT` never serves `/metrics`, so a public Traefik route cannot expose it. Scrape the listener over the internal overlay network, and do not publish the port. Set `METRICS_ADDR=off` to disable the listener. If the address cannot be bound, Dined logs the error and keeps serving. The listener shuts down gracefully with the app.
+
+| Metric | Labels | Meaning |
+| --- | --- | --- |
+| `http_requests_total`, `http_request_duration_seconds` | `method`, `route`, `code` | Requests on the public router. `route` is the chi route pattern, such as `/restaurants/{id}`, or `unmatched`; raw paths and query strings are never labels. `/health`, `/ready`, and `/metrics` are not recorded |
+| `pgxpool_*` | none | Postgres pool stats: acquired, idle, constructing, total, and max connections, plus acquire counts and wait time. Only with `DATA_STORE=postgres` |
+| `dined_oauth_failures_total` | `provider` | Google OAuth callbacks that failed before a session was created, such as a bad state, a provider error, or a failed code exchange |
+| `dined_login_failures_total` | none | Sign-ins refused for a Google account that is unverified or not on the allowlist |
+| `dined_uploads_total` | `result` | Dine photos submitted with a create or edit, by `success` (stored) or `failure` (the save was rejected) |
+| `dined_jobs_total` | `job`, `result` | Background job runs, currently `session_cleanup` |
+| `go_*`, `process_*` | none | Go runtime and process collectors |
+
+```bash
+curl -s localhost:9464/metrics | grep '^dined_'
+```
 
 ## Development
 
