@@ -6,7 +6,7 @@
   "packageRules": [
     {
       "description": "One weekly PR for every non-major update. Majors keep their own PRs.",
-      "matchUpdateTypes": ["minor", "patch", "digest", "pin"],
+      "matchUpdateTypes": ["minor", "patch", "digest", "pin", "pinDigest"],
       "groupName": "all non-major dependencies"
     },
     {
