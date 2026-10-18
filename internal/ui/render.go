@@ -23,7 +23,7 @@ import (
 var templates embed.FS
 
 // pageTemplates is parsed once; html/template is safe for concurrent use.
-var pageTemplates = template.Must(template.New("dined").Funcs(funcs()).ParseFS(templates, "templates/*.html"))
+var pageTemplates = template.Must(template.New("dined").Funcs(funcs()).Funcs(wantToTryFuncs()).ParseFS(templates, "templates/*.html"))
 
 // assetVersions maps each /static/ URL to its cache-busted form. It is set
 // once at startup by LoadAssetVersions.
@@ -79,6 +79,20 @@ type PageData struct {
 	PrefillPhotoDataURIs    []string
 	PrefillFromPost         bool
 	ReturnVisitID           string
+	// RequestURI is the page's own path and query.
+	RequestURI string
+	// Want to Try: the open items, how many there are, the item a log form
+	// was opened for, and the restaurant IDs and Google place IDs on the list.
+	WantToTryItems []model.WantToTryItem
+	WantToTryCount int
+	WantToTryItem  *model.WantToTryItem
+	WantToTryKeys  map[string]bool
+	// WantToTrySheet adds the save sheet, which lists People, to the page.
+	WantToTrySheet bool
+	// WantToTryForm is the restaurant a save form page names, as form values,
+	// and WantToTryCancelURL is where its Cancel link goes.
+	WantToTryForm      url.Values
+	WantToTryCancelURL string
 }
 
 type RestaurantResult struct {

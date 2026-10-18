@@ -41,6 +41,10 @@ type DinerStore interface {
 	UpdateRestaurant(context.Context, uuid.UUID, model.RestaurantInput) error
 	ToggleChain(context.Context, uuid.UUID, bool) error
 	Stats(context.Context) (model.Stats, error)
+	WantToTry(context.Context) ([]model.WantToTryItem, error)
+	WantToTryItem(context.Context, uuid.UUID) (*model.WantToTryItem, error)
+	SaveWantToTry(context.Context, model.WantToTryInput) (*uuid.UUID, error)
+	DeleteWantToTry(context.Context, uuid.UUID) error
 }
 
 func New(pool *pgxpool.Pool) *Store {
@@ -389,6 +393,10 @@ func (s *Store) CreateVisit(ctx context.Context, input model.VisitInput) (*uuid.
 		return nil, fmt.Errorf("create visit photos: %w", err)
 	}
 
+	if err := markWantToTryDone(ctx, tx, restaurantID); err != nil {
+		return nil, err
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit create visit: %w", err)
 	}
@@ -663,6 +671,14 @@ func (s *Store) UpdateVisit(ctx context.Context, id uuid.UUID, input model.Visit
 	if err := checkPicker(ctx, tx, input.PickerID); err != nil {
 		return err
 	}
+	var previousRestaurantID uuid.UUID
+	err = tx.QueryRow(ctx, `SELECT restaurant_id FROM dining_visits WHERE id = $1 FOR UPDATE`, id).Scan(&previousRestaurantID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return pgx.ErrNoRows
+	}
+	if err != nil {
+		return fmt.Errorf("find visit restaurant: %w", err)
+	}
 	notes := nullableString(input.Notes)
 	result, err := tx.Exec(ctx, `
 		UPDATE dining_visits
@@ -685,6 +701,15 @@ func (s *Store) UpdateVisit(ctx context.Context, id uuid.UUID, input model.Visit
 
 	if err := reconcileVisitPhotos(ctx, tx, id, input); err != nil {
 		return fmt.Errorf("update visit photos: %w", err)
+	}
+
+	// A dine moved to another restaurant is now logged there. Editing a dine
+	// in place leaves the list alone, so an older dine cannot clear a place
+	// put back on it since.
+	if previousRestaurantID != *input.RestaurantID {
+		if err := markWantToTryDone(ctx, tx, *input.RestaurantID); err != nil {
+			return err
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {

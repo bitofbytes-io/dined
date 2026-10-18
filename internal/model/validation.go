@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 const (
@@ -94,6 +95,33 @@ func (in RestaurantInput) Validate() error {
 		return errors.New("restaurant name is required")
 	}
 	return validateGoogleRatingAndPriceLevel(in.GoogleRating, in.GooglePriceLevel)
+}
+
+// MaxWantToTryNoteLength caps a Want to Try note, in characters.
+const MaxWantToTryNoteLength = 500
+
+func (in WantToTryInput) Validate() error {
+	if in.RestaurantID == nil && strings.TrimSpace(in.RestaurantName) == "" {
+		return errors.New("restaurant is required")
+	}
+	if utf8.RuneCountInString(strings.TrimSpace(in.Note)) > MaxWantToTryNoteLength {
+		return fmt.Errorf("note must be %d characters or fewer", MaxWantToTryNoteLength)
+	}
+	return validateGoogleRatingAndPriceLevel(in.GoogleMetadata.GoogleRating, in.GoogleMetadata.GooglePriceLevel)
+}
+
+// VisitInput returns the restaurant fields of a Want to Try input as a visit
+// input, so saving finds or creates the restaurant the same way a dine does.
+func (in WantToTryInput) VisitInput() VisitInput {
+	return VisitInput{
+		RestaurantID:   in.RestaurantID,
+		RestaurantName: in.RestaurantName,
+		Address:        in.Address,
+		City:           in.City,
+		GooglePlaceID:  in.GooglePlaceID,
+		GoogleMetadata: in.GoogleMetadata,
+		Category:       in.Category,
+	}
 }
 
 func validateGoogleRatingAndPriceLevel(rating *float64, priceLevel *int) error {

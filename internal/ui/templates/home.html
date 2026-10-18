@@ -13,6 +13,7 @@
         {{else}}
         <p>Log in to search Google Places or add new dines.</p>
         {{end}}
+        {{with .WantToTryCount}}<a class="want-teaser" href="/want-to-try">{{.}} {{if eq . 1}}place{{else}}places{{end}} on our Want to Try list →</a>{{end}}
       </div>
 
       {{if .Authenticated}}<a class="image-cta" href="/log"><img src="/static/assets/dined-log-arrow-generated.png" alt="Log a Dine"></a>{{else}}<a class="public-badge-link" href="/dines"><span>View Dines</span></a>{{end}}

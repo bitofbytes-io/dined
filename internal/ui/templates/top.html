@@ -35,6 +35,7 @@
 	      <nav class="nav" id="primary-nav" aria-label="Primary">
 	        <a href="/dines">Dines</a>
 	        {{if .Authenticated}}<a href="/nearby">Nearby</a><a href="/search">Search</a><a href="/log">Log</a>{{end}}
+	        <a href="/want-to-try">Want to Try</a>
 	        <a href="/trophy-case">Trophy Case</a>
 	        {{if .Authenticated}}<form method="post" action="/logout"><button class="link-button">LOGOUT</button></form>{{else}}<a href="/login">Login</a>{{end}}
       </nav>

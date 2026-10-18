@@ -653,3 +653,157 @@ if (!window.dinedListenersBound) {
   document.addEventListener("htmx:load", dinedInitializePage);
 }
 dinedInitializePage();
+
+// Want to Try: the save sheet behind "+ Want to Try" links and the list
+// page's "Pick one for us". Each link's href is the save form page, which
+// browsers without the sheet open instead; its query names the place.
+var dinedWantToTrySource = null;
+// dinedWantToTryOpening counts sheet openings, so a save answers only the
+// opening it was sent from and cannot close or flag a later one.
+var dinedWantToTryOpening = 0;
+
+function dinedWantToTrySheet() {
+  return document.getElementById("want-to-try-sheet");
+}
+
+function dinedSetWantToTryError(form, message) {
+  var error = form.querySelector("[data-want-to-try-sheet-error]");
+  if (!error) return;
+  error.textContent = message || "";
+  error.hidden = !message;
+}
+
+function dinedOpenWantToTrySheet(link) {
+  var sheet = dinedWantToTrySheet();
+  var form = sheet ? sheet.querySelector("[data-want-to-try-sheet-form]") : null;
+  if (!form || typeof sheet.showModal !== "function") return false;
+  form.reset();
+  var params = new URL(link.href, window.location.href).searchParams;
+  var fields = form.querySelectorAll("[data-want-to-try-field]");
+  for (var i = 0; i < fields.length; i += 1) {
+    fields[i].value = params.get(fields[i].name) || "";
+  }
+  var name = sheet.querySelector("[data-want-to-try-sheet-name]");
+  var address = sheet.querySelector("[data-want-to-try-sheet-address]");
+  if (name) name.textContent = link.dataset.wantToTryName || "";
+  if (address) {
+    address.textContent = link.dataset.wantToTryAddress || "";
+    address.hidden = !address.textContent;
+  }
+  dinedSetWantToTryError(form, "");
+  var save = form.querySelector("[data-want-to-try-save]");
+  if (save) save.disabled = false;
+  dinedWantToTrySource = link;
+  dinedWantToTryOpening += 1;
+  if (!sheet.open) sheet.showModal();
+  return true;
+}
+
+function dinedCloseWantToTrySheet() {
+  var sheet = dinedWantToTrySheet();
+  if (sheet && sheet.open) sheet.close();
+  dinedWantToTrySource = null;
+}
+
+function dinedMarkWantToTrySaved(link) {
+  if (!link || !link.parentNode) return;
+  var saved = document.createElement("span");
+  saved.className = "want-on";
+  saved.textContent = "✓ On Want to Try";
+  link.replaceWith(saved);
+}
+
+function dinedSubmitWantToTry(form) {
+  var save = form.querySelector("[data-want-to-try-save]");
+  var source = dinedWantToTrySource;
+  var opening = dinedWantToTryOpening;
+  function current() {
+    var sheet = dinedWantToTrySheet();
+    return opening === dinedWantToTryOpening && sheet && sheet.open;
+  }
+  function fail(message) {
+    if (current()) dinedSetWantToTryError(form, message);
+  }
+  if (save) save.disabled = true;
+  dinedSetWantToTryError(form, "");
+  fetch(form.action, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "X-Dined-Want-To-Try-Sheet": "1" },
+    body: new URLSearchParams(new FormData(form))
+  }).then(function (response) {
+    if (response.ok) {
+      dinedMarkWantToTrySaved(source);
+      if (current()) dinedCloseWantToTrySheet();
+      return null;
+    }
+    if (response.status === 401) {
+      fail("Log in again to save places.");
+      return null;
+    }
+    return response.text().then(function (text) {
+      fail(text.trim() || "Could not save this place. Please try again.");
+    });
+  }).catch(function () {
+    fail("Could not save this place. Check your connection and try again.");
+  }).then(function () {
+    if (save && opening === dinedWantToTryOpening) save.disabled = false;
+  });
+}
+
+function dinedPickWantToTry(button) {
+  var rows = Array.prototype.slice.call(document.querySelectorAll("[data-want-to-try-row]"));
+  if (!rows.length) return;
+  var choices = rows.filter(function (row) { return !row.classList.contains("is-picked"); });
+  if (!choices.length) choices = rows;
+  var picked = choices[Math.floor(Math.random() * choices.length)];
+  for (var i = 0; i < rows.length; i += 1) {
+    rows[i].classList.toggle("is-picked", rows[i] === picked);
+  }
+  var result = document.querySelector("[data-want-to-try-pick-result]");
+  if (result) {
+    result.textContent = "How about " + (picked.dataset.wantToTryName || "this one") + "?";
+    result.hidden = false;
+  }
+  button.textContent = "Pick again";
+}
+
+function dinedHandleWantToTryClick(event) {
+  var target = event.target;
+  if (!target || !target.closest) return;
+  var open = target.closest("[data-want-to-try-open]");
+  if (open) {
+    if (dinedOpenWantToTrySheet(open)) event.preventDefault();
+    return;
+  }
+  if (target.closest("[data-want-to-try-cancel]") || target === dinedWantToTrySheet()) {
+    dinedCloseWantToTrySheet();
+    return;
+  }
+  var pick = target.closest("[data-want-to-try-pick]");
+  if (pick) dinedPickWantToTry(pick);
+}
+
+function dinedHandleWantToTrySubmit(event) {
+  var form = event.target;
+  if (!form || !form.matches || !form.matches("[data-want-to-try-sheet-form]")) return;
+  event.preventDefault();
+  dinedSubmitWantToTry(form);
+}
+
+function dinedInitializeWantToTry() {
+  var pickAreas = document.querySelectorAll("[data-want-to-try-pick-area]");
+  for (var i = 0; i < pickAreas.length; i += 1) {
+    pickAreas[i].hidden = false;
+  }
+  var result = document.querySelector("[data-want-to-try-pick-result]");
+  if (result && !result.textContent) result.hidden = true;
+}
+
+if (!window.dinedWantToTryListenersBound) {
+  window.dinedWantToTryListenersBound = true;
+  document.addEventListener("click", dinedHandleWantToTryClick);
+  document.addEventListener("submit", dinedHandleWantToTrySubmit);
+  document.addEventListener("htmx:load", dinedInitializeWantToTry);
+}
+dinedInitializeWantToTry();

@@ -77,6 +77,28 @@ func TestAuthPublicRestaurantRouteIsExact(t *testing.T) {
 	}
 }
 
+func TestAuthWantToTryListIsTheOnlyPublicWantToTryPage(t *testing.T) {
+	for path, wantPublic := range map[string]bool{"/want-to-try": true, "/want-to-try/new": false} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		called := false
+		Auth(testAuthService(t), false)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			called = true
+		})).ServeHTTP(rec, req)
+		if called != wantPublic {
+			t.Fatalf("%s: handler called = %v, want %v (status %d)", path, called, wantPublic, rec.Code)
+		}
+	}
+	req := httptest.NewRequest(http.MethodPost, "/want-to-try", nil)
+	rec := httptest.NewRecorder()
+	Auth(testAuthService(t), false)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("handler should not be called")
+	})).ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("POST /want-to-try status = %d, want 401", rec.Code)
+	}
+}
+
 func TestAuthBlocksMutationsWithoutSession(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/visits", nil)
 	rec := httptest.NewRecorder()

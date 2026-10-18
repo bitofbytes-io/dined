@@ -21,7 +21,7 @@ func (h *Handler) Home(w http.ResponseWriter, r *http.Request) {
 		h.error(w, "home visits", err)
 		return
 	}
-	h.render(w, "home", r, ui.PageData{Visits: visits})
+	h.render(w, "home", r, ui.PageData{Visits: visits, WantToTryCount: h.wantToTryCount(r)})
 }
 
 const (
@@ -166,7 +166,7 @@ func (h *Handler) CreateVisit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("visit created", "visit_id", visitID, "picker_id", pickerLogValue(input.PickerID), "rating_count", len(input.Ratings), "tag_count", len(input.TagIDs), "photo_count", len(input.Photos))
-	http.Redirect(w, r, h.dinesVisitURL(r, *visitID), http.StatusSeeOther)
+	http.Redirect(w, r, h.createdVisitURL(r, *visitID), http.StatusSeeOther)
 }
 
 func (h *Handler) EditVisitPage(w http.ResponseWriter, r *http.Request) {
@@ -256,7 +256,7 @@ func (h *Handler) logData(r *http.Request) (ui.PageData, error) {
 		return ui.PageData{}, err
 	}
 	prefillPrice, _ := strconv.Atoi(r.URL.Query().Get("price_level"))
-	return ui.PageData{
+	data := ui.PageData{
 		Title:                   "Log a Dine",
 		People:                  people,
 		Tags:                    tags,
@@ -275,7 +275,8 @@ func (h *Handler) logData(r *http.Request) (ui.PageData, error) {
 		PrefillPriceLevel:       prefillPrice,
 		PrefillPickerID:         ui.EverybodyPickerValue,
 		PrefillRestaurantID:     r.URL.Query().Get("restaurant_id"),
-	}, nil
+	}
+	return data, h.addWantToTryLogPrefill(r, &data)
 }
 
 func (h *Handler) visitInput(r *http.Request) (model.VisitInput, error) {

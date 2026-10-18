@@ -34,12 +34,14 @@ func (h *Handler) Restaurant(w http.ResponseWriter, r *http.Request) {
 		h.error(w, "restaurant visits", err)
 		return
 	}
-	h.render(w, "restaurant", r, ui.PageData{
+	data := ui.PageData{
 		Title:          restaurant.Name,
 		Restaurant:     restaurant,
 		Visits:         visits,
 		ReadOnlyVisits: true,
-	})
+	}
+	h.addWantToTrySheet(r, &data)
+	h.render(w, "restaurant", r, data)
 }
 
 func (h *Handler) EditRestaurantPage(w http.ResponseWriter, r *http.Request) {

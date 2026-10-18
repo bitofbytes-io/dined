@@ -6,6 +6,7 @@
 		      <div><h1>Log a Dine</h1></div>
 	    </div>
     {{if .PrefillPlaceID}}<p class="place-source">Google place loaded: {{.PrefillName}}</p>{{end}}
+    {{with .WantToTryItem}}<p class="place-source">From Want to Try · {{wantToTryIdea .SuggestedBy}}</p><input type="hidden" name="want_to_try" value="{{.ID}}">{{end}}
     <div class="console-grid">
 	      <section class="form-section restaurant-console">
 	        <input type="hidden" name="restaurant_id" value="{{.PrefillRestaurantID}}">
