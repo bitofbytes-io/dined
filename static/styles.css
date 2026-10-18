@@ -773,6 +773,153 @@ a:focus-visible, button:focus-visible {
   font-weight: 900;
 }
 
+/* /dines filters: a quiet count line and a Filter button that opens a dialog. */
+.dines-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+.dines-filter-status, .dines-filter-close, .dines-filter-clear {
+  color: var(--ink-soft);
+  font-family: var(--condensed);
+  font-size: .9rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+.dines-filter-status {
+  min-width: 0;
+  margin: 0;
+}
+.dines-filter-summary {
+  display: block;
+  color: var(--night);
+}
+.dines-filter-status a, .dines-filter-clear {
+  color: var(--red-dark);
+  text-underline-offset: .2em;
+}
+.dines-filter-button {
+  flex: none;
+  min-height: 2.5rem;
+  padding: .45rem 1rem;
+  color: var(--aqua-dark);
+  background: #fffdf4;
+  border: 2px solid var(--chrome-dark);
+  box-shadow: none;
+  white-space: nowrap;
+}
+.dines-filter-button.is-active {
+  border-color: var(--aqua);
+  box-shadow: inset 0 0 0 1px var(--aqua);
+}
+.dines-filter-button:hover, .dines-filter-button:focus-visible {
+  color: var(--night);
+  background: #fffdf4;
+  box-shadow: inset 0 0 0 1px var(--aqua);
+  transform: none;
+}
+.dines-filter-dialog {
+  width: min(calc(100% - 2rem), 34rem);
+}
+.dines-filter-dialog .confirm-card {
+  gap: 1.1rem;
+  border-bottom-color: var(--aqua);
+}
+.dines-filter-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.dines-filter-head h2 {
+  margin: 0;
+  color: var(--night);
+}
+.dines-filter-close {
+  min-height: 0;
+  padding: .2rem 0;
+  color: var(--aqua-dark);
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  text-decoration: underline;
+  text-underline-offset: .2em;
+}
+.dines-filter-close:hover, .dines-filter-close:focus-visible {
+  color: var(--night);
+  background: transparent;
+  box-shadow: none;
+  transform: none;
+}
+.dines-filter-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .75rem 1rem;
+}
+.dines-filter-field {
+  min-width: 0;
+  gap: .3rem;
+}
+.dines-filter-field span {
+  color: var(--chrome-deep);
+  font-size: .8rem;
+}
+.dines-filter-field select {
+  min-height: 2.6rem;
+  padding: .5rem .7rem;
+  border-color: var(--chrome-dark);
+  box-shadow: none;
+  font-family: var(--body);
+  font-size: 1rem;
+}
+.dines-filter-field:has(option:checked:not([value=""])) select {
+  color: var(--aqua-dark);
+  border-color: var(--aqua);
+  box-shadow: inset 0 0 0 1px var(--aqua);
+  font-weight: 700;
+}
+.dines-filter-actions {
+  align-items: center;
+  gap: 1.25rem;
+}
+.dines-no-match {
+  display: grid;
+  justify-items: center;
+  gap: .9rem;
+  padding: 2.5rem 1rem;
+  text-align: center;
+  background: #fff8e5;
+  border: 2px solid var(--chrome-dark);
+  border-radius: var(--radius);
+}
+.dines-no-match h2 {
+  margin: 0;
+  color: var(--night);
+}
+@media (max-width: 680px) {
+  .dines-filter-fields {
+    grid-template-columns: 1fr;
+    gap: .6rem;
+  }
+}
+/* Without JavaScript the dialog cannot open, so show the filter form in the page instead. */
+@media (scripting: none) {
+  .dines-filter-button, .dines-filter-close {
+    display: none;
+  }
+  .dines-filter-dialog {
+    position: static;
+    display: block;
+    width: auto;
+    margin: 0 0 1.25rem;
+  }
+  .dines-filter-dialog .confirm-card {
+    box-shadow: none;
+  }
+}
+
 /* Forms and utility pages */
 .order-page {
   background-color: var(--night);

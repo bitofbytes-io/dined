@@ -60,14 +60,14 @@ func TestMemoryStoreVisitsPageOffsetsAndOmitsPhotoData(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	page, err := store.VisitsPage(context.Background(), 2, 1)
+	page, err := store.VisitsPage(context.Background(), model.VisitFilter{}, 2, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(page) != 2 || page[0].ID != all[1].ID || page[1].ID != all[2].ID {
 		t.Fatalf("offset page = %#v", page)
 	}
-	if past, err := store.VisitsPage(context.Background(), 2, len(all)); err != nil || len(past) != 0 {
+	if past, err := store.VisitsPage(context.Background(), model.VisitFilter{}, 2, len(all)); err != nil || len(past) != 0 {
 		t.Fatalf("page past the end = %#v, err = %v", past, err)
 	}
 
@@ -165,6 +165,14 @@ func TestMemoryStoreAllowsBackToBackPicks(t *testing.T) {
 
 func TestMemoryStoreEverybodyPicks(t *testing.T) {
 	assertEverybodyPicks(t, emptyMemoryStore())
+}
+
+func TestMemoryStoreVisitFilters(t *testing.T) {
+	assertVisitFilters(t, emptyMemoryStore())
+}
+
+func TestMemoryStoreNoVisitFilterOptionsWithoutVisits(t *testing.T) {
+	assertNoVisitFilterOptionsWithoutVisits(t, emptyMemoryStore())
 }
 
 func TestMemoryStoreRejectsUnknownPicker(t *testing.T) {

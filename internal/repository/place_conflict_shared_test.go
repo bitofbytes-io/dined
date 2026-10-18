@@ -73,7 +73,7 @@ func storeRestaurantByID(t *testing.T, store DinerStore, id uuid.UUID) model.Res
 
 func storeVisitCount(t *testing.T, store DinerStore) int {
 	t.Helper()
-	visits, err := store.VisitsPage(context.Background(), 1000, 0)
+	visits, err := store.VisitsPage(context.Background(), model.VisitFilter{}, 1000, 0)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bitofbytes-io/dined/internal/apptime"
 	"github.com/bitofbytes-io/dined/internal/model"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -24,7 +25,9 @@ type DinerStore interface {
 	Restaurant(context.Context, uuid.UUID) (*model.Restaurant, error)
 	Visit(context.Context, uuid.UUID) (*model.Visit, error)
 	Visits(context.Context, int) ([]model.Visit, error)
-	VisitsPage(ctx context.Context, limit, offset int) ([]model.Visit, error)
+	VisitsPage(ctx context.Context, filter model.VisitFilter, limit, offset int) ([]model.Visit, error)
+	CountVisits(context.Context, model.VisitFilter) (int, error)
+	VisitFilterOptions(context.Context) (model.VisitFilterOptions, error)
 	VisitPosition(context.Context, uuid.UUID) (int, bool, error)
 	VisitPhoto(context.Context, uuid.UUID) (*model.VisitPhoto, error)
 	RestaurantVisits(context.Context, uuid.UUID) ([]model.Visit, error)
@@ -139,17 +142,18 @@ func (s *Store) Visit(ctx context.Context, id uuid.UUID) (*model.Visit, error) {
 }
 
 func (s *Store) Visits(ctx context.Context, limit int) ([]model.Visit, error) {
-	return s.VisitsPage(ctx, limit, 0)
+	return s.VisitsPage(ctx, model.VisitFilter{}, limit, 0)
 }
 
-// VisitsPage lists visits newest first. A limit of zero returns every visit after offset.
-// Photos carry metadata only; their image bytes are served by VisitPhoto.
-func (s *Store) VisitsPage(ctx context.Context, limit, offset int) ([]model.Visit, error) {
-	query := visitSelectSQL() + ` ORDER BY v.visited_at DESC, v.created_at DESC, v.id OFFSET $1`
-	args := []any{max(offset, 0)}
+// VisitsPage lists the visits that match filter, newest first. A limit of zero returns every
+// matching visit after offset. Photos carry metadata only; their image bytes are served by VisitPhoto.
+func (s *Store) VisitsPage(ctx context.Context, filter model.VisitFilter, limit, offset int) ([]model.Visit, error) {
+	where, args := visitFilterSQL(filter)
+	args = append(args, max(offset, 0))
+	query := visitSelectSQL() + where + fmt.Sprintf(` ORDER BY v.visited_at DESC, v.created_at DESC, v.id OFFSET $%d`, len(args))
 	if limit > 0 {
-		query += ` LIMIT $2`
 		args = append(args, limit)
+		query += fmt.Sprintf(` LIMIT $%d`, len(args))
 	}
 	rows, err := s.pool.Query(ctx, query, args...)
 	if err != nil {
@@ -157,6 +161,100 @@ func (s *Store) VisitsPage(ctx context.Context, limit, offset int) ([]model.Visi
 	}
 	defer rows.Close()
 	return s.scanVisits(ctx, rows, withPhotoMetadata)
+}
+
+// CountVisits counts the visits that match filter.
+func (s *Store) CountVisits(ctx context.Context, filter model.VisitFilter) (int, error) {
+	where, args := visitFilterSQL(filter)
+	var count int
+	err := s.pool.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM dining_visits v
+		JOIN restaurants r ON r.id = v.restaurant_id`+where, args...).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("count visits: %w", err)
+	}
+	return count, nil
+}
+
+// VisitFilterOptions lists the cuisines and cities of visited restaurants and the years of visits.
+func (s *Store) VisitFilterOptions(ctx context.Context) (model.VisitFilterOptions, error) {
+	var options model.VisitFilterOptions
+	var err error
+	if options.Cuisines, err = s.visitedRestaurantValues(ctx, "category"); err != nil {
+		return options, err
+	}
+	if options.Cities, err = s.visitedRestaurantValues(ctx, "city"); err != nil {
+		return options, err
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT DISTINCT EXTRACT(YEAR FROM visited_at AT TIME ZONE 'America/New_York')::int AS year
+		FROM dining_visits
+		ORDER BY year DESC`)
+	if err != nil {
+		return options, fmt.Errorf("list visit years: %w", err)
+	}
+	if options.Years, err = pgx.CollectRows(rows, pgx.RowTo[int]); err != nil {
+		return options, fmt.Errorf("scan visit years: %w", err)
+	}
+	return options, nil
+}
+
+// visitedRestaurantValues lists one trimmed spelling of each case-insensitive value of a
+// restaurant text column, across restaurants with a visit. Byte order picks the spelling and
+// sorts the values, like the memory store. column must be a trusted name.
+func (s *Store) visitedRestaurantValues(ctx context.Context, column string) ([]string, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT MIN(btrim(r.`+column+`) COLLATE "C")
+		FROM restaurants r
+		WHERE btrim(coalesce(r.`+column+`, '')) <> ''
+		  AND EXISTS (SELECT 1 FROM dining_visits v WHERE v.restaurant_id = r.id)
+		GROUP BY lower(btrim(r.`+column+`))
+		ORDER BY lower(btrim(r.`+column+`)) COLLATE "C"`)
+	if err != nil {
+		return nil, fmt.Errorf("list restaurant %s values: %w", column, err)
+	}
+	values, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return nil, fmt.Errorf("scan restaurant %s values: %w", column, err)
+	}
+	return values, nil
+}
+
+// visitFilterSQL returns the WHERE clause, if any, and its arguments for filter. The clause
+// refers to the visit as v and its restaurant as r, and numbers its parameters from $1.
+func visitFilterSQL(filter model.VisitFilter) (string, []any) {
+	var conditions []string
+	var args []any
+	arg := func(value any) string {
+		args = append(args, value)
+		return fmt.Sprintf("$%d", len(args))
+	}
+	if cuisine := strings.TrimSpace(filter.Cuisine); cuisine != "" {
+		conditions = append(conditions, `lower(btrim(r.category)) = lower(`+arg(cuisine)+`)`)
+	}
+	if filter.EverybodyPicked {
+		conditions = append(conditions, `v.picked_by_person_id IS NULL`)
+	} else if filter.PickerID != nil {
+		conditions = append(conditions, `v.picked_by_person_id = `+arg(*filter.PickerID))
+	}
+	if filter.RaterID != nil {
+		conditions = append(conditions, `EXISTS (SELECT 1 FROM visit_participant_ratings vr WHERE vr.visit_id = v.id AND vr.person_id = `+arg(*filter.RaterID)+`)`)
+	}
+	if filter.TagID != nil {
+		conditions = append(conditions, `EXISTS (SELECT 1 FROM visit_tags vt WHERE vt.visit_id = v.id AND vt.tag_id = `+arg(*filter.TagID)+`)`)
+	}
+	if city := strings.TrimSpace(filter.City); city != "" {
+		conditions = append(conditions, `lower(btrim(r.city)) = lower(`+arg(city)+`)`)
+	}
+	if filter.Year != 0 {
+		start, end := apptime.YearBounds(filter.Year)
+		conditions = append(conditions, `v.visited_at >= `+arg(start)+` AND v.visited_at < `+arg(end))
+	}
+	if len(conditions) == 0 {
+		return "", nil
+	}
+	return ` WHERE ` + strings.Join(conditions, ` AND `), args
 }
 
 // VisitPosition returns the visit's zero-based index in VisitsPage ordering, or false if it does not exist.

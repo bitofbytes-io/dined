@@ -119,6 +119,67 @@ func TestSearchRemoveCancelDoesNotDeleteRestaurant(t *testing.T) {
 	}
 }
 
+func TestDinesFilterDialogAppliesChosenFilters(t *testing.T) {
+	chromePath := chromeExecutableForTest()
+	if chromePath == "" {
+		t.Skip("Chrome or Chromium executable not found")
+	}
+	// Serve static/app.js, which opens the dialog and submits the filters.
+	t.Chdir(filepath.Join("..", ".."))
+	router, _ := newAuthenticatedTestRouter(t, repository.NewMemoryStore())
+	server := httptest.NewServer(router)
+	defer server.Close()
+
+	options := append(chromedp.DefaultExecAllocatorOptions[:],
+		chromedp.ExecPath(chromePath),
+		chromedp.Headless,
+		chromedp.NoFirstRun,
+		chromedp.NoDefaultBrowserCheck,
+		chromedp.DisableGPU,
+		chromedp.Flag("disable-dev-shm-usage", true),
+	)
+	allocCtx, cancelAlloc := chromedp.NewExecAllocator(context.Background(), options...)
+	defer cancelAlloc()
+	browserCtx, cancelBrowser := chromedp.NewContext(allocCtx, chromedp.WithLogf(func(string, ...any) {}))
+	defer cancelBrowser()
+	browserCtx, cancelTimeout := context.WithTimeout(browserCtx, 20*time.Second)
+	defer cancelTimeout()
+
+	var closedAfterClose bool
+	var search, status string
+	var cards int
+	err := chromedp.Run(browserCtx,
+		chromedp.Navigate(server.URL+"/dines"),
+		chromedp.WaitVisible(`[data-dines-filter-open]`, chromedp.ByQuery),
+		chromedp.Click(`[data-dines-filter-open]`, chromedp.ByQuery),
+		chromedp.WaitVisible(`#dines-filter-dialog[open]`, chromedp.ByQuery),
+		chromedp.Click(`[data-dines-filter-close]`, chromedp.ByQuery),
+		chromedp.Evaluate(`!document.getElementById("dines-filter-dialog").open`, &closedAfterClose),
+		chromedp.Click(`[data-dines-filter-open]`, chromedp.ByQuery),
+		chromedp.WaitVisible(`#dines-filter-dialog[open]`, chromedp.ByQuery),
+		chromedp.SetValue(`select[name="cuisine"]`, "Mexican", chromedp.ByQuery),
+		chromedp.SetValue(`select[name="picker"]`, "Jen", chromedp.ByQuery),
+		chromedp.Click(`.dines-filter-actions button`, chromedp.ByQuery),
+		chromedp.WaitVisible(`.dines-filter-summary`, chromedp.ByQuery),
+		chromedp.Evaluate(`window.location.search`, &search),
+		chromedp.Evaluate(`document.querySelector(".dines-filter-status").textContent`, &status),
+		chromedp.Evaluate(`document.querySelectorAll(".visit-card").length`, &cards),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !closedAfterClose {
+		t.Fatal("filter dialog stayed open after Close")
+	}
+	// Filters left at Any stay out of the URL.
+	if search != "?cuisine=Mexican&picker=Jen" {
+		t.Fatalf("filtered URL search = %q, want only the chosen filters", search)
+	}
+	if cards != 1 || !strings.Contains(status, "Mexican · Jen's picks") || !strings.Contains(status, "1 of 3 dines") {
+		t.Fatalf("filtered page shows %d cards and status %q", cards, status)
+	}
+}
+
 func TestHomeRecentDinesFitInsideDesktopBoothScene(t *testing.T) {
 	chromePath := chromeExecutableForTest()
 	if chromePath == "" {

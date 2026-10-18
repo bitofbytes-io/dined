@@ -38,29 +38,56 @@ const (
 var errInvalidPicker = errors.New("invalid picker")
 
 func (h *Handler) Dines(w http.ResponseWriter, r *http.Request) {
-	page, ok := dinesPage(r.URL.Query().Get("page"))
+	query := r.URL.Query()
+	page, ok := dinesPage(query.Get("page"))
 	if !ok {
 		http.Error(w, "Invalid page", http.StatusBadRequest)
 		return
 	}
-	// Fetch one extra visit to learn whether an older page exists.
-	visits, err := h.store.VisitsPage(r.Context(), dinesPageSize+1, (page-1)*dinesPageSize)
-	if err != nil {
-		h.error(w, "all visits", err)
+	params := readDinesFilterParams(query)
+	year, ok := dinesYear(params.get(yearParam))
+	if !ok {
+		http.Error(w, "Invalid year", http.StatusBadRequest)
 		return
 	}
-	if page > 1 && len(visits) == 0 {
+	if year != 0 {
+		params[yearParam] = strconv.Itoa(year) // "02026" is the 2026 choice.
+	}
+	choices, err := h.dinesFilterChoices(r)
+	if err != nil {
+		h.error(w, "dines filter choices", err)
+		return
+	}
+	filter, matchable := choices.filter(params, year)
+
+	total, err := h.store.CountVisits(r.Context(), model.VisitFilter{})
+	if err != nil {
+		h.error(w, "count visits", err)
+		return
+	}
+	matched := total
+	if !matchable {
+		matched = 0
+	} else if params.active() > 0 {
+		if matched, err = h.store.CountVisits(r.Context(), filter); err != nil {
+			h.error(w, "count filtered visits", err)
+			return
+		}
+	}
+	pages := max(1, (matched+dinesPageSize-1)/dinesPageSize)
+	if page > pages {
 		http.NotFound(w, r)
 		return
 	}
+	var visits []model.Visit
+	if matched > 0 {
+		if visits, err = h.store.VisitsPage(r.Context(), filter, dinesPageSize, (page-1)*dinesPageSize); err != nil {
+			h.error(w, "all visits", err)
+			return
+		}
+	}
 	data := ui.PageData{Title: "All Dines", Visits: visits}
-	if len(visits) > dinesPageSize {
-		data.Visits = visits[:dinesPageSize]
-		data.NextPage = page + 1
-	}
-	if page > 1 {
-		data.PrevPage = page - 1
-	}
+	data.DinesFilter = choices.view(params, matched, total, page, pages)
 	h.render(w, "dines", r, data)
 }
 
