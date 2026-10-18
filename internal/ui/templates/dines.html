@@ -2,11 +2,41 @@
 {{template "top" .}}
 <main class="page-band ledger-page">
   <section class="wide-ticket ledger-panel">
-	    <div class="section-head"><div><h1>All Dines</h1></div>{{if .Authenticated}}<a class="small-cta" href="/log">Log a Dine</a>{{end}}</div>
+    <div class="section-head"><div><h1>All Dines</h1></div>{{if .Authenticated}}<a class="small-cta" href="/log">Log a Dine</a>{{end}}</div>
+    {{with .DinesFilter}}
+    <div class="dines-filter-bar">
+      <p class="dines-filter-status">{{if .Active}}<span class="dines-filter-summary">{{.Summary}}</span>{{end}}<span>{{.Count}}{{if gt .Pages 1}} · Page {{.Page}} of {{.Pages}}{{end}}{{if .Active}} · <a href="/dines">Clear</a>{{end}}</span></p>
+      <button type="button" class="dines-filter-button{{if .Active}} is-active{{end}}" data-dines-filter-open aria-controls="dines-filter-dialog" aria-haspopup="dialog">Filter{{if .Active}} · {{.Active}}{{end}}</button>
+    </div>
+    {{template "dines-filter-dialog" .}}
+    {{end}}
+    {{if or .Visits (not .DinesFilter.Active)}}
     {{template "visit-list" .}}
-    {{if or .PrevPage .NextPage}}<nav class="pager" aria-label="Dines pages">{{if .PrevPage}}<a class="secondary-button" href="/dines{{if gt .PrevPage 1}}?page={{.PrevPage}}{{end}}" rel="prev">Newer</a>{{end}}{{if .NextPage}}<a class="secondary-button" href="/dines?page={{.NextPage}}" rel="next">Older</a>{{end}}</nav>{{end}}
+    {{else}}
+    <div class="dines-no-match">
+      <h2>No dines match</h2>
+      <a class="secondary-button" href="/dines">Clear filters</a>
+    </div>
+    {{end}}
+    {{with .DinesFilter}}{{if or .PrevURL .NextURL}}<nav class="pager" aria-label="Dines pages">{{if .PrevURL}}<a class="secondary-button" href="{{.PrevURL}}" rel="prev">Newer</a>{{end}}{{if .NextURL}}<a class="secondary-button" href="{{.NextURL}}" rel="next">Older</a>{{end}}</nav>{{end}}{{end}}
   </section>
 </main>
 {{template "bottom" .}}
 {{end}}
 
+{{/* The filter form is a plain GET form: a modal dialog with JavaScript, shown inline without it. */}}
+{{define "dines-filter-dialog"}}
+<dialog class="confirm-modal dines-filter-dialog" id="dines-filter-dialog" aria-labelledby="dines-filter-title">
+  <form class="confirm-card dines-filter-form" method="get" action="/dines" hx-boost="false" data-dines-filter-form>
+    <div class="dines-filter-head"><h2 id="dines-filter-title">Filter dines</h2><button type="button" class="dines-filter-close" data-dines-filter-close>Close</button></div>
+    <div class="dines-filter-fields">
+      {{range .Fields}}<label class="dines-filter-field"><span>{{.Label}}</span><select name="{{.Name}}"><option value="">Any</option>{{range .Options}}<option value="{{.Value}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select></label>
+      {{end}}
+    </div>
+    <div class="confirm-actions dines-filter-actions">
+      {{if .Active}}<a class="dines-filter-clear" href="/dines">Clear</a>{{end}}
+      <button class="secondary-button">Show dines</button>
+    </div>
+  </form>
+</dialog>
+{{end}}

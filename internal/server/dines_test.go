@@ -11,10 +11,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/bitofbytes-io/dined/internal/apptime"
 	"github.com/bitofbytes-io/dined/internal/middleware"
 	"github.com/bitofbytes-io/dined/internal/model"
 	"github.com/bitofbytes-io/dined/internal/repository"
@@ -120,6 +122,156 @@ func TestRouterDinesSinglePageHasNoPager(t *testing.T) {
 	}
 	if rec := getPublic(router, "/dines?page=1"); rec.Code != http.StatusOK {
 		t.Fatalf("explicit page 1 status = %d", rec.Code)
+	}
+}
+
+func TestRouterDinesFiltersByQuery(t *testing.T) {
+	router, _ := newAuthenticatedTestRouter(t, repository.NewMemoryStore())
+
+	rec := getPublic(router, "/dines?cuisine=mexican")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if got := strings.Count(body, `class="visit-card"`); got != 1 || !strings.Contains(body, "El Patio Verde") {
+		t.Fatalf("cuisine filter should list only El Patio Verde:\n%s", body)
+	}
+	for _, want := range []string{
+		`<span class="dines-filter-summary">Mexican</span><span>1 of 3 dines · <a href="/dines">Clear</a></span>`,
+		`>Filter · 1</button>`,
+		`<option value="Mexican" selected>Mexican</option>`,
+		`<a class="dines-filter-clear" href="/dines">Clear</a>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("filtered page missing %q:\n%s", want, body)
+		}
+	}
+
+	rec = getPublic(router, "/dines?picker=caleb&tag=kid+approved")
+	body = rec.Body.String()
+	if rec.Code != http.StatusOK || strings.Count(body, `class="visit-card"`) != 1 || !strings.Contains(body, "Saffron Counter") {
+		t.Fatalf("picker and tag filters should list only Saffron Counter (%d):\n%s", rec.Code, body)
+	}
+	if !strings.Contains(body, `<span class="dines-filter-summary">Caleb&#39;s picks · Kid Approved</span>`) || !strings.Contains(body, `>Filter · 2</button>`) {
+		t.Fatalf("summary should name both filters:\n%s", body)
+	}
+
+	rec = getPublic(router, "/dines?rater=Aiden&city=raleigh&year="+strconv.Itoa(time.Now().In(apptime.EasternLocation()).Year()))
+	if body := rec.Body.String(); strings.Count(body, `class="visit-card"`) != 1 || !strings.Contains(body, "Hank&#39;s Downtown Diner") || !strings.Contains(body, "Rated by Aiden · Raleigh · ") {
+		t.Fatalf("rater, city and year filters should list only Hank's:\n%s", body)
+	}
+
+	// Empty values are Any, as the form submits them without JavaScript.
+	rec = getPublic(router, "/dines?cuisine=&picker=&rater=&tag=&city=&year=")
+	body = rec.Body.String()
+	if rec.Code != http.StatusOK || strings.Count(body, `class="visit-card"`) != 3 || !strings.Contains(body, `<span>3 dines</span>`) || !strings.Contains(body, `>Filter</button>`) {
+		t.Fatalf("empty filters should list every dine (%d):\n%s", rec.Code, body)
+	}
+	if strings.Contains(body, "dines-filter-summary") || strings.Contains(body, "dines-filter-clear") || strings.Contains(body, " selected>") {
+		t.Fatalf("unfiltered page should not show a summary, Clear, or a selected choice:\n%s", body)
+	}
+
+	if rec := getPublic(router, "/dines?year=soon"); rec.Code != http.StatusBadRequest {
+		t.Fatalf("invalid year status = %d, want 400", rec.Code)
+	}
+}
+
+func TestRouterDinesFilterWithNoMatches(t *testing.T) {
+	router, _ := newAuthenticatedTestRouter(t, repository.NewMemoryStore())
+
+	// Everybody picked none of the demo dines, and no one is named Zed.
+	for _, target := range []string{"/dines?picker=Everybody", "/dines?rater=Zed", "/dines?tag=Nope&cuisine=Mexican"} {
+		rec := getPublic(router, target)
+		body := rec.Body.String()
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s status = %d", target, rec.Code)
+		}
+		if strings.Contains(body, `class="visit-card"`) || !strings.Contains(body, "<h2>No dines match</h2>") || !strings.Contains(body, `<a class="secondary-button" href="/dines">Clear filters</a>`) {
+			t.Fatalf("%s should show the no-match card:\n%s", target, body)
+		}
+		if !strings.Contains(body, "0 of 3 dines") || strings.Contains(body, "No dines logged yet") {
+			t.Fatalf("%s should count zero of three dines:\n%s", target, body)
+		}
+	}
+	if body := getPublic(router, "/dines?picker=Everybody").Body.String(); !strings.Contains(body, "Everybody&#39;s picks") || !strings.Contains(body, `<option value="everybody" selected>Everybody</option>`) {
+		t.Fatalf("Everybody filter should be named and selected:\n%s", body)
+	}
+	if rec := getPublic(router, "/dines?picker=Everybody&page=2"); rec.Code != http.StatusNotFound {
+		t.Fatalf("page past a filtered end status = %d, want 404", rec.Code)
+	}
+}
+
+func TestRouterDinesFilterDialogOrder(t *testing.T) {
+	router, _ := newAuthenticatedTestRouter(t, repository.NewMemoryStore())
+	body := getPublic(router, "/dines").Body.String()
+
+	last := -1
+	for _, field := range []string{"Cuisine</span><select name=\"cuisine\">", "Picked by</span><select name=\"picker\">", "Rated by</span><select name=\"rater\">", "Tag</span><select name=\"tag\">", "City</span><select name=\"city\">", "Year</span><select name=\"year\">"} {
+		index := strings.Index(body, field)
+		if index <= last {
+			t.Fatalf("dialog field %q is missing or out of order:\n%s", field, body)
+		}
+		last = index
+	}
+	if strings.Contains(body, `name="category"`) {
+		t.Fatalf("Cuisine replaces a separate Category filter:\n%s", body)
+	}
+	for _, want := range []string{
+		`<form class="confirm-card dines-filter-form" method="get" action="/dines" hx-boost="false" data-dines-filter-form>`,
+		`<select name="cuisine"><option value="">Any</option><option value="American">American</option><option value="Indian">Indian</option><option value="Mexican">Mexican</option></select>`,
+		`<select name="picker"><option value="">Any</option><option value="everybody">Everybody</option><option value="Daniel">Daniel</option>`,
+		`<button class="secondary-button">Show dines</button>`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("dialog missing %q:\n%s", want, body)
+		}
+	}
+}
+
+func TestRouterDinesFilterKeepsFiltersAcrossPages(t *testing.T) {
+	store := repository.NewMemoryStore()
+	seedVisits(t, store, 22) // Daniel picked the 22 seeded dines and Hank's: 23 of 25.
+	router, _ := newAuthenticatedTestRouter(t, store)
+
+	first := getPublic(router, "/dines?picker=Daniel").Body.String()
+	if got := strings.Count(first, `class="visit-card"`); got != 20 {
+		t.Fatalf("page 1 visits = %d, want 20", got)
+	}
+	if !strings.Contains(first, "23 of 25 dines · Page 1 of 2") || !strings.Contains(first, `href="/dines?page=2&amp;picker=Daniel" rel="next"`) || strings.Contains(first, `rel="prev"`) {
+		t.Fatalf("page 1 should count matches and link to page 2 with the filter:\n%s", first)
+	}
+
+	second := getPublic(router, "/dines?page=2&picker=Daniel").Body.String()
+	if got := strings.Count(second, `class="visit-card"`); got != 3 {
+		t.Fatalf("page 2 visits = %d, want 3", got)
+	}
+	if !strings.Contains(second, "Page 2 of 2") || !strings.Contains(second, `href="/dines?picker=Daniel" rel="prev"`) || strings.Contains(second, `rel="next"`) {
+		t.Fatalf("page 2 should link back to page 1 with the filter:\n%s", second)
+	}
+	if rec := getPublic(router, "/dines?page=3&picker=Daniel"); rec.Code != http.StatusNotFound {
+		t.Fatalf("page past the filtered end status = %d, want 404", rec.Code)
+	}
+}
+
+func TestRouterDinesFiltersArePublicAndReadOnly(t *testing.T) {
+	router, token := newAuthenticatedTestRouter(t, repository.NewMemoryStore())
+
+	public := getPublic(router, "/dines?picker=Jen").Body.String()
+	if !strings.Contains(public, "El Patio Verde") || !strings.Contains(public, `>Filter · 1</button>`) || !strings.Contains(public, `id="dines-filter-dialog"`) {
+		t.Fatalf("logged-out visitors should get the same filters:\n%s", public)
+	}
+	for _, hidden := range []string{"Log a Dine", "/edit\"", "data-delete-dine-form"} {
+		if strings.Contains(public, hidden) {
+			t.Fatalf("logged-out page should not include %q:\n%s", hidden, public)
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/dines?picker=Jen", nil)
+	req.AddCookie(&http.Cookie{Name: middleware.CookieName, Value: token})
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	if body := rec.Body.String(); !strings.Contains(body, "Log a Dine") || !strings.Contains(body, "data-delete-dine-form") || strings.Count(body, `class="visit-card"`) != 1 {
+		t.Fatalf("logged-in filtered page should keep Log/Edit/Delete:\n%s", body)
 	}
 }
 

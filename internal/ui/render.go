@@ -36,8 +36,7 @@ type PageData struct {
 	Notice                  string
 	Visits                  []model.Visit
 	ReadOnlyVisits          bool
-	PrevPage                int
-	NextPage                int
+	DinesFilter             *DinesFilter
 	DinesURL                string
 	Visit                   *model.Visit
 	People                  []model.Person
@@ -90,6 +89,34 @@ type RestaurantResult struct {
 	// HasAverage is false when no visit has enough ratings to count in AverageRating.
 	HasAverage bool
 	Tags       []model.Tag
+}
+
+// DinesFilter is the /dines count line, Filter dialog, and pager.
+type DinesFilter struct {
+	// Fields are the dialog's dropdowns in order.
+	Fields []DinesFilterField
+	// Active counts the filters that are set, and Summary names them.
+	Active  int
+	Summary string
+	// Count is "30 dines", or "5 of 30 dines" when filters are set.
+	Count   string
+	Page    int
+	Pages   int
+	PrevURL string
+	NextURL string
+}
+
+// DinesFilterField is one dropdown; its first choice is always Any.
+type DinesFilterField struct {
+	Name    string
+	Label   string
+	Options []DinesFilterOption
+}
+
+type DinesFilterOption struct {
+	Value    string
+	Label    string
+	Selected bool
 }
 
 // EverybodyPickerValue is the picker form value for a visit that Everybody picked.
