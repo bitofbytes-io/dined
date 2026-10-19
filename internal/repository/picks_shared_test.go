@@ -267,9 +267,10 @@ func assertTrophyRecords(t *testing.T, store DinerStore) {
 	// A single rater counts toward no one's taste profile.
 	createPickTestVisit(t, store, "Solo Sushi", "Japanese", 4, &caleb, map[uuid.UUID]float64{caleb.ID: 10})
 	createPickTestVisit(t, store, "Taco Town", "Mexican", 5, &aiden, map[uuid.UUID]float64{daniel.ID: 8, jen.ID: 8, caleb.ID: 8})
-	createPickTestVisit(t, store, "Pizza Pal", "Italian", 8, &aiden, map[uuid.UUID]float64{daniel.ID: 5, jen.ID: 5})
-	createPickTestVisit(t, store, "Taco Town", "Mexican", 9, nil, map[uuid.UUID]float64{daniel.ID: 7, jen.ID: 9})
-	createPickTestVisit(t, store, "Pizza Pal", "Italian", 10, &daniel, map[uuid.UUID]float64{daniel.ID: 5, aiden.ID: 5})
+	createPickTestVisit(t, store, "Pizza Pal", "Italian", 8, &aiden, map[uuid.UUID]float64{daniel.ID: 5, jen.ID: 5, caleb.ID: 1})
+	createPickTestVisit(t, store, "Taco Town", "Mexican", 9, nil, map[uuid.UUID]float64{daniel.ID: 7, jen.ID: 9, caleb.ID: 9})
+	// Caleb's best single score is Italian, but Mexican wins on average.
+	createPickTestVisit(t, store, "Pizza Pal", "Italian", 10, &daniel, map[uuid.UUID]float64{daniel.ID: 5, caleb.ID: 10, aiden.ID: 5})
 
 	stats, err := store.Stats(context.Background())
 	if err != nil {
@@ -289,7 +290,7 @@ func assertTrophyRecords(t *testing.T, store DinerStore) {
 	want := []model.PersonTasteStat{
 		{Person: "Daniel", Category: "American", AverageRating: 10, RatingCount: 1},
 		{Person: "Jen", Category: "Vietnamese", AverageRating: 10, RatingCount: 1},
-		{Person: "Caleb", Category: "Mexican", AverageRating: 8, RatingCount: 1},
+		{Person: "Caleb", Category: "Mexican", AverageRating: 8.5, RatingCount: 2},
 		{Person: "Aiden", Category: "Italian", AverageRating: 5, RatingCount: 1},
 	}
 	if len(stats.TasteProfiles) != len(want) {
