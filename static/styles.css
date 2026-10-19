@@ -1645,8 +1645,8 @@ fieldset {
   --record-size: 10.4rem;
   --record-row-gap: 1rem;
   --record-to-list-gap: var(--record-row-gap);
-  /* Rows of records in .record-grid: six records in three columns. */
-  --record-rows: 2;
+  /* Rows of records in .record-grid: nine records in three columns. */
+  --record-rows: 3;
   position: relative;
   width: min(100%, 1180px);
   min-height: 880px;
@@ -1773,6 +1773,17 @@ fieldset {
 .record-name {
   font-size: 1.35rem;
   line-height: .92;
+}
+/* Restaurant names run longer than people's, so they get three lines at most. */
+.record-place {
+  display: -webkit-box;
+  max-width: 6.6rem;
+  font-size: 1.08rem;
+  line-height: 1;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
 }
 .record p {
   margin: 0;

@@ -859,6 +859,10 @@ func TestPostgresNoAggregatesWithoutTwoRaters(t *testing.T) {
 	assertNoAggregatesWithoutTwoRaters(t, postgresStore(t))
 }
 
+func TestPostgresTrophyRecords(t *testing.T) {
+	assertTrophyRecords(t, postgresStore(t))
+}
+
 func TestPostgresRejectsPlaceIDOwnedByAnotherRestaurant(t *testing.T) {
 	assertChosenRestaurantPlaceOwnedElsewhereRejected(t, postgresStore(t))
 }

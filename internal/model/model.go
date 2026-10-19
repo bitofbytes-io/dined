@@ -193,6 +193,28 @@ type Stats struct {
 	CitiesExplored          int
 	TopRestaurants          []RestaurantRatingStat
 	TopRestaurantsByCuisine []CuisineRestaurantStat
+	// BiggestSplitRestaurant is where one visit's highest and lowest ratings
+	// were furthest apart; BiggestSplit is that gap.
+	BiggestSplitRestaurant string
+	BiggestSplit           float64
+	// MostLoyalRestaurant is the restaurant with the most visits, once any
+	// restaurant has been visited at least twice.
+	MostLoyalRestaurant string
+	MostLoyalVisits     int
+	// NostalgiaRestaurant is the restaurant whose last visit is the oldest,
+	// once the family has dined somewhere else since.
+	NostalgiaRestaurant    string
+	NostalgiaLastVisitedAt time.Time
+	// TasteProfiles holds each person's favorite category, in people order.
+	TasteProfiles []PersonTasteStat
+}
+
+// PersonTasteStat is the category a person rates highest on average.
+type PersonTasteStat struct {
+	Person        string
+	Category      string
+	AverageRating float64
+	RatingCount   int
 }
 
 type RestaurantRatingStat struct {
