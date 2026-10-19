@@ -2672,7 +2672,10 @@ fieldset {
 }
 .spin-form .primary-button { min-width: 9rem; }
 .spin-card { padding: 1.3rem 1.25rem 1.25rem; }
-.spin-card .eyebrow { margin: 0 0 .3rem; }
+.spin-card .eyebrow {
+  margin: 0 0 .3rem;
+  transition: opacity .25s ease;
+}
 .spin-card h2 {
   margin: 0 0 .3rem;
   color: var(--aqua-dark);
@@ -2690,6 +2693,8 @@ fieldset {
   transition: opacity .25s ease;
 }
 .spin-details .want-note { margin: .25rem 0 0; }
+/* Only the name flashes; the lines about the pick wait until it settles. */
+.spin-card.is-spinning .eyebrow,
 .spin-card.is-spinning .spin-details { opacity: 0; }
 .spin-turn {
   display: flex;
