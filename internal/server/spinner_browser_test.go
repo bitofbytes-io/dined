@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -37,8 +38,12 @@ func TestSpinnerSpinsToAPickInTheBrowser(t *testing.T) {
 	browserCtx, cancelTimeout := context.WithTimeout(browserCtx, 20*time.Second)
 	defer cancelTimeout()
 
-	var name, again, location string
+	var name, again, location, nextName, nextHref string
 	var overflow bool
+	var watch struct {
+		Spun   bool `json:"spun"`
+		Linked bool `json:"linked"`
+	}
 	err := chromedp.Run(browserCtx,
 		chromedp.EmulateViewport(390, 844),
 		chromedp.Navigate(server.URL+"/where-to-eat"),
@@ -51,6 +56,22 @@ func TestSpinnerSpinsToAPickInTheBrowser(t *testing.T) {
 		chromedp.Text(`.spin-form button`, &again, chromedp.ByQuery),
 		chromedp.Location(&location),
 		chromedp.Evaluate(`document.documentElement.scrollWidth > window.innerWidth`, &overflow),
+
+		// Anywhere holds two places, so Spin again skips Old Haunt and the
+		// reel flashes the other name before the link comes back.
+		chromedp.SetValue(`.spin-form select[name="from"]`, "", chromedp.ByQuery),
+		chromedp.Evaluate(`window.spinWatch = {spun: false, linked: false};
+			new MutationObserver(function () {
+				var card = document.querySelector("[data-spin-result].is-spinning");
+				if (!card) return;
+				window.spinWatch.spun = true;
+				if (card.querySelector("[data-spin-name]").hasAttribute("href")) window.spinWatch.linked = true;
+			}).observe(document.body, {subtree: true, childList: true, attributes: true, characterData: true}); true`, nil),
+		chromedp.Click(`.spin-form button`, chromedp.ByQuery),
+		chromedp.Poll(`location.search.includes("last=") && document.querySelector("[data-spin-result][data-spin-reel-done]:not(.is-spinning)") !== null`, nil),
+		chromedp.Text(`[data-spin-name]`, &nextName, chromedp.ByQuery),
+		chromedp.Evaluate(`document.querySelector("[data-spin-name]").getAttribute("href") || ""`, &nextHref),
+		chromedp.Evaluate(`window.spinWatch`, &watch),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -66,5 +87,14 @@ func TestSpinnerSpinsToAPickInTheBrowser(t *testing.T) {
 	}
 	if overflow {
 		t.Fatal("spinner scrolls sideways at 390px")
+	}
+	if nextName != "El Patio Verde" {
+		t.Fatalf("spin again landed on %q, want El Patio Verde, skipping the last pick", nextName)
+	}
+	if !watch.Spun || watch.Linked {
+		t.Fatalf("reel ran: %v, linked while flashing names: %v; want a reel with no link", watch.Spun, watch.Linked)
+	}
+	if !strings.HasPrefix(nextHref, "/restaurants/") {
+		t.Fatalf("after the reel the pick links to %q, want its restaurant page", nextHref)
 	}
 }

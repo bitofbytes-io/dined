@@ -824,8 +824,11 @@ function dinedRunSpinReel() {
   var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   if (!name || !names.length || reduceMotion) return;
   var pick = name.textContent;
+  // The link goes to the pick, so it is not a link while it shows other names.
+  var href = name.getAttribute("href");
   var frames = names.length < 6 ? names.concat(names) : names;
   var frame = 0;
+  name.removeAttribute("href");
   card.classList.add("is-spinning");
   card.setAttribute("aria-busy", "true");
   function step() {
@@ -836,6 +839,7 @@ function dinedRunSpinReel() {
       return;
     }
     name.textContent = pick;
+    if (href) name.setAttribute("href", href);
     card.classList.remove("is-spinning");
     card.removeAttribute("aria-busy");
   }
