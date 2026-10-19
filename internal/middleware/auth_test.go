@@ -99,6 +99,18 @@ func TestAuthWantToTryListIsTheOnlyPublicWantToTryPage(t *testing.T) {
 	}
 }
 
+func TestAuthAllowsPublicSpinner(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/where-to-eat?spin=1", nil)
+	rec := httptest.NewRecorder()
+	called := false
+	Auth(testAuthService(t), false)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+	})).ServeHTTP(rec, req)
+	if !called {
+		t.Fatalf("handler was not called (status %d)", rec.Code)
+	}
+}
+
 func TestAuthBlocksMutationsWithoutSession(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/visits", nil)
 	rec := httptest.NewRecorder()

@@ -94,6 +94,8 @@ type PageData struct {
 	// and WantToTryCancelURL is where its Cancel link goes.
 	WantToTryForm      url.Values
 	WantToTryCancelURL string
+	// Spin is the "Where should we eat?" page.
+	Spin *Spin
 }
 
 type RestaurantResult struct {

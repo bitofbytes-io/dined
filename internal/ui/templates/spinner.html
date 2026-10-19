@@ -1,0 +1,42 @@
+{{define "spinner"}}
+{{template "top" .}}
+<main class="page-band want-page spin-page">
+  <section class="wide-ticket want-panel">
+    {{with .Spin}}
+    <div class="want-head">
+      <h1>Where should we eat?</h1>
+      <p class="want-meta">{{if .Total}}{{.Total}} {{if eq .Total 1}}place{{else}}places{{end}} in the hat: {{end}}our Want to Try list, plus favorites rated {{score .MinAverage}}+ that we haven't had in {{.RestDays}} days.</p>
+    </div>
+    {{if .Total}}
+    <form class="spin-form" method="get" action="/where-to-eat">
+      <input type="hidden" name="spin" value="1">
+      {{with .Pick}}<input type="hidden" name="last" value="{{.Restaurant.ID}}">{{end}}
+      <label class="want-field">Pick from<select name="from">
+        <option value="">Anywhere</option>
+        {{with .Cuisines}}<optgroup label="Cuisine">{{range .}}<option value="{{.Value}}" {{if .Selected}}selected{{end}}>{{.Label}}</option>{{end}}</optgroup>{{end}}
+        {{with .Cities}}<optgroup label="City">{{range .}}<option value="{{.Value}}" {{if .Selected}}selected{{end}}>{{.Label}}</option>{{end}}</optgroup>{{end}}
+      </select></label>
+      <button class="primary-button">{{if .Pick}}Spin again{{else}}Spin{{end}}</button>
+    </form>
+    {{with .Pick}}
+    <article class="want-card spin-card" data-spin-result data-spin-reel="{{$.Spin.ReelJSON}}" aria-live="polite">
+      <p class="eyebrow">{{if .WantToTry}}From Want to Try{{else}}Old favorite{{end}}</p>
+      <h2><a href="/restaurants/{{.Restaurant.ID}}" data-spin-name>{{.Restaurant.Name}}</a></h2>
+      <div class="spin-details">
+        {{with wantToTryPlaceLine .Restaurant}}<p class="want-meta">{{.}}</p>{{end}}
+        {{with .WantToTry}}<p class="want-meta">{{wantToTryIdea .SuggestedBy}} · added {{wantToTryAge .CreatedAt}}</p>{{with .Note}}<p class="want-note">{{.}}</p>{{end}}{{else}}{{with .Favorite}}<p class="want-meta">Rated {{score .AverageRating}} · last here {{wantToTryAge .LastVisitedAt}}</p>{{end}}{{end}}
+        {{with $.Spin.Turn}}<p class="spin-turn">{{if avatar .Name}}<img src="{{avatar .Name}}" alt="">{{end}}<span>Nobody agrees? It's <b>{{.Name}}'s</b> turn to pick. <span class="want-meta">Fewest picks in the last {{$.Spin.TurnDays}} days.</span></span></p>{{end}}
+      </div>
+    </article>
+    {{end}}
+    {{else}}
+    <div class="want-card want-empty">
+      <p>Nothing in the hat yet. Save a place to Want to Try, or rate a few dines, and check back.</p>
+      <a class="secondary-button" href="/want-to-try">See Want to Try</a>
+    </div>
+    {{end}}
+    {{end}}
+  </section>
+</main>
+{{template "bottom" .}}
+{{end}}

@@ -1,6 +1,6 @@
 # Dined
 
-Dined is a self-hosted restaurant memory ledger for recording visits, who chose a restaurant, who attended, ratings, photos, map-based history, and a shared Want to Try list of places to go next. It is a server-rendered Go application with Google sign-in.
+Dined is a self-hosted restaurant memory ledger for recording visits, who chose a restaurant, who attended, ratings, photos, map-based history, a shared Want to Try list of places to go next, and a "Where should we eat?" spinner that picks from that list and old favorites and says whose turn it is to pick. It is a server-rendered Go application with Google sign-in.
 
 ## Requirements
 
