@@ -134,6 +134,18 @@ func (m *MemoryStore) Restaurant(_ context.Context, id uuid.UUID) (*model.Restau
 	return nil, nil
 }
 
+func (m *MemoryStore) RestaurantsByPlaceIDs(_ context.Context, placeIDs []string) (map[string]model.Restaurant, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	restaurants := map[string]model.Restaurant{}
+	for _, restaurant := range m.restaurants {
+		if restaurant.GooglePlaceID != nil && slices.Contains(placeIDs, *restaurant.GooglePlaceID) {
+			restaurants[*restaurant.GooglePlaceID] = restaurant
+		}
+	}
+	return restaurants, nil
+}
+
 func (m *MemoryStore) Visit(_ context.Context, id uuid.UUID) (*model.Visit, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

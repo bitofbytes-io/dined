@@ -799,6 +799,32 @@ func TestRenderSearchShowsRemoveOnlyForZeroVisitSavedSpots(t *testing.T) {
 	}
 }
 
+func TestRenderDinedStampOnlyOnNearby(t *testing.T) {
+	restaurantID := uuid.New()
+	dined := map[string]*RestaurantResult{"place-deli": {
+		Restaurant:    model.Restaurant{ID: restaurantID, Name: "Third Street Deli"},
+		LatestVisit:   &model.Visit{VisitedAt: time.Date(2026, 6, 12, 18, 0, 0, 0, apptime.EasternLocation())},
+		VisitCount:    3,
+		AverageRating: 7.5,
+		HasAverage:    true,
+	}}
+	want := `<a class="dined-stamp" href="/restaurants/` + restaurantID.String() + `">Dined 3x · Avg 7.5 · Last Jun 2026</a>`
+	for _, page := range []string{"nearby", "search"} {
+		var out strings.Builder
+		if err := Render(&out, page, PageData{Authenticated: true, Places: wantToTryTestPlaces(), DinedPlaces: dined}); err != nil {
+			t.Fatal(err)
+		}
+		rendered := out.String()
+		stamps := strings.Count(rendered, `class="dined-stamp"`)
+		if page == "nearby" && (stamps != 1 || !strings.Contains(rendered, want)) {
+			t.Fatalf("nearby page has %d stamps, want one %q:\n%s", stamps, want, rendered)
+		}
+		if page == "search" && stamps != 0 {
+			t.Fatalf("search page has %d dined stamps, want none:\n%s", stamps, rendered)
+		}
+	}
+}
+
 func TestRenderSearchDoesNotShowGooglePlacesWarningForEmptySavedSearch(t *testing.T) {
 	var out strings.Builder
 	err := Render(&out, "search", PageData{Query: "Amigos"})

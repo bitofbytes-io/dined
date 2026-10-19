@@ -827,6 +827,10 @@ func TestPostgresVisitPositionMatchesVisitsPageOrder(t *testing.T) {
 	}
 }
 
+func TestPostgresRestaurantsByPlaceIDs(t *testing.T) {
+	assertRestaurantsByPlaceIDs(t, postgresStore(t))
+}
+
 func TestPostgresAllowsBackToBackPicks(t *testing.T) {
 	assertBackToBackPicks(t, postgresStore(t))
 }

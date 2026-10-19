@@ -159,6 +159,10 @@ func emptyMemoryStore() *MemoryStore {
 	return store
 }
 
+func TestMemoryStoreRestaurantsByPlaceIDs(t *testing.T) {
+	assertRestaurantsByPlaceIDs(t, emptyMemoryStore())
+}
+
 func TestMemoryStoreAllowsBackToBackPicks(t *testing.T) {
 	assertBackToBackPicks(t, emptyMemoryStore())
 }

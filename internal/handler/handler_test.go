@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -366,8 +367,66 @@ func TestRestaurantInputValidatesGoogleRating(t *testing.T) {
 	}
 }
 
+func TestNearbyStampsPlacesWeHaveDined(t *testing.T) {
+	ctx := context.Background()
+	store := repository.NewMemoryStore()
+	saved, err := store.RestaurantsByPlaceIDs(ctx, []string{"demo-hanks"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hanks, ok := saved["demo-hanks"]
+	if !ok {
+		t.Fatal("expected the memory store to link Hank's to demo-hanks")
+	}
+	visits, err := store.RestaurantVisits(ctx, hanks.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(visits) == 0 {
+		t.Fatal("expected the memory store to have visits to Hank's")
+	}
+	// A place saved only to Want to Try has a restaurant but no dines.
+	if _, err := store.SaveWantToTry(ctx, model.WantToTryInput{RestaurantName: "Wish List Cafe", GooglePlaceID: "place-wish"}); err != nil {
+		t.Fatal(err)
+	}
+	fakePlaces := &fakeGooglePlacesClient{
+		configured: true,
+		nearbyPlaces: []places.Place{
+			{ID: "demo-hanks", DisplayName: places.Name{Text: "Hank's Downtown Diner"}},
+			{ID: "place-wish", DisplayName: places.Name{Text: "Wish List Cafe"}},
+			{ID: "place-new", DisplayName: places.Name{Text: "Brand New Bistro"}},
+		},
+	}
+	handler := New(nil, store, fakePlaces, nil, nil)
+	rec := httptest.NewRecorder()
+
+	handler.Nearby(rec, httptest.NewRequestWithContext(ctx, http.MethodGet, "/nearby?lat=35.7796&lng=-78.6382", nil))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if got := strings.Count(body, `class="dined-stamp"`); got != 1 {
+		t.Fatalf("dined stamps = %d, want 1 for Hank's only:\n%s", got, body)
+	}
+	result := restaurantResult(hanks, visits)
+	want := fmt.Sprintf(`<a class="dined-stamp" href="/restaurants/%s">Dined %dx`, hanks.ID, result.VisitCount)
+	if !strings.Contains(body, want) {
+		t.Fatalf("body missing %q:\n%s", want, body)
+	}
+	if !strings.Contains(body, "Last "+result.LatestVisit.VisitedAt.In(apptime.EasternLocation()).Format("Jan 2006")+"</a>") {
+		t.Fatalf("stamp missing the latest visit month:\n%s", body)
+	}
+	for _, name := range []string{"Wish List Cafe", "Brand New Bistro"} {
+		if !strings.Contains(body, name) {
+			t.Fatalf("body missing place %q", name)
+		}
+	}
+}
+
 type fakeGooglePlacesClient struct {
 	configured       bool
+	nearbyPlaces     []places.Place
 	detailsPlace     *places.Place
 	staticMapImage   *places.StaticMapImage
 	staticMapErr     error
@@ -388,7 +447,7 @@ func (f *fakeGooglePlacesClient) TextSearchNear(context.Context, string, float64
 }
 
 func (f *fakeGooglePlacesClient) Nearby(context.Context, float64, float64) ([]places.Place, error) {
-	return nil, nil
+	return f.nearbyPlaces, nil
 }
 
 func (f *fakeGooglePlacesClient) Details(_ context.Context, _ string) (*places.Place, error) {

@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/bitofbytes-io/dined/internal/model"
 	"github.com/bitofbytes-io/dined/internal/places"
 	"github.com/bitofbytes-io/dined/internal/ui"
 )
@@ -95,6 +96,7 @@ func (h *Handler) Nearby(w http.ResponseWriter, r *http.Request) {
 	data := ui.PageData{
 		Title:          "Nearby",
 		Places:         found,
+		DinedPlaces:    h.dinedPlaces(r, found),
 		Query:          q,
 		LocationQuery:  near,
 		LocationStatus: locationStatus,
@@ -108,6 +110,45 @@ func (h *Handler) Nearby(w http.ResponseWriter, r *http.Request) {
 		h.addWantToTrySheet(r, &data)
 	}
 	h.render(w, "nearby", r, data)
+}
+
+// dinedPlaces looks up the visit history of the found places we have dined
+// at, keyed by Google place ID. A failed lookup only leaves out the history.
+func (h *Handler) dinedPlaces(r *http.Request, found []places.Place) map[string]*ui.RestaurantResult {
+	placeIDs := make([]string, 0, len(found))
+	for _, place := range found {
+		if place.ID != "" {
+			placeIDs = append(placeIDs, place.ID)
+		}
+	}
+	if len(placeIDs) == 0 {
+		return nil
+	}
+	saved, err := h.store.RestaurantsByPlaceIDs(r.Context(), placeIDs)
+	if err != nil {
+		slog.Warn("nearby saved restaurants", "error", err)
+		return nil
+	}
+	if len(saved) == 0 {
+		return nil
+	}
+	restaurants := make([]model.Restaurant, 0, len(saved))
+	for _, restaurant := range saved {
+		restaurants = append(restaurants, restaurant)
+	}
+	history, err := h.searchResults(r, restaurants)
+	if err != nil {
+		slog.Warn("nearby visit history", "error", err)
+		return nil
+	}
+	dined := make(map[string]*ui.RestaurantResult, len(history))
+	for i := range history {
+		// A place saved only to Want to Try has a restaurant but no dines.
+		if history[i].VisitCount > 0 {
+			dined[*history[i].Restaurant.GooglePlaceID] = &history[i]
+		}
+	}
+	return dined
 }
 
 func nearbyTextQuery(query, near string) string {
