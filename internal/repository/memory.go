@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"math"
 	"slices"
 	"sort"
 	"strings"
@@ -688,7 +689,133 @@ func (m *MemoryStore) Stats(context.Context) (model.Stats, error) {
 	stats.CitiesExplored = len(cities)
 	stats.TopRestaurants = topRestaurantStats(ratingsByRestaurantID)
 	stats.TopRestaurantsByCuisine = topRestaurantStatsByCuisine(ratingsByCuisineRestaurantID)
+	stats.BiggestSplitRestaurant, stats.BiggestSplit = biggestRatingSplit(m.visits)
+	stats.MostLoyalRestaurant, stats.MostLoyalVisits, stats.NostalgiaRestaurant, stats.NostalgiaLastVisitedAt = restaurantVisitRecords(m.visits)
+	stats.TasteProfiles = tasteProfiles(m.people, m.visits)
 	return stats, nil
+}
+
+// biggestRatingSplit mirrors Postgres: the visit whose highest and lowest
+// ratings are furthest apart, newest first and then by name on ties.
+func biggestRatingSplit(visits []model.Visit) (string, float64) {
+	var name string
+	var split float64
+	var visitedAt time.Time
+	for _, visit := range visits {
+		if len(visit.Ratings) < 2 {
+			continue
+		}
+		low, high := visit.Ratings[0].Score, visit.Ratings[0].Score
+		for _, rating := range visit.Ratings[1:] {
+			low = math.Min(low, rating.Score)
+			high = math.Max(high, rating.Score)
+		}
+		gap := high - low
+		if gap <= 0 {
+			continue
+		}
+		if name == "" || gap > split ||
+			(gap == split && (visit.VisitedAt.After(visitedAt) ||
+				(visit.VisitedAt.Equal(visitedAt) && visit.Restaurant.Name < name))) {
+			name, split, visitedAt = visit.Restaurant.Name, gap, visit.VisitedAt
+		}
+	}
+	return name, split
+}
+
+type restaurantVisitRecord struct {
+	name          string
+	visitCount    int
+	lastVisitedAt time.Time
+}
+
+// restaurantVisitRecords mirrors Postgres for the most loyal restaurant (most
+// visits, at least two) and the nostalgia restaurant (oldest last visit,
+// excluding the most recently visited).
+func restaurantVisitRecords(visits []model.Visit) (loyal string, loyalVisits int, nostalgia string, nostalgiaLastVisitedAt time.Time) {
+	byRestaurant := map[uuid.UUID]*restaurantVisitRecord{}
+	var latest time.Time
+	for _, visit := range visits {
+		record := byRestaurant[visit.Restaurant.ID]
+		if record == nil {
+			record = &restaurantVisitRecord{name: visit.Restaurant.Name}
+			byRestaurant[visit.Restaurant.ID] = record
+		}
+		record.visitCount++
+		if visit.VisitedAt.After(record.lastVisitedAt) {
+			record.lastVisitedAt = visit.VisitedAt
+		}
+		if visit.VisitedAt.After(latest) {
+			latest = visit.VisitedAt
+		}
+	}
+	var loyalAt time.Time
+	for _, record := range byRestaurant {
+		if record.visitCount >= 2 && (loyal == "" || record.visitCount > loyalVisits ||
+			(record.visitCount == loyalVisits && (record.lastVisitedAt.After(loyalAt) ||
+				(record.lastVisitedAt.Equal(loyalAt) && record.name < loyal)))) {
+			loyal, loyalVisits, loyalAt = record.name, record.visitCount, record.lastVisitedAt
+		}
+		if record.lastVisitedAt.Before(latest) && (nostalgia == "" || record.lastVisitedAt.Before(nostalgiaLastVisitedAt) ||
+			(record.lastVisitedAt.Equal(nostalgiaLastVisitedAt) && record.name < nostalgia)) {
+			nostalgia, nostalgiaLastVisitedAt = record.name, record.lastVisitedAt
+		}
+	}
+	return loyal, loyalVisits, nostalgia, nostalgiaLastVisitedAt
+}
+
+// tasteProfiles mirrors Postgres: each person's highest-rated category on
+// average over the visits whose ratings count, in people order.
+func tasteProfiles(people []model.Person, visits []model.Visit) []model.PersonTasteStat {
+	type categoryRatings struct {
+		category string
+		scores   []float64
+	}
+	byPerson := map[uuid.UUID]map[string]*categoryRatings{}
+	for _, visit := range visits {
+		category := strings.TrimSpace(valueOrEmpty(visit.Restaurant.Category))
+		if category == "" || !visit.CountsInAggregates() {
+			continue
+		}
+		key := strings.ToLower(category)
+		for _, rating := range visit.Ratings {
+			categories := byPerson[rating.Person.ID]
+			if categories == nil {
+				categories = map[string]*categoryRatings{}
+				byPerson[rating.Person.ID] = categories
+			}
+			entry := categories[key]
+			if entry == nil {
+				entry = &categoryRatings{category: category}
+				categories[key] = entry
+			}
+			if category < entry.category {
+				entry.category = category
+			}
+			entry.scores = append(entry.scores, rating.Score)
+		}
+	}
+	var profiles []model.PersonTasteStat
+	for _, person := range people {
+		var best *model.PersonTasteStat
+		for _, entry := range byPerson[person.ID] {
+			candidate := model.PersonTasteStat{
+				Person:        person.Name,
+				Category:      entry.category,
+				AverageRating: average(entry.scores),
+				RatingCount:   len(entry.scores),
+			}
+			if best == nil || candidate.AverageRating > best.AverageRating ||
+				(candidate.AverageRating == best.AverageRating && (candidate.RatingCount > best.RatingCount ||
+					(candidate.RatingCount == best.RatingCount && candidate.Category < best.Category))) {
+				best = &candidate
+			}
+		}
+		if best != nil {
+			profiles = append(profiles, *best)
+		}
+	}
+	return profiles
 }
 
 func sortVisitsNewestFirst(visits []model.Visit) {

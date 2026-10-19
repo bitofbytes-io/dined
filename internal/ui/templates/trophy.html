@@ -13,6 +13,9 @@
       <div class="record"><span class="record-value record-name">{{default .Stats.WorstPicker "Waiting"}}</span><p>Worst Picker</p>{{if .Stats.WorstPicker}}<small>{{score .Stats.WorstPickerAverage}} average</small>{{else}}<small>More dines needed</small>{{end}}</div>
       <div class="record"><span class="record-value">{{.Stats.NewPlaces}}</span><p>New Places</p></div>
       <div class="record"><span class="record-value">{{.Stats.CitiesExplored}}</span><p>Cities Explored</p></div>
+      <div class="record"><span class="record-value record-name{{if .Stats.BiggestSplitRestaurant}} record-place{{end}}">{{default .Stats.BiggestSplitRestaurant "Waiting"}}</span><p>Biggest Split</p>{{if .Stats.BiggestSplitRestaurant}}<small>{{score .Stats.BiggestSplit}} point gap</small>{{else}}<small>More dines needed</small>{{end}}</div>
+      <div class="record"><span class="record-value record-name{{if .Stats.MostLoyalRestaurant}} record-place{{end}}">{{default .Stats.MostLoyalRestaurant "Waiting"}}</span><p>Most Loyal</p>{{if .Stats.MostLoyalRestaurant}}<small>{{.Stats.MostLoyalVisits}} visits</small>{{else}}<small>No repeats yet</small>{{end}}</div>
+      <div class="record"><span class="record-value record-name{{if .Stats.NostalgiaRestaurant}} record-place{{end}}">{{default .Stats.NostalgiaRestaurant "Waiting"}}</span><p>Haven't Been Since</p>{{if .Stats.NostalgiaRestaurant}}<small>{{date .Stats.NostalgiaLastVisitedAt}}</small>{{else}}<small>More dines needed</small>{{end}}</div>
     </div>
     <div class="dined-map-panel">
       <div class="dined-map-heading"><p>Places We've Dined</p>{{if .TrophyMapPoints}}<span>{{len .TrophyMapPoints}} pinned</span>{{end}}</div>
@@ -23,6 +26,8 @@
       {{if .Stats.TopRestaurants}}<ol class="top-restaurant-list">{{range $index, $restaurant := .Stats.TopRestaurants}}<li><span class="track-rank">{{add1 $index}}</span><span class="track-name">{{$restaurant.Name}}</span><span class="track-score">{{score $restaurant.AverageRating}} avg</span></li>{{end}}</ol>{{else}}<p class="track-empty">Waiting on more dines</p>{{end}}
       <h2 class="track-section-title">Best By Cuisine</h2>
       {{if .Stats.TopRestaurantsByCuisine}}<ol class="top-restaurant-list cuisine-restaurant-list">{{range $restaurant := .Stats.TopRestaurantsByCuisine}}<li><span class="track-cuisine">{{$restaurant.Cuisine}}</span><span class="track-name">{{$restaurant.Name}}</span><span class="track-score">{{score $restaurant.AverageRating}} avg</span></li>{{end}}</ol>{{else}}<p class="track-empty">Waiting on cuisine data</p>{{end}}
+      <h2 class="track-section-title">Taste Profiles</h2>
+      {{if .Stats.TasteProfiles}}<ul class="top-restaurant-list cuisine-restaurant-list">{{range $profile := .Stats.TasteProfiles}}<li><span class="track-cuisine">{{$profile.Person}}</span><span class="track-name">{{$profile.Category}}</span><span class="track-score">{{score $profile.AverageRating}} avg</span></li>{{end}}</ul>{{else}}<p class="track-empty">Waiting on cuisine ratings</p>{{end}}
     </div>
   </section>
 </main>

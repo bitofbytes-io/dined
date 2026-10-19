@@ -192,6 +192,15 @@ func TestRenderTrophyShowsRedesignedRecordsAndTopRestaurants(t *testing.T) {
 				{Cuisine: "Mexican", Name: "El Patio Verde", AverageRating: 8.6, RatingCount: 4, VisitCount: 1},
 				{Cuisine: "Southern", Name: "Tupelo Honey", AverageRating: 8.2, RatingCount: 4, VisitCount: 1},
 			},
+			BiggestSplitRestaurant: "Saffron Counter",
+			BiggestSplit:           4.5,
+			MostLoyalRestaurant:    "Hank's Downtown Diner",
+			MostLoyalVisits:        6,
+			NostalgiaRestaurant:    "Bida Manda",
+			NostalgiaLastVisitedAt: time.Date(2025, 3, 14, 23, 0, 0, 0, time.UTC),
+			TasteProfiles: []model.PersonTasteStat{
+				{Person: "Caleb", Category: "Indian", AverageRating: 9.5, RatingCount: 2},
+			},
 		},
 	}
 	if err := Render(&out, "trophy", data); err != nil {
@@ -215,13 +224,25 @@ func TestRenderTrophyShowsRedesignedRecordsAndTopRestaurants(t *testing.T) {
 		"Southern",
 		"Tupelo Honey",
 		"8.2 avg",
+		"Biggest Split",
+		"Saffron Counter",
+		"4.5 point gap",
+		"Most Loyal",
+		"6 visits",
+		"Haven't Been Since",
+		"Bida Manda",
+		"Mar 14, 2025",
+		"Taste Profiles",
+		"Caleb",
+		"Indian",
+		"9.5 avg",
 	} {
 		if !strings.Contains(rendered, fragment) {
 			t.Fatalf("rendered trophy missing %q:\n%s", fragment, rendered)
 		}
 	}
-	if got := strings.Count(rendered, `class="record"`); got != 6 {
-		t.Fatalf("rendered %d trophy records, want 6:\n%s", got, rendered)
+	if got := strings.Count(rendered, `class="record"`); got != 9 {
+		t.Fatalf("rendered %d trophy records, want 9:\n%s", got, rendered)
 	}
 	for _, oldAward := range []string{"Safe Bet", "The Regular", "Table Divided", "Next Up"} {
 		if strings.Contains(rendered, oldAward) {
@@ -236,7 +257,8 @@ func TestRenderTrophyTopRestaurantsEmptyState(t *testing.T) {
 		t.Fatal(err)
 	}
 	rendered := out.String()
-	if !strings.Contains(rendered, "All-Time Top Restaurants") || !strings.Contains(rendered, "Waiting on more dines") || !strings.Contains(rendered, "Waiting on cuisine data") {
+	if !strings.Contains(rendered, "All-Time Top Restaurants") || !strings.Contains(rendered, "Waiting on more dines") || !strings.Contains(rendered, "Waiting on cuisine data") ||
+		!strings.Contains(rendered, "Waiting on cuisine ratings") || !strings.Contains(rendered, "No repeats yet") {
 		t.Fatalf("rendered trophy missing top restaurant empty state:\n%s", rendered)
 	}
 	if !strings.Contains(rendered, "No mapped dines yet") {

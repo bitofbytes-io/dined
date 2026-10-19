@@ -191,6 +191,10 @@ func TestMemoryStoreNoAggregatesWithoutTwoRaters(t *testing.T) {
 	assertNoAggregatesWithoutTwoRaters(t, emptyMemoryStore())
 }
 
+func TestMemoryStoreTrophyRecords(t *testing.T) {
+	assertTrophyRecords(t, emptyMemoryStore())
+}
+
 func TestMemoryStoreCreateVisitDoesNotReuseNameOnlyMatch(t *testing.T) {
 	store := NewMemoryStore()
 	people, err := store.People(context.Background())
@@ -761,6 +765,19 @@ func TestMemoryStoreStatsIncludesTrophyMetrics(t *testing.T) {
 	}
 	if stats.TopRestaurants[0].RatingCount != 4 || stats.TopRestaurants[0].VisitCount != 1 {
 		t.Fatalf("top counts = %d ratings/%d visits, want 4/1", stats.TopRestaurants[0].RatingCount, stats.TopRestaurants[0].VisitCount)
+	}
+	if stats.BiggestSplitRestaurant != "El Patio Verde" || math.Abs(stats.BiggestSplit-2) > 0.001 {
+		t.Fatalf("biggest split = %s %f, want El Patio Verde 2", stats.BiggestSplitRestaurant, stats.BiggestSplit)
+	}
+	// Every demo restaurant has one visit, so none is a repeat.
+	if stats.MostLoyalRestaurant != "" {
+		t.Fatalf("MostLoyalRestaurant = %q, want none", stats.MostLoyalRestaurant)
+	}
+	if stats.NostalgiaRestaurant != "Saffron Counter" {
+		t.Fatalf("NostalgiaRestaurant = %q, want Saffron Counter", stats.NostalgiaRestaurant)
+	}
+	if len(stats.TasteProfiles) != 4 || stats.TasteProfiles[0].Person != "Daniel" || stats.TasteProfiles[0].Category != "Mexican" {
+		t.Fatalf("taste profiles = %#v, want four with Daniel's Mexican first", stats.TasteProfiles)
 	}
 }
 
