@@ -25,6 +25,7 @@ type DinerStore interface {
 	Tags(context.Context) ([]model.Tag, error)
 	Restaurants(context.Context, string) ([]model.Restaurant, error)
 	Restaurant(context.Context, uuid.UUID) (*model.Restaurant, error)
+	RestaurantsByPlaceIDs(context.Context, []string) (map[string]model.Restaurant, error)
 	Visit(context.Context, uuid.UUID) (*model.Visit, error)
 	Visits(context.Context, int) ([]model.Visit, error)
 	VisitsPage(ctx context.Context, filter model.VisitFilter, limit, offset int) ([]model.Visit, error)
@@ -132,6 +133,32 @@ func (s *Store) Restaurant(ctx context.Context, id uuid.UUID) (*model.Restaurant
 		return nil, err
 	}
 	return &restaurant, nil
+}
+
+// RestaurantsByPlaceIDs loads the saved restaurants linked to any of the
+// Google place IDs, keyed by place ID. Unknown IDs are left out.
+func (s *Store) RestaurantsByPlaceIDs(ctx context.Context, placeIDs []string) (map[string]model.Restaurant, error) {
+	restaurants := map[string]model.Restaurant{}
+	if len(placeIDs) == 0 {
+		return restaurants, nil
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT id, name, address, city, latitude, longitude, phone, website, google_place_id,
+		       google_rating, google_price_level, category, is_chain, created_at, updated_at
+		FROM restaurants
+		WHERE google_place_id = ANY($1)`, placeIDs)
+	if err != nil {
+		return nil, fmt.Errorf("restaurants by place ID: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		restaurant, err := scanRestaurant(rows)
+		if err != nil {
+			return nil, err
+		}
+		restaurants[*restaurant.GooglePlaceID] = restaurant
+	}
+	return restaurants, rows.Err()
 }
 
 func (s *Store) Visit(ctx context.Context, id uuid.UUID) (*model.Visit, error) {

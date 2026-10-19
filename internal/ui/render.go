@@ -50,6 +50,7 @@ type PageData struct {
 	TrophyMapReady          bool
 	TrophyMapFallback       string
 	Places                  []places.Place
+	DinedPlaces             map[string]*RestaurantResult // visit history of Places we have dined at, by place ID
 	Query                   string
 	LocationQuery           string
 	LocationStatus          string
@@ -169,6 +170,9 @@ func funcs() template.FuncMap {
 				return ""
 			}
 			return t.In(apptime.EasternLocation()).Format("Jan 2, 2006")
+		},
+		"monthYear": func(t time.Time) string {
+			return t.In(apptime.EasternLocation()).Format("Jan 2006")
 		},
 		"avg": func(v model.Visit) string {
 			if len(v.Ratings) == 0 {
