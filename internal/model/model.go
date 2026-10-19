@@ -182,6 +182,23 @@ type WantToTryInput struct {
 	Note          string
 }
 
+// RestedFavorite is a restaurant the family rated well and has not been back
+// to lately, so the "Where should we eat?" spinner can land on it.
+type RestedFavorite struct {
+	Restaurant Restaurant
+	// AverageRating counts only visits whose ratings count in aggregates.
+	AverageRating float64
+	LastVisitedAt time.Time
+}
+
+// PickCount is how many times a person picked where to eat since some time.
+type PickCount struct {
+	Person Person
+	Picks  int
+	// LastPickedAt is the person's latest pick ever, or nil if they never picked.
+	LastPickedAt *time.Time
+}
+
 type Stats struct {
 	TotalDines              int
 	AverageRating           float64

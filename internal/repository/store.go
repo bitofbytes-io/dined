@@ -48,6 +48,8 @@ type DinerStore interface {
 	WantToTryItem(context.Context, uuid.UUID) (*model.WantToTryItem, error)
 	SaveWantToTry(context.Context, model.WantToTryInput) (*uuid.UUID, error)
 	DeleteWantToTry(context.Context, uuid.UUID) error
+	RestedFavorites(ctx context.Context, minAverage float64, lastVisitedBefore time.Time) ([]model.RestedFavorite, error)
+	PickCounts(ctx context.Context, since time.Time) ([]model.PickCount, error)
 }
 
 func New(pool *pgxpool.Pool) *Store {
