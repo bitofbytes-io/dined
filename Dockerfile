@@ -7,7 +7,8 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o /out/dined ./cmd/dined
+RUN CGO_ENABLED=0 GOOS=linux go build -o /out/dined ./cmd/dined \
+    && CGO_ENABLED=0 GOOS=linux go build -o /out/photo-storage ./cmd/photo-storage
 
 FROM alpine:3.23
 WORKDIR /app
@@ -15,6 +16,7 @@ WORKDIR /app
 RUN apk add --no-cache ca-certificates wget
 
 COPY --from=builder /out/dined ./dined
+COPY --from=builder /out/photo-storage ./photo-storage
 COPY --from=builder /src/static ./static
 COPY migrations ./migrations
 

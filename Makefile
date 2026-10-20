@@ -30,9 +30,10 @@ run-postgres: ## Run locally against Postgres
 	@test -n '$(DATABASE_URL)' || (echo "DATABASE_URL must be set in local.mk or the environment" >&2; exit 1)
 	APP_ENV=$(APP_ENV) DATA_STORE=postgres PORT=$(PORT) DATABASE_URL='$(DATABASE_URL)' GOOGLE_PLACES_API_KEY="$(GOOGLE_PLACES_API_KEY)" AUTH_GOOGLE_CLIENT_ID="$(AUTH_GOOGLE_CLIENT_ID)" AUTH_GOOGLE_CLIENT_SECRET="$(AUTH_GOOGLE_CLIENT_SECRET)" AUTH_GOOGLE_REDIRECT_URL="$(AUTH_GOOGLE_REDIRECT_URL)" AUTH_GOOGLE_ALLOWED_EMAILS="$(AUTH_GOOGLE_ALLOWED_EMAILS)" AUTH_GOOGLE_ALLOWED_DOMAINS="$(AUTH_GOOGLE_ALLOWED_DOMAINS)" AUTH_SESSION_TTL="$(AUTH_SESSION_TTL)" SECURE_COOKIES=false go run ./cmd/dined
 
-build: ## Build the production binary
+build: ## Build the app and explicit photo audit/backfill utility
 	mkdir -p $(BIN_DIR)
 	go build -o $(BIN_DIR)/dined ./cmd/dined
+	go build -o $(BIN_DIR)/photo-storage ./cmd/photo-storage
 
 migrate: ## Apply database migrations
 	@test -n '$(DATABASE_URL)' || (echo "DATABASE_URL must be set in local.mk or the environment" >&2; exit 1)

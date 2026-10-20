@@ -3,7 +3,9 @@ package server
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -18,6 +20,7 @@ import (
 	"github.com/bitofbytes-io/dined/internal/model"
 	"github.com/bitofbytes-io/dined/internal/places"
 	"github.com/bitofbytes-io/dined/internal/repository"
+	"github.com/bitofbytes-io/dined/internal/testutil"
 	"github.com/google/uuid"
 )
 
@@ -94,7 +97,7 @@ func TestRouterSecurityHeaders(t *testing.T) {
 				{name: "invalid photo", method: http.MethodGet, path: "/photos/invalid", status: http.StatusBadRequest},
 				{name: "missing photo", method: http.MethodGet, path: "/photos/" + uuid.NewString(), status: http.StatusNotFound},
 				{name: "photo", method: http.MethodGet, path: photoURL, status: http.StatusOK, contentType: "image/jpeg"},
-				{name: "cached photo", method: http.MethodGet, path: photoURL, status: http.StatusNotModified, headers: map[string]string{"If-None-Match": `"` + photoID + `"`}},
+				{name: "cached photo", method: http.MethodGet, path: photoURL, status: http.StatusNotModified, headers: map[string]string{"If-None-Match": fmt.Sprintf(`"photo--%x"`, sha256.Sum256(photoJPEG))}},
 				{name: "photo range", method: http.MethodGet, path: photoURL, status: http.StatusPartialContent, headers: map[string]string{"Range": "bytes=0-3"}, contentType: "image/jpeg"},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
@@ -118,10 +121,10 @@ func TestRouterSecurityHeaders(t *testing.T) {
 						t.Errorf("authentication redirect = %q", rec.Header().Get("Location"))
 					}
 					if tc.path == photoURL {
-						if got := rec.Header().Get("Cache-Control"); got != "public, max-age=300" {
+						if got := rec.Header().Get("Cache-Control"); got != "public, max-age=86400" {
 							t.Errorf("photo Cache-Control = %q", got)
 						}
-						if got := rec.Header().Get("ETag"); got != `"`+photoID+`"` {
+						if got := rec.Header().Get("ETag"); got != fmt.Sprintf(`"photo--%x"`, sha256.Sum256(photoJPEG)) {
 							t.Errorf("photo ETag = %q", got)
 						}
 						want := photoJPEG
@@ -576,8 +579,8 @@ func TestRouterCreateVisitStoresPhotos(t *testing.T) {
 	form.Set("picker_id", people[0].ID.String())
 	form.Set("price_level", "2")
 	form.Set("rating_"+people[0].ID.String(), "8")
-	form.Add("photo_data_uri", "data:image/jpeg;base64,aGVsbG8=")
-	form.Add("photo_data_uri", "data:image/jpeg;base64,dGFjbw==")
+	form.Add("photo_data_uri", testutil.PhotoURI(1))
+	form.Add("photo_data_uri", testutil.PhotoURI(2))
 
 	router, token := newAuthenticatedTestRouter(t, store)
 	req := httptest.NewRequest(http.MethodPost, "/visits", strings.NewReader(form.Encode()))
@@ -602,7 +605,7 @@ func TestRouterCreateVisitStoresPhotos(t *testing.T) {
 	if len(created.Photos) != 2 {
 		t.Fatalf("photo len = %d, want 2: %#v", len(created.Photos), created.Photos)
 	}
-	if created.Photos[0].ContentType != "image/jpeg" || created.Photos[0].ByteCount != 5 {
+	if created.Photos[0].ContentType != "image/jpeg" || created.Photos[0].ByteCount != len(testutil.JPEG(8, 6, 1)) {
 		t.Fatalf("first photo = %#v", created.Photos[0])
 	}
 }
@@ -636,8 +639,8 @@ func TestRouterUpdateVisitErrorPreservesPostedForm(t *testing.T) {
 		Ratings:        map[uuid.UUID]float64{people[0].ID: 6},
 		TagIDs:         []uuid.UUID{tags[0].ID},
 		Photos: []model.VisitPhotoInput{
-			{DataURI: "data:image/jpeg;base64,a2VlcA=="},
-			{DataURI: "data:image/jpeg;base64,ZHJvcA=="},
+			{DataURI: testutil.PhotoURI(10)},
+			{DataURI: testutil.PhotoURI(11)},
 		},
 	})
 	if err != nil {
@@ -648,7 +651,7 @@ func TestRouterUpdateVisitErrorPreservesPostedForm(t *testing.T) {
 		t.Fatalf("saved visit = %#v, err = %v", saved, err)
 	}
 	keptPhoto, removedPhoto := saved.Photos[0], saved.Photos[1]
-	const newPhoto = "data:image/jpeg;base64,bmV3"
+	var newPhoto = testutil.PhotoURI(8)
 
 	form := url.Values{}
 	form.Set("restaurant_id", saved.Restaurant.ID.String())
@@ -684,7 +687,7 @@ func TestRouterUpdateVisitErrorPreservesPostedForm(t *testing.T) {
 		`name="new_tag" placeholder="Great fries" value="Patio"`,
 		`Edited notes</textarea>`,
 		`name="keep_photo_id" value="` + keptPhoto.ID.String() + `"`,
-		`name="photo_data_uri" value="` + newPhoto + `"`,
+		`name="photo_data_uri" value="` + strings.ReplaceAll(newPhoto, "+", "&#43;") + `"`,
 	} {
 		if !strings.Contains(rendered, fragment) {
 			t.Fatalf("response missing %q:\n%s", fragment, rendered)

@@ -152,3 +152,21 @@ func containsAddr(prefixes []netip.Prefix, addr string) bool {
 	}
 	return false
 }
+
+func TestLoadDatabaseURLUsesExistingSecretPrecedence(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "database-secret")
+	if err := os.WriteFile(path, []byte(" postgres://fixture:local-only@localhost/disposable \n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DATABASE_URL", "")
+	t.Setenv("DATABASE_URL_FILE", path)
+	got, err := LoadDatabaseURL()
+	if err != nil || got != "postgres://fixture:local-only@localhost/disposable" {
+		t.Fatal("database file not loaded with trimming", err)
+	}
+	t.Setenv("DATABASE_URL", "postgres://env-fixture@localhost/another-disposable")
+	got, err = LoadDatabaseURL()
+	if err != nil || got != "postgres://env-fixture@localhost/another-disposable" {
+		t.Fatal("database environment precedence changed", err)
+	}
+}

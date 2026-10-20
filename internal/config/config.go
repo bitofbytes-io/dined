@@ -52,7 +52,7 @@ func Load() (*Config, error) {
 	if cfg.DataStore, err = getEnv("DATA_STORE", DataStorePostgres); err != nil {
 		return nil, err
 	}
-	if cfg.DatabaseURL, err = getEnvOrFile("DATABASE_URL", "/run/secrets/dined_database_url"); err != nil {
+	if cfg.DatabaseURL, err = LoadDatabaseURL(); err != nil {
 		return nil, err
 	}
 	if cfg.GooglePlacesAPIKey, err = getEnvOrFile("GOOGLE_PLACES_API_KEY", "/run/secrets/dined_google_places_api_key"); err != nil {
@@ -122,6 +122,13 @@ func getEnv(key, defaultVal string) (string, error) {
 		return val, nil
 	}
 	return defaultVal, nil
+}
+
+// LoadDatabaseURL uses the application's existing database configuration only:
+// environment, explicit secret file, then the deployed Docker secret mount.
+// Operator tools can use it without reading OAuth or Places credentials.
+func LoadDatabaseURL() (string, error) {
+	return getEnvOrFile("DATABASE_URL", "/run/secrets/dined_database_url")
 }
 
 func getEnvOrFile(key, defaultPath string) (string, error) {

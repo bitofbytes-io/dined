@@ -142,7 +142,7 @@ func (h *Handler) CreateVisit(w http.ResponseWriter, r *http.Request) {
 		h.renderLogError(w, r, err.Error())
 		return
 	}
-	if err := input.Validate(); err != nil {
+	if input, err = input.Prepare(r.Context()); err != nil {
 		h.renderLogError(w, r, err.Error())
 		return
 	}
@@ -212,7 +212,7 @@ func (h *Handler) UpdateVisit(w http.ResponseWriter, r *http.Request) {
 		h.renderVisitEditError(w, r, id, err.Error())
 		return
 	}
-	if err := input.Validate(); err != nil {
+	if input, err = input.Prepare(r.Context()); err != nil {
 		h.renderVisitEditError(w, r, id, err.Error())
 		return
 	}

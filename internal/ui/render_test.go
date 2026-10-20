@@ -10,10 +10,11 @@ import (
 
 	"github.com/bitofbytes-io/dined/internal/apptime"
 	"github.com/bitofbytes-io/dined/internal/model"
+	"github.com/bitofbytes-io/dined/internal/testutil"
 	"github.com/google/uuid"
 )
 
-const testPhotoDataURI = "data:image/jpeg;base64,aGVsbG8="
+var testPhotoDataURI = testutil.PhotoURI(1)
 
 func TestAssetAppendsStaticFileVersion(t *testing.T) {
 	dir := t.TempDir()
@@ -561,7 +562,7 @@ func TestRenderLogIncludesPhotoUploadAndPrefilledPhotos(t *testing.T) {
 	for _, fragment := range []string{
 		`data-photo-uploader data-photo-limit="4" data-photo-max-bytes="512000"`,
 		`Food, fun, memories. Up to 4.`,
-		`name="photo_data_uri" value="` + testPhotoDataURI + `"`,
+		`name="photo_data_uri" value="` + strings.ReplaceAll(testPhotoDataURI, "+", "&#43;") + `"`,
 		`type="file" accept="image/*" multiple data-photo-input`,
 		`id="photo-preview-modal"`,
 		`<script src="/static/app.js"></script>`,
@@ -571,7 +572,7 @@ func TestRenderLogIncludesPhotoUploadAndPrefilledPhotos(t *testing.T) {
 		}
 	}
 	addIndex := strings.Index(rendered, `data-photo-add`)
-	photoIndex := strings.Index(rendered, `name="photo_data_uri" value="`+testPhotoDataURI+`"`)
+	photoIndex := strings.Index(rendered, `name="photo_data_uri" value="`+strings.ReplaceAll(testPhotoDataURI, "+", "&#43;")+`"`)
 	if addIndex < 0 || photoIndex < 0 || addIndex > photoIndex {
 		t.Fatalf("rendered log should place add-photo tile before photo thumbnails:\n%s", rendered)
 	}
@@ -639,7 +640,7 @@ func TestRenderDinesShowsPhotoStripAndPreviewHooks(t *testing.T) {
 	for _, fragment := range []string{
 		`class="visit-photo-strip" data-photo-strip`,
 		`data-photo-preview data-photo-src="/photos/` + photos[0].ID.String() + `"`,
-		`<img src="/photos/` + photos[3].ID.String() + `" alt="" loading="lazy">`,
+		`<img src="/photos/` + photos[3].ID.String() + `?variant=thumb-v1" alt="" loading="lazy">`,
 		`id="photo-preview-image"`,
 		`id="photo-preview-prev"`,
 		`id="photo-preview-next"`,
@@ -691,7 +692,7 @@ func TestRenderVisitEditPrefillsRatingsTagsAndNotes(t *testing.T) {
 		`value="` + tagID.String() + `" checked>`,
 		`href="/restaurants/` + restaurantID.String() + `/edit?return_visit_id=` + visitID.String() + `"`,
 		`name="keep_photo_id" value="` + photoID.String() + `"`,
-		`data-photo-preview data-photo-src="` + testPhotoDataURI + `"`,
+		`data-photo-preview data-photo-src="/photos/` + photoID.String() + `"`,
 		note,
 	} {
 		if !strings.Contains(rendered, fragment) {

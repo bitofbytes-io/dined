@@ -16,6 +16,7 @@ import (
 	"github.com/bitofbytes-io/dined/internal/middleware"
 	"github.com/bitofbytes-io/dined/internal/model"
 	"github.com/bitofbytes-io/dined/internal/repository"
+	"github.com/bitofbytes-io/dined/internal/testutil"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 	"github.com/google/uuid"
@@ -211,9 +212,9 @@ func TestHomeRecentDinesFitInsideDesktopBoothScene(t *testing.T) {
 			},
 			NewTag: "Would Return",
 			Photos: []model.VisitPhotoInput{
-				{DataURI: "data:image/jpeg;base64,aGVsbG8="},
-				{DataURI: "data:image/jpeg;base64,dGFjbw=="},
-				{DataURI: "data:image/jpeg;base64,cmljZQ=="},
+				{DataURI: testutil.PhotoURI(1)},
+				{DataURI: testutil.PhotoURI(2)},
+				{DataURI: testutil.PhotoURI(9)},
 			},
 		})
 		if err != nil {
@@ -319,9 +320,9 @@ func TestEditVisitPhotoAddTileIsFirstAndFullSizeOnMobile(t *testing.T) {
 		PriceLevel:     2,
 		Ratings:        map[uuid.UUID]float64{people[0].ID: 8},
 		Photos: []model.VisitPhotoInput{
-			{DataURI: "data:image/jpeg;base64,aGVsbG8="},
-			{DataURI: "data:image/jpeg;base64,dGFjbw=="},
-			{DataURI: "data:image/jpeg;base64,cmljZQ=="},
+			{DataURI: testutil.PhotoURI(1)},
+			{DataURI: testutil.PhotoURI(2)},
+			{DataURI: testutil.PhotoURI(9)},
 		},
 	})
 	if err != nil {

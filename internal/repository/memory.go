@@ -153,6 +153,7 @@ func (m *MemoryStore) Visit(_ context.Context, id uuid.UUID) (*model.Visit, erro
 	for _, visit := range m.visits {
 		if visit.ID == id {
 			copy := visit
+			copy.Photos = photoMetadata(visit.Photos)
 			return &copy, nil
 		}
 	}
@@ -284,13 +285,21 @@ func (m *MemoryStore) VisitPosition(_ context.Context, id uuid.UUID) (int, bool,
 	return 0, false, nil
 }
 
-func (m *MemoryStore) VisitPhoto(_ context.Context, id uuid.UUID) (*model.VisitPhoto, error) {
+func (m *MemoryStore) VisitPhoto(_ context.Context, id uuid.UUID, variant string) (*model.VisitPhoto, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	for _, visit := range m.visits {
 		for _, photo := range visit.Photos {
 			if photo.ID == id {
 				copy := photo
+				if variant == model.PhotoThumbnailVersion {
+					copy.Bytes = photo.ThumbnailBytes
+				}
+				copy.Bytes = append([]byte(nil), copy.Bytes...)
+				copy.ThumbnailBytes = nil
+				if len(copy.Bytes) > 0 {
+					copy.DataURI = ""
+				}
 				return &copy, nil
 			}
 		}
@@ -341,6 +350,8 @@ func photoMetadata(photos []model.VisitPhoto) []model.VisitPhoto {
 	metadata := make([]model.VisitPhoto, len(photos))
 	for i, photo := range photos {
 		photo.DataURI = ""
+		photo.Bytes = nil
+		photo.ThumbnailBytes = nil
 		metadata[i] = photo
 	}
 	return metadata
@@ -384,12 +395,16 @@ func (m *MemoryStore) VisitedRestaurantMapPoints(context.Context) ([]model.Resta
 	return points, nil
 }
 
-func (m *MemoryStore) CreateVisit(_ context.Context, input model.VisitInput) (*uuid.UUID, error) {
-	if err := input.Validate(); err != nil {
+func (m *MemoryStore) CreateVisit(ctx context.Context, input model.VisitInput) (*uuid.UUID, error) {
+	input, photos, err := prepareVisitInput(ctx, input)
+	if err != nil {
 		return nil, err
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 
 	// Check the picker before creating a restaurant, as Postgres rolls both back.
 	picker, err := m.pickerFromInput(input.PickerID)
@@ -412,7 +427,7 @@ func (m *MemoryStore) CreateVisit(_ context.Context, input model.VisitInput) (*u
 		UpdatedAt:  time.Now(),
 	}
 	visit.Ratings = m.ratingsFromInput(input)
-	visit.Photos = photosFromInput(visit.ID, input.Photos, 0)
+	visit.Photos = photosFromPrepared(visit.ID, photos, 0)
 	for _, tagID := range input.TagIDs {
 		if tag, ok := m.tagByID(tagID); ok {
 			visit.Tags = append(visit.Tags, tag)
@@ -477,8 +492,9 @@ func (m *MemoryStore) UpdateRestaurantGoogleMetadata(_ context.Context, id uuid.
 	return nil
 }
 
-func (m *MemoryStore) UpdateVisit(_ context.Context, id uuid.UUID, input model.VisitInput) error {
-	if err := input.Validate(); err != nil {
+func (m *MemoryStore) UpdateVisit(ctx context.Context, id uuid.UUID, input model.VisitInput) error {
+	input, preparedPhotos, err := prepareVisitInput(ctx, input)
+	if err != nil {
 		return err
 	}
 	if input.RestaurantID == nil {
@@ -487,6 +503,9 @@ func (m *MemoryStore) UpdateVisit(_ context.Context, id uuid.UUID, input model.V
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 
 	restaurant, ok := m.findRestaurant(input.RestaurantID)
 	if !ok {
@@ -509,6 +528,11 @@ func (m *MemoryStore) UpdateVisit(_ context.Context, id uuid.UUID, input model.V
 
 	ratings := m.ratingsFromInput(input)
 
+	photos, err := m.reconciledVisitPhotos(m.visits[visitIndex], input, preparedPhotos)
+	if err != nil {
+		return err
+	}
+
 	tagIDs := append([]uuid.UUID(nil), input.TagIDs...)
 	if name := strings.TrimSpace(input.NewTag); name != "" {
 		tag := model.Tag{ID: uuid.New(), Name: name}
@@ -520,10 +544,6 @@ func (m *MemoryStore) UpdateVisit(_ context.Context, id uuid.UUID, input model.V
 		if tag, ok := m.tagByID(tagID); ok {
 			tags = append(tags, tag)
 		}
-	}
-	photos, err := m.reconciledVisitPhotos(m.visits[visitIndex], input)
-	if err != nil {
-		return err
 	}
 
 	// Like Postgres, only a dine moved to another restaurant clears that one's item.
@@ -980,7 +1000,7 @@ func (m *MemoryStore) ratingsFromInput(input model.VisitInput) []model.Rating {
 	return ratings
 }
 
-func (m *MemoryStore) reconciledVisitPhotos(visit model.Visit, input model.VisitInput) ([]model.VisitPhoto, error) {
+func (m *MemoryStore) reconciledVisitPhotos(visit model.Visit, input model.VisitInput, preparedPhotos []model.VisitPhoto) ([]model.VisitPhoto, error) {
 	existingByID := map[uuid.UUID]model.VisitPhoto{}
 	for _, photo := range visit.Photos {
 		existingByID[photo.ID] = photo
@@ -995,23 +1015,18 @@ func (m *MemoryStore) reconciledVisitPhotos(visit model.Visit, input model.Visit
 		photo.SortOrder = order
 		photos = append(photos, photo)
 	}
-	photos = append(photos, photosFromInput(visit.ID, input.Photos, len(photos))...)
+	photos = append(photos, photosFromPrepared(visit.ID, preparedPhotos, len(photos))...)
 	return photos, nil
 }
 
-func photosFromInput(visitID uuid.UUID, inputs []model.VisitPhotoInput, startOrder int) []model.VisitPhoto {
+func photosFromPrepared(visitID uuid.UUID, inputs []model.VisitPhoto, startOrder int) []model.VisitPhoto {
 	photos := make([]model.VisitPhoto, 0, len(inputs))
-	for i, input := range inputs {
-		byteCount, _ := model.ValidateVisitPhotoDataURI(input.DataURI)
-		photos = append(photos, model.VisitPhoto{
-			ID:          uuid.New(),
-			VisitID:     visitID,
-			DataURI:     strings.TrimSpace(input.DataURI),
-			ContentType: "image/jpeg",
-			ByteCount:   byteCount,
-			SortOrder:   startOrder + i,
-			CreatedAt:   time.Now(),
-		})
+	for i, photo := range inputs {
+		photo.ID = uuid.New()
+		photo.VisitID = visitID
+		photo.SortOrder = startOrder + i
+		photo.CreatedAt = time.Now()
+		photos = append(photos, photo)
 	}
 	return photos
 }
