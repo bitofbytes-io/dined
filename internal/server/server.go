@@ -39,6 +39,7 @@ func (s *Server) Router() http.Handler {
 	r.Use(middleware.RealIP(s.cfg.TrustedProxies))
 	r.Use(middleware.Logger)
 	r.Use(metrics.Middleware)
+	r.Use(middleware.SecurityHeaders(s.cfg.SecureCookies))
 	r.Use(chimw.Recoverer)
 	r.Use(middleware.SameOrigin)
 
