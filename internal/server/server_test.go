@@ -579,7 +579,7 @@ func TestRouterCreateVisitRejectsInvalidGoogleRating(t *testing.T) {
 	router, token := newAuthenticatedTestRouter(t, store)
 
 	for value, want := range map[string]string{
-		"999": "Google rating must be between 0 and 5",
+		"999": "rating from Google must be between 0 and 5",
 		"NaN": "Google rating must be a finite number",
 	} {
 		form := url.Values{}

@@ -38,6 +38,7 @@ jobs:
           cache-dependency-path: go.sum
       - run: make test
       - run: go vet ./...
+      - run: make lint
       - name: Check Go vulnerabilities
         # Install, then run it with the go.mod toolchain so standard-library findings match
         # the version we ship.
