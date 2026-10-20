@@ -123,6 +123,8 @@ curl -s localhost:9464/metrics | grep '^dined_'
 
 ## Development
 
+`make test` runs the Go race detector and requires a [supported platform](https://go.dev/doc/articles/race_detector#Requirements), a C compiler, and cgo enabled (`CGO_ENABLED=1`).
+
 PostgreSQL regression tests use `DINED_TEST_DATABASE_URL` and create isolated schemas that are removed afterward. Point it at a disposable database; the test account needs permission to create schemas and the `pgcrypto` extension. Without this variable, PostgreSQL tests are skipped. CI supplies a PostgreSQL service for every pull request.
 
 ```bash

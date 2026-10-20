@@ -46,8 +46,8 @@ migrate-status: ## Show migration status
 	@test -n '$(DATABASE_URL)' || (echo "DATABASE_URL must be set in local.mk or the environment" >&2; exit 1)
 	goose -dir migrations postgres '$(DATABASE_URL)' status
 
-test: ## Run Go tests
-	go test -v ./...
+test: ## Run Go tests with the race detector
+	go test -race -v ./...
 
 lint: ## Check Go formatting and run Staticcheck
 	@files="$$(gofmt -l .)" || exit $$?; \

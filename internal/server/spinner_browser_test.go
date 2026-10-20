@@ -49,9 +49,13 @@ func TestSpinnerSpinsToAPickInTheBrowser(t *testing.T) {
 		chromedp.Navigate(server.URL+"/where-to-eat"),
 		chromedp.WaitVisible(`.spin-form select[name="from"]`, chromedp.ByQuery),
 		chromedp.SetValue(`.spin-form select[name="from"]`, "cuisine:Pizza", chromedp.ByQuery),
+		chromedp.Evaluate(`window.firstSpinSettled = false;
+			document.addEventListener("htmx:afterSettle", function () { window.firstSpinSettled = true; }, {once: true});`, nil),
 		chromedp.Click(`.spin-form button`, chromedp.ByQuery),
 		chromedp.WaitVisible(`[data-spin-result]`, chromedp.ByQuery),
 		chromedp.WaitNotPresent(`[data-spin-result].is-spinning`, chromedp.ByQuery),
+		// The result is visible before HTMX finishes initializing the replacement form.
+		chromedp.Poll(`window.firstSpinSettled === true`, nil),
 		chromedp.Text(`[data-spin-name]`, &name, chromedp.ByQuery),
 		chromedp.Text(`.spin-form button`, &again, chromedp.ByQuery),
 		chromedp.Location(&location),
