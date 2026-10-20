@@ -15,6 +15,7 @@ import (
 	"github.com/bitofbytes-io/dined/internal/model"
 	"github.com/bitofbytes-io/dined/internal/places"
 	"github.com/bitofbytes-io/dined/internal/repository"
+	"github.com/bitofbytes-io/dined/internal/testutil"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -317,8 +318,8 @@ func TestVisitInputParsesPhotos(t *testing.T) {
 		"rating_" + personID.String(): {"8"},
 		"keep_photo_id":               {keptPhotoID.String()},
 		"photo_data_uri": {
-			"data:image/jpeg;base64,aGVsbG8=",
-			"data:image/jpeg;base64,dGFjbw==",
+			testutil.PhotoURI(1),
+			testutil.PhotoURI(2),
 		},
 	}
 	req := httptest.NewRequest("POST", "/visits", strings.NewReader(form.Encode()))
@@ -334,7 +335,7 @@ func TestVisitInputParsesPhotos(t *testing.T) {
 	if len(input.KeepPhotoIDs) != 1 || input.KeepPhotoIDs[0] != keptPhotoID {
 		t.Fatalf("kept photo ids = %#v", input.KeepPhotoIDs)
 	}
-	if len(input.Photos) != 2 || input.Photos[0].DataURI != "data:image/jpeg;base64,aGVsbG8=" || input.Photos[1].DataURI != "data:image/jpeg;base64,dGFjbw==" {
+	if len(input.Photos) != 2 || input.Photos[0].DataURI != testutil.PhotoURI(1) || input.Photos[1].DataURI != testutil.PhotoURI(2) {
 		t.Fatalf("photos = %#v", input.Photos)
 	}
 }

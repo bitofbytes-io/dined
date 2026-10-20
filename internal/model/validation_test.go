@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bitofbytes-io/dined/internal/testutil"
 	"github.com/google/uuid"
 )
 
@@ -63,7 +64,7 @@ func TestVisitInputValidateAcceptsJPEGPhoto(t *testing.T) {
 		VisitedAt:      time.Now(),
 		PriceLevel:     2,
 		Ratings:        map[uuid.UUID]float64{uuid.New(): 8.5},
-		Photos:         []VisitPhotoInput{{DataURI: visitPhotoDataURI([]byte("jpeg"))}},
+		Photos:         []VisitPhotoInput{{DataURI: testutil.PhotoURI(1)}},
 	}.Validate()
 	if err != nil {
 		t.Fatal(err)

@@ -153,6 +153,7 @@ func (m *MemoryStore) Visit(_ context.Context, id uuid.UUID) (*model.Visit, erro
 	for _, visit := range m.visits {
 		if visit.ID == id {
 			copy := visit
+			copy.Photos = photoMetadata(visit.Photos)
 			return &copy, nil
 		}
 	}
@@ -284,13 +285,21 @@ func (m *MemoryStore) VisitPosition(_ context.Context, id uuid.UUID) (int, bool,
 	return 0, false, nil
 }
 
-func (m *MemoryStore) VisitPhoto(_ context.Context, id uuid.UUID) (*model.VisitPhoto, error) {
+func (m *MemoryStore) VisitPhoto(_ context.Context, id uuid.UUID, variant string) (*model.VisitPhoto, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	for _, visit := range m.visits {
 		for _, photo := range visit.Photos {
 			if photo.ID == id {
 				copy := photo
+				if variant == model.PhotoThumbnailVersion {
+					copy.Bytes = photo.ThumbnailBytes
+				}
+				copy.Bytes = append([]byte(nil), copy.Bytes...)
+				copy.ThumbnailBytes = nil
+				if len(copy.Bytes) > 0 {
+					copy.DataURI = ""
+				}
 				return &copy, nil
 			}
 		}
@@ -341,6 +350,8 @@ func photoMetadata(photos []model.VisitPhoto) []model.VisitPhoto {
 	metadata := make([]model.VisitPhoto, len(photos))
 	for i, photo := range photos {
 		photo.DataURI = ""
+		photo.Bytes = nil
+		photo.ThumbnailBytes = nil
 		metadata[i] = photo
 	}
 	return metadata
@@ -1002,15 +1013,17 @@ func (m *MemoryStore) reconciledVisitPhotos(visit model.Visit, input model.Visit
 func photosFromInput(visitID uuid.UUID, inputs []model.VisitPhotoInput, startOrder int) []model.VisitPhoto {
 	photos := make([]model.VisitPhoto, 0, len(inputs))
 	for i, input := range inputs {
-		byteCount, _ := model.ValidateVisitPhotoDataURI(input.DataURI)
+		original, thumbnail, _ := model.PrepareVisitPhoto(context.Background(), input.DataURI)
 		photos = append(photos, model.VisitPhoto{
-			ID:          uuid.New(),
-			VisitID:     visitID,
-			DataURI:     strings.TrimSpace(input.DataURI),
-			ContentType: "image/jpeg",
-			ByteCount:   byteCount,
-			SortOrder:   startOrder + i,
-			CreatedAt:   time.Now(),
+			ID:             uuid.New(),
+			VisitID:        visitID,
+			DataURI:        strings.TrimSpace(input.DataURI),
+			ContentType:    "image/jpeg",
+			ByteCount:      len(original),
+			Bytes:          original,
+			ThumbnailBytes: thumbnail,
+			SortOrder:      startOrder + i,
+			CreatedAt:      time.Now(),
 		})
 	}
 	return photos

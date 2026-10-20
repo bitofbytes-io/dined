@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
 	"image"
@@ -359,7 +360,7 @@ func TestRouterServesPublicPhotosByURL(t *testing.T) {
 			t.Fatalf("%s status = %d", page, rec.Code)
 		}
 		body := rec.Body.String()
-		if !strings.Contains(body, `<img src="`+photoURL+`"`) || strings.Contains(body, "base64,") {
+		if !strings.Contains(body, `<img src="`+photoURL+`?variant=thumb-v1"`) || strings.Contains(body, "base64,") {
 			t.Fatalf("%s should reference photos by URL instead of embedding them:\n%s", page, body)
 		}
 	}
@@ -371,11 +372,11 @@ func TestRouterServesPublicPhotosByURL(t *testing.T) {
 	if got := rec.Header().Get("Content-Type"); got != "image/jpeg" {
 		t.Fatalf("content type = %q", got)
 	}
-	if got := rec.Header().Get("Cache-Control"); got != "public, max-age=300" {
-		t.Fatalf("cache control = %q, want a short max-age so deleted photos age out", got)
+	if got := rec.Header().Get("Cache-Control"); got != "public, max-age=86400" {
+		t.Fatalf("cache control = %q, want one-day expiry for deleted cached photos", got)
 	}
 	etag := rec.Header().Get("ETag")
-	if etag != `"`+visit.Photos[0].ID.String()+`"` {
+	if etag != fmt.Sprintf(`"photo--%x"`, sha256.Sum256(photoJPEG)) {
 		t.Fatalf("etag = %q", etag)
 	}
 	if got := rec.Header().Get("X-Content-Type-Options"); got != "nosniff" {
@@ -417,7 +418,7 @@ func TestRouterServesPublicPhotosByURL(t *testing.T) {
 	}
 }
 
-func TestRouterEditVisitKeepsInlinePhotoPreview(t *testing.T) {
+func TestRouterEditVisitUsesPhotoURLs(t *testing.T) {
 	ctx := context.Background()
 	photoDataURI := testJPEGDataURI(t)
 	store := repository.NewMemoryStore()
@@ -450,7 +451,7 @@ func TestRouterEditVisitKeepsInlinePhotoPreview(t *testing.T) {
 		t.Fatalf("status = %d", rec.Code)
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, `name="keep_photo_id" value="`+visit.Photos[0].ID.String()+`"`) || !strings.Contains(body, `<img src="data:image/jpeg;base64,`) {
+	if !strings.Contains(body, `name="keep_photo_id" value="`+visit.Photos[0].ID.String()+`"`) || !strings.Contains(body, `<img src="/photos/`+visit.Photos[0].ID.String()+`?variant=thumb-v1"`) || strings.Contains(body, "base64,") {
 		t.Fatalf("edit form should keep existing photos:\n%s", body)
 	}
 }

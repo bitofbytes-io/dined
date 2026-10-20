@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/bitofbytes-io/dined/internal/model"
+	"github.com/bitofbytes-io/dined/internal/testutil"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -207,7 +209,7 @@ func TestPostgresVisitReadErrorsReleaseConnection(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		rows, err := store.pool.Query(ctx, query)
 		if err == nil {
-			_, err = store.scanVisits(ctx, rows, withPhotoData)
+			_, err = store.scanVisits(ctx, rows, withPhotoMetadata)
 		}
 		if err == nil {
 			t.Errorf("expected error from %q", query)
@@ -307,19 +309,19 @@ func TestPostgresVisitListsBatchRelatedQueries(t *testing.T) {
 		if len(visit.Tags) != 1 || visit.Tags[0].ID != tags[(visitCount-1-i)%len(tags)].ID {
 			t.Fatalf("visit %d tags = %#v", i, visit.Tags)
 		}
-		if len(visit.Photos) != 1 || visit.Photos[0].VisitID != visit.ID || visit.Photos[0].DataURI != "" || visit.Photos[0].ByteCount != 5 {
+		if len(visit.Photos) != 1 || visit.Photos[0].VisitID != visit.ID || visit.Photos[0].DataURI != "" || visit.Photos[0].ByteCount != len(testutil.JPEG(8, 6, 1)) {
 			t.Fatalf("visit %d photos should carry metadata only: %#v", i, visit.Photos)
 		}
 	}
 
-	photo, err := store.VisitPhoto(ctx, visits[0].Photos[0].ID)
+	photo, err := store.VisitPhoto(ctx, visits[0].Photos[0].ID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if photo == nil || photo.DataURI != testVisitPhotoDataURI {
+	if photo == nil || !bytes.Equal(photo.Bytes, testutil.JPEG(8, 6, 1)) {
 		t.Fatalf("visit photo = %#v", photo)
 	}
-	if missing, err := store.VisitPhoto(ctx, uuid.New()); err != nil || missing != nil {
+	if missing, err := store.VisitPhoto(ctx, uuid.New(), ""); err != nil || missing != nil {
 		t.Fatalf("missing photo = %#v, err = %v", missing, err)
 	}
 
@@ -697,9 +699,9 @@ func TestPostgresUpdateVisitReconcilesPhotos(t *testing.T) {
 
 	input := postgresVisitInput(t, store, "Photo Diner")
 	input.Photos = []model.VisitPhotoInput{
-		{DataURI: "data:image/jpeg;base64,b25l"},
-		{DataURI: "data:image/jpeg;base64,dHdv"},
-		{DataURI: "data:image/jpeg;base64,dGhyZWU="},
+		{DataURI: testutil.PhotoURI(3)},
+		{DataURI: testutil.PhotoURI(4)},
+		{DataURI: testutil.PhotoURI(5)},
 	}
 	visitID, err := store.CreateVisit(ctx, input)
 	if err != nil {
@@ -717,7 +719,7 @@ func TestPostgresUpdateVisitReconcilesPhotos(t *testing.T) {
 	update := postgresVisitInput(t, store, "")
 	update.RestaurantID = &created.Restaurant.ID
 	update.KeepPhotoIDs = []uuid.UUID{three.ID, one.ID}
-	update.Photos = []model.VisitPhotoInput{{DataURI: "data:image/jpeg;base64,Zm91cg=="}}
+	update.Photos = []model.VisitPhotoInput{{DataURI: testutil.PhotoURI(6)}}
 	if err := store.UpdateVisit(ctx, *visitID, update); err != nil {
 		t.Fatal(err)
 	}
@@ -736,10 +738,10 @@ func TestPostgresUpdateVisitReconcilesPhotos(t *testing.T) {
 		}
 	}
 	added := updated.Photos[2]
-	if added.ID == one.ID || added.ID == two.ID || added.ID == three.ID || added.DataURI != "data:image/jpeg;base64,Zm91cg==" || added.SortOrder != 2 || added.ByteCount != 4 {
+	if added.ID == one.ID || added.ID == two.ID || added.ID == three.ID || added.DataURI != "" || added.SortOrder != 2 || added.ByteCount != len(testutil.JPEG(8, 6, 6)) {
 		t.Fatalf("new photo = %#v", added)
 	}
-	if removed, err := store.VisitPhoto(ctx, two.ID); err != nil || removed != nil {
+	if removed, err := store.VisitPhoto(ctx, two.ID, ""); err != nil || removed != nil {
 		t.Fatalf("removed photo = %#v, err = %v", removed, err)
 	}
 

@@ -99,13 +99,15 @@ func (v Visit) CountsInAggregates() bool {
 }
 
 type VisitPhoto struct {
-	ID          uuid.UUID
-	VisitID     uuid.UUID
-	DataURI     string
-	ContentType string
-	ByteCount   int
-	SortOrder   int
-	CreatedAt   time.Time
+	Bytes          []byte // The requested original or thumbnail representation; absent on visit reads.
+	ThumbnailBytes []byte // Memory-store backing only; absent on visit reads.
+	ID             uuid.UUID
+	VisitID        uuid.UUID
+	DataURI        string
+	ContentType    string
+	ByteCount      int
+	SortOrder      int
+	CreatedAt      time.Time
 }
 
 type Rating struct {

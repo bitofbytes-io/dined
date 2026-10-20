@@ -1,16 +1,18 @@
 package repository
 
 import (
+	"bytes"
 	"context"
 	"math"
 	"testing"
 	"time"
 
 	"github.com/bitofbytes-io/dined/internal/model"
+	"github.com/bitofbytes-io/dined/internal/testutil"
 	"github.com/google/uuid"
 )
 
-const testVisitPhotoDataURI = "data:image/jpeg;base64,aGVsbG8="
+var testVisitPhotoDataURI = testutil.PhotoURI(1)
 
 func TestMemoryStoreVisitsZeroReturnsAllVisits(t *testing.T) {
 	store := NewMemoryStore()
@@ -72,17 +74,17 @@ func TestMemoryStoreVisitsPageOffsetsAndOmitsPhotoData(t *testing.T) {
 	}
 
 	listed := all[0]
-	if listed.ID != store.visits[0].ID || len(listed.Photos) != 1 || listed.Photos[0].DataURI != "" || listed.Photos[0].ByteCount != 5 {
+	if listed.ID != store.visits[0].ID || len(listed.Photos) != 1 || listed.Photos[0].DataURI != "" || listed.Photos[0].ByteCount != len(testutil.JPEG(8, 6, 1)) {
 		t.Fatalf("listed photos should carry metadata only: %#v", listed.Photos)
 	}
 	if store.visits[0].Photos[0].DataURI != testVisitPhotoDataURI {
 		t.Fatal("listing visits must not clear stored photo data")
 	}
-	photo, err := store.VisitPhoto(context.Background(), listed.Photos[0].ID)
-	if err != nil || photo == nil || photo.DataURI != testVisitPhotoDataURI {
+	photo, err := store.VisitPhoto(context.Background(), listed.Photos[0].ID, "")
+	if err != nil || photo == nil || !bytes.Equal(photo.Bytes, testutil.JPEG(8, 6, 1)) {
 		t.Fatalf("visit photo = %#v, err = %v", photo, err)
 	}
-	if missing, err := store.VisitPhoto(context.Background(), uuid.New()); err != nil || missing != nil {
+	if missing, err := store.VisitPhoto(context.Background(), uuid.New(), ""); err != nil || missing != nil {
 		t.Fatalf("missing photo = %#v, err = %v", missing, err)
 	}
 }
@@ -244,7 +246,7 @@ func TestMemoryStoreCreateVisitStoresPhotos(t *testing.T) {
 		Ratings:        map[uuid.UUID]float64{people[0].ID: 8},
 		Photos: []model.VisitPhotoInput{
 			{DataURI: testVisitPhotoDataURI},
-			{DataURI: "data:image/jpeg;base64,dGFjbw=="},
+			{DataURI: testutil.PhotoURI(2)},
 		},
 	}
 
@@ -257,7 +259,7 @@ func TestMemoryStoreCreateVisitStoresPhotos(t *testing.T) {
 	if len(created.Photos) != 2 {
 		t.Fatalf("photos len = %d, want 2", len(created.Photos))
 	}
-	if created.Photos[0].DataURI != testVisitPhotoDataURI || created.Photos[0].ContentType != "image/jpeg" || created.Photos[0].ByteCount != 5 || created.Photos[0].SortOrder != 0 {
+	if created.Photos[0].DataURI != testVisitPhotoDataURI || created.Photos[0].ContentType != "image/jpeg" || created.Photos[0].ByteCount != len(testutil.JPEG(8, 6, 1)) || created.Photos[0].SortOrder != 0 {
 		t.Fatalf("first photo = %#v", created.Photos[0])
 	}
 	if created.Photos[1].SortOrder != 1 {
@@ -536,7 +538,7 @@ func TestMemoryStoreUpdateVisitReconcilesPhotos(t *testing.T) {
 	visit := store.visits[0]
 	visit.Photos = photosFromInput(visit.ID, []model.VisitPhotoInput{
 		{DataURI: testVisitPhotoDataURI},
-		{DataURI: "data:image/jpeg;base64,dGFibGU="},
+		{DataURI: testutil.PhotoURI(7)},
 	}, 0)
 	store.visits[0] = visit
 	restaurantID := visit.Restaurant.ID
@@ -548,7 +550,7 @@ func TestMemoryStoreUpdateVisitReconcilesPhotos(t *testing.T) {
 		PriceLevel:   visit.PriceLevel,
 		Ratings:      map[uuid.UUID]float64{store.people[0].ID: 9},
 		KeepPhotoIDs: []uuid.UUID{visit.Photos[1].ID},
-		Photos:       []model.VisitPhotoInput{{DataURI: "data:image/jpeg;base64,bmV3"}},
+		Photos:       []model.VisitPhotoInput{{DataURI: testutil.PhotoURI(8)}},
 	}
 
 	if err := store.UpdateVisit(context.Background(), visit.ID, input); err != nil {
@@ -562,7 +564,7 @@ func TestMemoryStoreUpdateVisitReconcilesPhotos(t *testing.T) {
 	if updated.Photos[0].ID != visit.Photos[1].ID || updated.Photos[0].SortOrder != 0 {
 		t.Fatalf("kept photo = %#v, want original second photo first", updated.Photos[0])
 	}
-	if updated.Photos[1].ID == visit.Photos[0].ID || updated.Photos[1].DataURI != "data:image/jpeg;base64,bmV3" || updated.Photos[1].SortOrder != 1 {
+	if updated.Photos[1].ID == visit.Photos[0].ID || updated.Photos[1].DataURI != testutil.PhotoURI(8) || updated.Photos[1].SortOrder != 1 {
 		t.Fatalf("new photo = %#v", updated.Photos[1])
 	}
 }

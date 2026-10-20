@@ -1,7 +1,6 @@
 package model
 
 import (
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"strings"
@@ -68,26 +67,6 @@ func ValidateVisitPhotoDataURI(raw string) (int, error) {
 		return 0, err
 	}
 	return len(decoded), nil
-}
-
-// DecodeVisitPhotoDataURI validates a stored or submitted JPEG data URI and returns its image bytes.
-func DecodeVisitPhotoDataURI(raw string) ([]byte, error) {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return nil, errors.New("photo data is required")
-	}
-	if !strings.HasPrefix(strings.ToLower(trimmed), visitPhotoPrefix) {
-		return nil, errors.New("dine photos must be JPEG images")
-	}
-	encoded := trimmed[len(visitPhotoPrefix):]
-	decoded, err := base64.StdEncoding.DecodeString(encoded)
-	if err != nil {
-		return nil, errors.New("dine photos must contain valid base64 image data")
-	}
-	if len(decoded) > MaxVisitPhotoBytes {
-		return nil, fmt.Errorf("dine photos must be smaller than %dKB", MaxVisitPhotoBytes/1024)
-	}
-	return decoded, nil
 }
 
 func (in RestaurantInput) Validate() error {

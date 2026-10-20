@@ -13,6 +13,7 @@ import (
 	"github.com/bitofbytes-io/dined/internal/metrics/metricstest"
 	"github.com/bitofbytes-io/dined/internal/middleware"
 	"github.com/bitofbytes-io/dined/internal/repository"
+	"github.com/bitofbytes-io/dined/internal/testutil"
 	"github.com/google/uuid"
 )
 
@@ -77,8 +78,8 @@ func TestRouterCountsPhotoUploads(t *testing.T) {
 	form.Set("picker_id", people[0].ID.String())
 	form.Set("price_level", "2")
 	form.Set("rating_"+people[0].ID.String(), "8")
-	form.Add("photo_data_uri", "data:image/jpeg;base64,aGVsbG8=")
-	form.Add("photo_data_uri", "data:image/jpeg;base64,dGFjbw==")
+	form.Add("photo_data_uri", testutil.PhotoURI(1))
+	form.Add("photo_data_uri", testutil.PhotoURI(2))
 	if rec := postVisitForm(t, router, token, "/visits", form); rec.Code != http.StatusSeeOther {
 		t.Fatalf("create visit = %d, want 303: %s", rec.Code, rec.Body.String())
 	}
@@ -89,7 +90,7 @@ func TestRouterCountsPhotoUploads(t *testing.T) {
 	}
 
 	// A photo is a failed upload even when a different field rejects the form.
-	form.Set("photo_data_uri", "data:image/jpeg;base64,aGVsbG8=")
+	form.Set("photo_data_uri", testutil.PhotoURI(1))
 	form.Set("visited_at", "not-a-date")
 	if rec := postVisitForm(t, router, token, "/visits", form); rec.Code == http.StatusSeeOther {
 		t.Fatal("create visit with an invalid date succeeded, want a validation error")
