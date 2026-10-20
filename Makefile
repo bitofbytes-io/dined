@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help dev run run-postgres build test migrate migrate-down migrate-status docker-build docker-buildx clean
+.PHONY: help dev run run-postgres build test lint migrate migrate-down migrate-status docker-build docker-buildx clean
 
 BIN_DIR ?= bin
 PORT ?= 4600
@@ -48,6 +48,14 @@ migrate-status: ## Show migration status
 
 test: ## Run Go tests
 	go test -v ./...
+
+lint: ## Check Go formatting and run Staticcheck
+	@files="$$(gofmt -l .)" || exit $$?; \
+	if [ -n "$$files" ]; then \
+		printf 'Go files need formatting:\n%s\n' "$$files" >&2; \
+		exit 1; \
+	fi
+	GOTOOLCHAIN=$$(go env GOVERSION) go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
 
 docker-build: ## Build the Docker image locally
 	docker build -t $(REGISTRY)/$(IMAGE_REPO):$(TAG) .

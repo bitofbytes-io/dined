@@ -127,10 +127,10 @@ func (in WantToTryInput) VisitInput() VisitInput {
 func validateGoogleRatingAndPriceLevel(rating *float64, priceLevel *int) error {
 	// Written so that NaN, which fails every comparison, is rejected too.
 	if rating != nil && !(*rating >= 0 && *rating <= 5) {
-		return errors.New("Google rating must be between 0 and 5")
+		return errors.New("rating from Google must be between 0 and 5")
 	}
 	if priceLevel != nil && (*priceLevel < 1 || *priceLevel > 4) {
-		return errors.New("Google price level must be between 1 and 4")
+		return errors.New("price level from Google must be between 1 and 4")
 	}
 	return nil
 }
