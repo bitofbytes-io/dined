@@ -1,7 +1,7 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "description": "Weekly dependency updates for dined: one grouped non-major PR, separate major PRs, grouped GitHub Actions, and digest-pinned Dockerfile base images.",
-  "extends": ["config:recommended"],
+  "extends": ["config:recommended", "helpers:pinGitHubActionDigests"],
   "schedule": ["* * * * 4"],
   "packageRules": [
     {

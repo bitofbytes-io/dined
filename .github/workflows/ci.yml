@@ -64,7 +64,7 @@ jobs:
       MANAGER_REPO_PATH: ${{ vars.MANAGER_REPO_PATH }}
       PLATFORMS: linux/arm64/v8
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           fetch-depth: 0
 
@@ -73,7 +73,7 @@ jobs:
         run: echo "TAG=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
           cache-dependency-path: go.sum
@@ -108,12 +108,12 @@ jobs:
           echo "Registry ${registry_endpoint} resolved to ${registry_ip} and returned HTTP ${status}"
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
         with:
           driver-opts: network=host
 
       - name: Log in to registry
-        uses: docker/login-action@v4
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           registry: ${{ env.IMAGE_REG }}
           username: ${{ secrets.REGISTRY_USERNAME }}
