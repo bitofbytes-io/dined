@@ -142,7 +142,8 @@ type VisitInput struct {
 }
 
 type VisitPhotoInput struct {
-	DataURI string
+	DataURI  string
+	prepared *preparedVisitPhoto
 }
 
 type RestaurantInput struct {

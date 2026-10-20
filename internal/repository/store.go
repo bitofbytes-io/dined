@@ -323,12 +323,12 @@ func (s *Store) VisitPhoto(ctx context.Context, id uuid.UUID, variant string) (*
 	var photo model.VisitPhoto
 	err := s.pool.QueryRow(ctx, `
  SELECT id, visit_id, content_type, byte_count, sort_order, created_at,
- CASE WHEN $2 = 'thumb-v1' THEN
+ CASE WHEN $2 = $3 THEN
    CASE WHEN thumbnail_version = $2 THEN thumbnail_bytes END
  ELSE original_bytes END,
- CASE WHEN ($2 = 'thumb-v1' AND (thumbnail_bytes IS NULL OR thumbnail_version IS DISTINCT FROM $2))
-   OR ($2 <> 'thumb-v1' AND original_bytes IS NULL) THEN data_uri ELSE '' END
- FROM visit_photos WHERE id = $1`, id, variant).Scan(
+ CASE WHEN ($2 = $3 AND (thumbnail_bytes IS NULL OR thumbnail_version IS DISTINCT FROM $2))
+   OR ($2 <> $3 AND original_bytes IS NULL) THEN data_uri ELSE '' END
+ FROM visit_photos WHERE id = $1`, id, variant, model.PhotoThumbnailVersion).Scan(
 		&photo.ID, &photo.VisitID, &photo.ContentType, &photo.ByteCount, &photo.SortOrder, &photo.CreatedAt, &photo.Bytes, &photo.DataURI)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -395,7 +395,8 @@ func (s *Store) VisitedRestaurantMapPoints(ctx context.Context) ([]model.Restaur
 }
 
 func (s *Store) CreateVisit(ctx context.Context, input model.VisitInput) (*uuid.UUID, error) {
-	if err := input.Validate(); err != nil {
+	input, photos, err := prepareVisitInput(ctx, input)
+	if err != nil {
 		return nil, err
 	}
 
@@ -427,7 +428,7 @@ func (s *Store) CreateVisit(ctx context.Context, input model.VisitInput) (*uuid.
 		return nil, err
 	}
 
-	if err := insertVisitPhotos(ctx, tx, visitID, input.Photos, 0); err != nil {
+	if err := insertVisitPhotos(ctx, tx, visitID, photos, 0); err != nil {
 		return nil, fmt.Errorf("create visit photos: %w", err)
 	}
 
@@ -693,7 +694,8 @@ func (s *Store) UpdateRestaurantGoogleMetadata(ctx context.Context, id uuid.UUID
 }
 
 func (s *Store) UpdateVisit(ctx context.Context, id uuid.UUID, input model.VisitInput) error {
-	if err := input.Validate(); err != nil {
+	input, photos, err := prepareVisitInput(ctx, input)
+	if err != nil {
 		return err
 	}
 	if input.RestaurantID == nil {
@@ -737,7 +739,7 @@ func (s *Store) UpdateVisit(ctx context.Context, id uuid.UUID, input model.Visit
 		return err
 	}
 
-	if err := reconcileVisitPhotos(ctx, tx, id, input); err != nil {
+	if err := reconcileVisitPhotos(ctx, tx, id, input, photos); err != nil {
 		return fmt.Errorf("update visit photos: %w", err)
 	}
 
@@ -1138,15 +1140,11 @@ func (s *Store) loadVisitRelations(ctx context.Context, visits []model.Visit, ph
 	return nil
 }
 
-func insertVisitPhotos(ctx context.Context, tx pgx.Tx, visitID uuid.UUID, photos []model.VisitPhotoInput, startOrder int) error {
+func insertVisitPhotos(ctx context.Context, tx pgx.Tx, visitID uuid.UUID, photos []model.VisitPhoto, startOrder int) error {
 	for i, photo := range photos {
-		original, thumbnail, err := model.PrepareVisitPhoto(ctx, photo.DataURI)
-		if err != nil {
-			return err
-		}
-		_, err = tx.Exec(ctx, `INSERT INTO visit_photos
+		_, err := tx.Exec(ctx, `INSERT INTO visit_photos
   (visit_id,data_uri,content_type,byte_count,sort_order,original_bytes,thumbnail_bytes,thumbnail_version)
-  VALUES ($1,$2,'image/jpeg',$3,$4,$5,$6,$7)`, visitID, strings.TrimSpace(photo.DataURI), len(original), startOrder+i, original, thumbnail, model.PhotoThumbnailVersion)
+  VALUES ($1,$2,'image/jpeg',$3,$4,$5,$6,$7)`, visitID, photo.DataURI, photo.ByteCount, startOrder+i, photo.Bytes, photo.ThumbnailBytes, model.PhotoThumbnailVersion)
 		if err != nil {
 			return err
 		}
@@ -1154,7 +1152,7 @@ func insertVisitPhotos(ctx context.Context, tx pgx.Tx, visitID uuid.UUID, photos
 	return nil
 }
 
-func reconcileVisitPhotos(ctx context.Context, tx pgx.Tx, visitID uuid.UUID, input model.VisitInput) error {
+func reconcileVisitPhotos(ctx context.Context, tx pgx.Tx, visitID uuid.UUID, input model.VisitInput, photos []model.VisitPhoto) error {
 	// Validate ownership before deleting anything. Retained rows are updated in
 	// place: their IDs, creation times, legacy URI, and binary bytes never change.
 	for _, id := range input.KeepPhotoIDs {
@@ -1174,7 +1172,7 @@ func reconcileVisitPhotos(ctx context.Context, tx pgx.Tx, visitID uuid.UUID, inp
 			return err
 		}
 	}
-	return insertVisitPhotos(ctx, tx, visitID, input.Photos, len(input.KeepPhotoIDs))
+	return insertVisitPhotos(ctx, tx, visitID, photos, len(input.KeepPhotoIDs))
 }
 
 func nonNilPhotoIDs(ids []uuid.UUID) []uuid.UUID {

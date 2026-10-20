@@ -121,13 +121,19 @@ func (s *Store) AuditPhotos(ctx context.Context, maxRows int, emit func(PhotoAud
 	if err = tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema=current_schema() AND table_name='visit_photos' AND column_name='original_bytes')`).Scan(&expanded); err != nil {
 		return 0, err
 	}
-	rows, err := tx.Query(ctx, `SELECT `+auditPhotoColumns(expanded)+` FROM visit_photos ORDER BY id`)
+	// Finish the bounded ID query before JPEG work. Each payload query is fully
+	// consumed before decoding, so statement_timeout does not include cumulative
+	// image-processing or output time. All reads retain this transaction's snapshot.
+	rows, err := tx.Query(ctx, `SELECT id FROM visit_photos ORDER BY id LIMIT $1`, maxRows)
 	if err != nil {
 		return 0, err
 	}
-	defer rows.Close()
-	for rows.Next() {
-		p, err := scanStoredPhoto(rows, expanded)
+	ids, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	if err != nil {
+		return 0, err
+	}
+	for _, id := range ids {
+		p, err := scanStoredPhoto(tx.QueryRow(ctx, `SELECT `+auditPhotoColumns(expanded)+` FROM visit_photos WHERE id=$1`, id), expanded)
 		if err != nil {
 			return 0, err
 		}
@@ -139,17 +145,14 @@ func (s *Store) AuditPhotos(ctx context.Context, maxRows int, emit func(PhotoAud
 			return 0, err
 		}
 	}
-	if err = rows.Err(); err != nil {
-		return 0, err
-	}
-	rows.Close()
+
 	if err = tx.Commit(ctx); err != nil {
 		return 0, err
 	}
 	return count, nil
 }
 
-const missingPhotoBytes = `(original_bytes IS NULL OR thumbnail_bytes IS NULL OR thumbnail_version IS DISTINCT FROM 'thumb-v1')`
+const missingPhotoBytes = `(original_bytes IS NULL OR thumbnail_bytes IS NULL OR thumbnail_version IS DISTINCT FROM '` + model.PhotoThumbnailVersion + `')`
 
 // BackfillPhotos changes only missing binary representations, never legacy data
 // or identity/ordering/timestamps. Each small batch starts at the beginning, so

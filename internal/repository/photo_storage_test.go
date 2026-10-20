@@ -3,13 +3,18 @@ package repository
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"reflect"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/bitofbytes-io/dined/internal/model"
 	"github.com/bitofbytes-io/dined/internal/testutil"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -307,5 +312,155 @@ func TestPostgresPhotoBackfillRespectsConcurrentRowLock(t *testing.T) {
 	}
 	if records := photoAudit(t, s); len(records) != 0 {
 		t.Fatal("photo should remain deleted")
+	}
+}
+
+// Query tracing detects a live result cursor even when PostgreSQL has already
+// buffered a small result; timing-based timeout reproduction would miss that.
+type photoQueryTrace struct {
+	mu                   sync.Mutex
+	activePayloadQueries int
+	begins               int
+}
+type photoQueryKey struct{}
+
+func (tr *photoQueryTrace) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
+	tr.mu.Lock()
+	defer tr.mu.Unlock()
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(data.SQL)), "begin") {
+		tr.begins++
+	}
+	payload := strings.Contains(data.SQL, "FROM visit_photos") && strings.Contains(data.SQL, "data_uri")
+	if payload {
+		tr.activePayloadQueries++
+	}
+	return context.WithValue(ctx, photoQueryKey{}, payload)
+}
+func (tr *photoQueryTrace) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, _ pgx.TraceQueryEndData) {
+	if payload, _ := ctx.Value(photoQueryKey{}).(bool); payload {
+		tr.mu.Lock()
+		tr.activePayloadQueries--
+		tr.mu.Unlock()
+	}
+}
+
+func TestPostgresPhotoAuditClosesEachQueryAndKeepsSnapshot(t *testing.T) {
+	store := postgresStore(t)
+	ctx := context.Background()
+	input := postgresVisitInput(t, store, "Snapshot photos")
+	input.Photos = []model.VisitPhotoInput{{DataURI: testutil.PhotoURI(1)}, {DataURI: testutil.PhotoURI(2)}}
+	_, err := store.CreateVisit(ctx, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := photoAudit(t, store)
+	trace := &photoQueryTrace{}
+	cfg := store.pool.Config()
+	cfg.ConnConfig.Tracer = trace
+	pool, err := pgxpool.NewWithConfig(ctx, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pool.Close()
+	auditStore := New(pool)
+	var records []PhotoAudit
+	count, err := auditStore.AuditPhotos(ctx, 10, func(record PhotoAudit) error {
+		trace.mu.Lock()
+		active := trace.activePayloadQueries
+		trace.mu.Unlock()
+		if active != 0 {
+			t.Errorf("audit decodes/emits with %d payload queries still open", active)
+		}
+		records = append(records, record)
+		if len(records) == 1 {
+			// A concurrent writer changes the next photo after the snapshot was taken.
+			// The audit must still report the original coherent identity/hash metadata.
+			raw := testutil.PhotoURI(3)
+			_, err := store.pool.Exec(ctx, `UPDATE visit_photos SET data_uri=$2,byte_count=$3,original_bytes=NULL,thumbnail_bytes=NULL,thumbnail_version=NULL WHERE id=$1`, before[1].ID, raw, len(testutil.JPEG(8, 6, 3)))
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 2 || !reflect.DeepEqual(records, before) {
+		t.Fatal("audit lost its original repeatable-read snapshot")
+	}
+	after := photoAudit(t, store)
+	if after[1].SHA256 == before[1].SHA256 {
+		t.Fatal("concurrent fixture update did not occur")
+	}
+}
+
+func TestPostgresPhotoPreparationFailureStartsNoTransaction(t *testing.T) {
+	for _, update := range []bool{false, true} {
+		for _, reason := range []string{"cancelled preparation", "invalid second image"} {
+			t.Run(fmt.Sprintf("update=%t/%s", update, reason), func(t *testing.T) {
+				store := postgresStore(t)
+				ctx := context.Background()
+				input := postgresVisitInput(t, store, "Atomic photo preparation")
+				input.Photos = []model.VisitPhotoInput{{DataURI: testutil.PhotoURI(1)}}
+				id, err := store.CreateVisit(ctx, input)
+				if err != nil {
+					t.Fatal(err)
+				}
+				visit, err := store.Visit(ctx, *id)
+				if err != nil {
+					t.Fatal(err)
+				}
+				before := photoAudit(t, store)
+				if update {
+					input.RestaurantID = &visit.Restaurant.ID
+					input.KeepPhotoIDs = []uuid.UUID{visit.Photos[0].ID}
+				} else {
+					input.RestaurantName = "Should never be created"
+				}
+				input.NewTag = "Should never be added"
+				trace := &photoQueryTrace{}
+				cfg := store.pool.Config()
+				cfg.ConnConfig.Tracer = trace
+				pool, err := pgxpool.NewWithConfig(ctx, cfg)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer pool.Close()
+				target := New(pool)
+				if reason == "cancelled preparation" {
+					cancelled, cancel := context.WithCancel(ctx)
+					defer cancel()
+					ctx = &preparationContext{Context: cancelled, observe: cancel}
+				} else {
+					input.Photos = append(input.Photos, model.VisitPhotoInput{DataURI: "data:image/jpeg;base64,aGVsbG8="})
+				}
+				if update {
+					err = target.UpdateVisit(ctx, *id, input)
+				} else {
+					_, err = target.CreateVisit(ctx, input)
+				}
+				if err == nil {
+					t.Fatal("expected preparation failure")
+				}
+				if reason == "cancelled preparation" && !errors.Is(err, context.Canceled) {
+					t.Fatal("wrong cancellation error", err)
+				}
+				trace.mu.Lock()
+				begins := trace.begins
+				trace.mu.Unlock()
+				if begins != 0 {
+					t.Fatal("photo preparation started a database transaction")
+				}
+				if after := photoAudit(t, store); !reflect.DeepEqual(before, after) {
+					t.Fatal("failed preparation changed original photo identity or bytes")
+				}
+				var count int
+				if err = store.pool.QueryRow(context.Background(), `SELECT (SELECT count(*) FROM restaurants WHERE name='Should never be created')+(SELECT count(*) FROM tags WHERE name='Should never be added')`).Scan(&count); err != nil {
+					t.Fatal(err)
+				}
+				if count != 0 {
+					t.Fatal("failed preparation wrote restaurant/tag data")
+				}
+			})
+		}
 	}
 }

@@ -5,9 +5,11 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"github.com/google/uuid"
 	"image/jpeg"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/bitofbytes-io/dined/internal/testutil"
 )
@@ -73,5 +75,82 @@ func TestPrepareVisitPhotoCancellation(t *testing.T) {
 	cancel()
 	if _, _, err := PrepareVisitPhoto(ctx, testutil.PhotoURI(1)); err != context.Canceled {
 		t.Fatalf("error=%v", err)
+	}
+}
+
+func TestPreparedVisitReusesValidatedPhotosWithoutDecoding(t *testing.T) {
+	input := VisitInput{RestaurantName: "Prepared diner", VisitedAt: time.Now(), PriceLevel: 2, Ratings: map[uuid.UUID]float64{uuid.New(): 8}, Photos: []VisitPhotoInput{{DataURI: testutil.PhotoURI(1)}}}
+	prepared, err := input.Prepare(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if input.Photos[0].prepared != nil {
+		t.Fatal("preparation mutated caller's input")
+	}
+	// Both decoder slots are busy: reuse must succeed without acquiring either.
+	photoDecoders <- struct{}{}
+	photoDecoders <- struct{}{}
+	defer func() { <-photoDecoders; <-photoDecoders }()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	again, err := prepared.Prepare(ctx)
+	if err != nil {
+		t.Fatal("prepared photo was decoded again", err)
+	}
+	if again.Photos[0].prepared != prepared.Photos[0].prepared {
+		t.Fatal("validated cache not reused")
+	}
+	photos, err := again.PreparedPhotos()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(photos[0].Bytes, testutil.JPEG(8, 6, 1)) {
+		t.Fatal("original changed")
+	}
+	photos[0].Bytes[0] = 0
+	photos[0].ThumbnailBytes[0] = 0
+	untouched, err := again.PreparedPhotos()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if untouched[0].Bytes[0] != 0xff || untouched[0].ThumbnailBytes[0] != 0xff {
+		t.Fatal("store copies alias the private validation cache")
+	}
+}
+
+func TestPreparedVisitRevalidatesChangedInput(t *testing.T) {
+	input := VisitInput{RestaurantName: "Prepared diner", VisitedAt: time.Now(), PriceLevel: 2, Ratings: map[uuid.UUID]float64{uuid.New(): 8}, Photos: []VisitPhotoInput{{DataURI: testutil.PhotoURI(1)}}}
+	prepared, err := input.Prepare(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared.PriceLevel = 0
+	if _, err = prepared.Prepare(context.Background()); err == nil {
+		t.Fatal("cached photo bypassed field validation")
+	}
+	prepared.PriceLevel = 2
+	prepared.Photos[0].DataURI = "data:image/jpeg;base64,aGVsbG8="
+	if _, err = prepared.PreparedPhotos(); err == nil {
+		t.Fatal("changed URI reused old photo bytes")
+	}
+	if _, err = prepared.Prepare(context.Background()); err == nil {
+		t.Fatal("changed invalid URI bypassed JPEG validation")
+	}
+	prepared.Photos[0].DataURI = testutil.PhotoURI(2)
+	replaced, err := prepared.Prepare(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	photos, err := replaced.PreparedPhotos()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(photos[0].Bytes, testutil.JPEG(8, 6, 2)) {
+		t.Fatal("replacement kept stale original bytes")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err = replaced.Prepare(ctx); err != context.Canceled {
+		t.Fatal("cached preparation ignored cancellation", err)
 	}
 }

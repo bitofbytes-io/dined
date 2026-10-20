@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -15,6 +16,11 @@ const (
 )
 
 func (in VisitInput) Validate() error {
+	_, err := in.Prepare(context.Background())
+	return err
+}
+
+func (in VisitInput) validateFields() error {
 	if in.RestaurantID == nil && strings.TrimSpace(in.RestaurantName) == "" {
 		return errors.New("restaurant is required")
 	}
@@ -52,11 +58,6 @@ func (in VisitInput) Validate() error {
 			return errors.New("photo ids must be unique")
 		}
 		seenPhotoIDs[id.String()] = true
-	}
-	for _, photo := range in.Photos {
-		if _, err := ValidateVisitPhotoDataURI(photo.DataURI); err != nil {
-			return err
-		}
 	}
 	return nil
 }

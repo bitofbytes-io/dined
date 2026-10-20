@@ -56,7 +56,7 @@ func TestMemoryStoreVisitsNewestFirstUsesCreatedAtTieBreaker(t *testing.T) {
 
 func TestMemoryStoreVisitsPageOffsetsAndOmitsPhotoData(t *testing.T) {
 	store := NewMemoryStore()
-	store.visits[0].Photos = photosFromInput(store.visits[0].ID, []model.VisitPhotoInput{{DataURI: testVisitPhotoDataURI}}, 0)
+	store.visits[0].Photos = photosFromTestInput(t, store.visits[0].ID, []model.VisitPhotoInput{{DataURI: testVisitPhotoDataURI}}, 0)
 	all, err := store.Visits(context.Background(), 0)
 	if err != nil {
 		t.Fatal(err)
@@ -270,7 +270,7 @@ func TestMemoryStoreCreateVisitStoresPhotos(t *testing.T) {
 func TestMemoryStoreRestaurantVisitSummariesOmitPhotos(t *testing.T) {
 	store := NewMemoryStore()
 	visit := store.visits[0]
-	visit.Photos = photosFromInput(visit.ID, []model.VisitPhotoInput{{DataURI: testVisitPhotoDataURI}}, 0)
+	visit.Photos = photosFromTestInput(t, visit.ID, []model.VisitPhotoInput{{DataURI: testVisitPhotoDataURI}}, 0)
 	store.visits[0] = visit
 
 	summariesByRestaurant, err := store.RestaurantVisitSummaries(context.Background(), []uuid.UUID{visit.Restaurant.ID})
@@ -536,7 +536,7 @@ func TestMemoryStoreUpdateVisitReplacesRatingsTagsAndNotes(t *testing.T) {
 func TestMemoryStoreUpdateVisitReconcilesPhotos(t *testing.T) {
 	store := NewMemoryStore()
 	visit := store.visits[0]
-	visit.Photos = photosFromInput(visit.ID, []model.VisitPhotoInput{
+	visit.Photos = photosFromTestInput(t, visit.ID, []model.VisitPhotoInput{
 		{DataURI: testVisitPhotoDataURI},
 		{DataURI: testutil.PhotoURI(7)},
 	}, 0)
@@ -882,4 +882,13 @@ func TestMemoryStoreEditVisitIgnoresPlaceID(t *testing.T) {
 
 func TestMemoryStoreIgnoresPlaceDetailsWithoutPlaceID(t *testing.T) {
 	assertChosenRestaurantIgnoresDetailsWithoutPlaceID(t, emptyMemoryStore())
+}
+
+func photosFromTestInput(t *testing.T, visitID uuid.UUID, inputs []model.VisitPhotoInput, startOrder int) []model.VisitPhoto {
+	t.Helper()
+	_, photos, err := prepareVisitInput(context.Background(), model.VisitInput{RestaurantName: "fixture", VisitedAt: time.Now(), PriceLevel: 2, Ratings: map[uuid.UUID]float64{uuid.New(): 8}, Photos: inputs})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return photosFromPrepared(visitID, photos, startOrder)
 }

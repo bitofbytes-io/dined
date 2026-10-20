@@ -15,7 +15,9 @@ backup policy remains in place. Never run migration Down for image rollback.
 Uploads and legacy fallback reads accept JPEG only, up to 500 KiB, at most 8192
 pixels on either axis and 16 million decoded pixels. JPEG configuration is
 checked before pixel allocation; at most two full decode/thumbnail operations
-run concurrently. `thumb-v1` is an aspect-preserving, never-upscaled, maximum
+run concurrently. Uploads are prepared once before store locks or transactions;
+unchanged validated inputs reuse those original/thumbnail bytes across the
+handler and storage boundary. `thumb-v1` is an aspect-preserving, never-upscaled, maximum
 320-pixel JPEG, using deterministic integer area averaging and quality 80. The
 browser's existing upload canvas normalizes submitted photographs before they
 reach the server. The exact submitted original bytes are retained.
@@ -67,7 +69,9 @@ Only an exit code of zero plus `complete audit: photos=N` establishes a complete
 audit. JSON lines contain metadata, dimensions, and SHA-256, never image bodies.
 The audit refuses a count exceeding its cap rather than silently truncating. If
 more than 1000 photos exist, review an explicit cap increase (hard maximum 10000).
-It uses a read-only repeatable-read transaction, 30-second statement timeout,
+It closes a bounded ID-list cursor first, then fully reads each photo before
+decoding it in the same snapshot; image processing does not keep a database
+query open. It uses a read-only repeatable-read transaction, 30-second statement timeout,
 2-second lock timeout, and a five-minute default overall timeout.
 
 ## Expand, backfill, verify

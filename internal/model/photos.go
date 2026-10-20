@@ -129,3 +129,57 @@ func PrepareVisitPhoto(ctx context.Context, raw string) (original, thumbnail []b
 	}
 	return original, encoded.Bytes(), nil
 }
+
+// Only model preparation can create this cache. It is immutable and tied to the
+// exact input URI, so changing a submitted photo cannot bypass revalidation.
+type preparedVisitPhoto struct {
+	dataURI             string
+	original, thumbnail []byte
+}
+
+// Prepare validates every entry point and decodes each new JPEG once. Returning
+// a separate photo slice leaves callers' inputs untouched; unchanged prepared
+// inputs can cross handler/store boundaries without repeating JPEG work.
+func (in VisitInput) Prepare(ctx context.Context) (VisitInput, error) {
+	if err := ctx.Err(); err != nil {
+		return VisitInput{}, err
+	}
+	if err := in.validateFields(); err != nil {
+		return VisitInput{}, err
+	}
+	in.Photos = append([]VisitPhotoInput(nil), in.Photos...)
+	for i, photo := range in.Photos {
+		if err := ctx.Err(); err != nil {
+			return VisitInput{}, err
+		}
+		if photo.prepared != nil && photo.prepared.dataURI == photo.DataURI {
+			continue
+		}
+		original, thumbnail, err := PrepareVisitPhoto(ctx, photo.DataURI)
+		if err != nil {
+			return VisitInput{}, err
+		}
+		in.Photos[i].prepared = &preparedVisitPhoto{dataURI: photo.DataURI, original: original, thumbnail: thumbnail}
+	}
+	if err := ctx.Err(); err != nil {
+		return VisitInput{}, err
+	}
+	return in, nil
+}
+
+// PreparedPhotos gives a store owned copies before it enters a transaction or
+// acquires its write lock. No mutable cache storage is exposed to callers.
+func (in VisitInput) PreparedPhotos() ([]VisitPhoto, error) {
+	photos := make([]VisitPhoto, 0, len(in.Photos))
+	for _, photo := range in.Photos {
+		prepared := photo.prepared
+		if prepared == nil || prepared.dataURI != photo.DataURI {
+			return nil, errors.New("photo must be prepared before storage")
+		}
+		photos = append(photos, VisitPhoto{
+			DataURI: strings.TrimSpace(photo.DataURI), ContentType: "image/jpeg", ByteCount: len(prepared.original),
+			Bytes: bytes.Clone(prepared.original), ThumbnailBytes: bytes.Clone(prepared.thumbnail),
+		})
+	}
+	return photos, nil
+}
