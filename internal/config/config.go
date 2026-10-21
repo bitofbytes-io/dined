@@ -49,6 +49,9 @@ func Load() (*Config, error) {
 	if cfg.MetricsAddr, err = getEnv("METRICS_ADDR", ":9464"); err != nil {
 		return nil, err
 	}
+	if cfg.MetricsAddr, err = validateMetricsAddr(cfg.MetricsAddr); err != nil {
+		return nil, err
+	}
 	if cfg.DataStore, err = getEnv("DATA_STORE", DataStorePostgres); err != nil {
 		return nil, err
 	}

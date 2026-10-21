@@ -130,6 +130,8 @@ For an ephemeral preview without Postgres, set `DATA_STORE=memory` and omit the 
 
 ## Metrics
 
+`METRICS_ADDR` is trimmed and `off` is case-insensitive. Other values must be a valid IP address or hostname plus a numeric port from 0 to 65535 (IPv6 addresses need brackets). Invalid syntax stops startup; validation does not resolve hostnames. Keep the metrics port private and never publish it through Docker or the public proxy.
+
 Dined serves Prometheus metrics at `GET /metrics` on a separate internal listener, `METRICS_ADDR` (default `:9464`). The public router on `PORT` never serves `/metrics`, so a public Traefik route cannot expose it. Scrape the listener over the internal overlay network, and do not publish the port. Set `METRICS_ADDR=off` to disable the listener. If the address cannot be bound, Dined logs the error and keeps serving. The listener shuts down gracefully with the app.
 
 | Metric | Labels | Meaning |
