@@ -136,7 +136,7 @@ func TestRenderHomeHeroUsesArrowSignForBothAudiences(t *testing.T) {
 		want          string
 		other         string
 	}{
-		{"logged out", false, `<a class="image-cta" href="/dines"><img src="/static/assets/dined-view-arrow-generated.png" alt="View Dines"></a>`, `href="/log"`},
+		{"logged out", false, `<a class="image-cta" href="/dines"><img src="/static/assets/dined-view-arrow-generated.webp" alt="View Dines"></a>`, `href="/log"`},
 		{"logged in", true, `<a class="image-cta" href="/log"><img src="/static/assets/dined-log-arrow-generated.png" alt="Log a Dine"></a>`, `alt="View Dines"`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -153,8 +153,12 @@ func TestRenderHomeHeroUsesArrowSignForBothAudiences(t *testing.T) {
 			}
 		})
 	}
-	if _, err := os.Stat(filepath.Join("..", "..", "static", "assets", "dined-view-arrow-generated.png")); err != nil {
+	assetInfo, err := os.Stat(filepath.Join("..", "..", "static", "assets", "dined-view-arrow-generated.webp"))
+	if err != nil {
 		t.Fatalf("View Dines sign asset missing: %v", err)
+	}
+	if assetInfo.Size() >= 60_000 {
+		t.Fatalf("View Dines sign is %d bytes, want less than 60 KB", assetInfo.Size())
 	}
 }
 
