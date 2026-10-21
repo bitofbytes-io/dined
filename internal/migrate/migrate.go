@@ -23,18 +23,35 @@ func Apply(ctx context.Context, pool *pgxpool.Pool) error {
 }
 
 func apply(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS) error {
-	// A session-level advisory lock serializes concurrent startups (e.g. two
-	// replicas during a rolling update): the second waits, then finds nothing
-	// left to apply. Poll every second for up to five minutes.
-	locker, err := lock.NewPostgresSessionLocker(lock.WithLockTimeout(1, 300))
+	return applyWithTimeouts(ctx, pool, fsys, startupTimeouts)
+}
+
+// applyWithTimeouts shares one startup deadline across all Goose work while
+// allowing regression tests to exercise expiry with short, isolated budgets.
+func applyWithTimeouts(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS, timeouts migrationTimeouts) (retErr error) {
+	// One deadline includes connection acquisition, lock waiting, SQL, and the
+	// final version check. Cleanup has a separate, bounded allowance.
+	ctx, cancel := context.WithTimeout(ctx, timeouts.total)
+	defer cancel()
+	defer func() {
+		if err := ctx.Err(); err != nil {
+			// Do not log the SQL or connection details from a canceled operation.
+			retErr = fmt.Errorf("migrate: startup interrupted: %w", err)
+		}
+	}()
+	locker, err := lock.NewPostgresSessionLocker(
+		lock.WithLockTimeout(1, retryCount(timeouts.lock)),
+		lock.WithUnlockTimeout(1, retryCount(timeouts.unlock)),
+	)
 	if err != nil {
 		return fmt.Errorf("migrate: create session locker: %w", err)
 	}
+	boundedLocker := deadlineLocker{locker: locker, timeouts: timeouts}
 
 	db := stdlib.OpenDBFromPool(pool)
 	defer db.Close()
 
-	provider, err := goose.NewProvider(goose.DialectPostgres, db, fsys, goose.WithSessionLocker(locker))
+	provider, err := goose.NewProvider(goose.DialectPostgres, db, fsys, goose.WithSessionLocker(boundedLocker))
 	if err != nil {
 		return fmt.Errorf("migrate: create goose provider: %w", err)
 	}
@@ -47,7 +64,9 @@ func apply(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS) error {
 		slog.Info("applied database migration", "file", result.Source.Path, "version", result.Source.Version, "duration", result.Duration)
 	}
 
-	version, err := provider.GetDBVersion(ctx)
+	// GetVersions reads without acquiring the session lock again. Up already
+	// serialized pending work; logging must not restart the lock-wait budget.
+	version, _, err := provider.GetVersions(ctx)
 	if err != nil {
 		return fmt.Errorf("migrate: read goose version: %w", err)
 	}
