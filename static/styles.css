@@ -2132,7 +2132,8 @@ fieldset {
     display: none;
   }
   .image-cta {
-    display: none;
+    width: min(13rem, 100%);
+    justify-self: center;
   }
 }
 
@@ -2227,9 +2228,7 @@ fieldset {
     font-size: 2.08rem;
     text-shadow: 2px 2px 0 var(--red-dark);
   }
-  .image-cta {
-    display: none;
-  }
+
   .booth-recent {
     position: relative;
     left: auto;
