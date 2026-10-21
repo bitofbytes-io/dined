@@ -79,6 +79,31 @@ until docker exec db pg_isready -U dined -d dined >/dev/null 2>&1; do sleep 1; d
 
 The SQL files in `migrations/` are embedded in the binary. With `DATA_STORE=postgres`, Dined applies any pending migrations at startup, before it serves traffic. If a migration fails, Dined exits non-zero and never becomes healthy, so a deploy whose migration fails does not finish rolling out. Each migration runs in its own transaction, so a failed migration leaves no partial changes and is not recorded. A Postgres advisory lock serializes startups, so replicas that start together apply each migration once. Versions are recorded in goose's standard `goose_db_version` table, so migrations already applied with the goose CLI are never re-run. No extra configuration is needed.
 
+
+Startup allows 10 seconds to connect, then 60 seconds total for migrations,
+including advisory-lock waiting. The lock is polled once per second for at most
+30 seconds; releasing it has a separate 5-second cleanup allowance. Configure
+the deployment healthcheck `start_period` to at least **90 seconds** in both
+Dined and Learnd before deploying these limits. SIGTERM or SIGINT cancels startup;
+a canceled or timed-out migration exits non-zero and logs the reason without
+connection details. Transactional migrations roll back the interrupted migration;
+previously completed migrations remain applied.
+
+Migrations run as the runtime role from `DATABASE_URL`. It needs schema CREATE
+and DDL/ownership rights for the app tables and `goose_db_version`, in addition
+to normal application DML privileges. On a fresh Dined database, migration 001
+also installs `pgcrypto`: provision that extension as an administrator first or
+give the role the required database CREATE privilege for the trusted extension.
+Do not assume a DML-only runtime role can migrate the database.
+
+Table-rewriting DDL can hold ACCESS EXCLUSIVE locks while old replicas still
+serve traffic. Schedule a maintenance window, stop/drain old replicas, apply the
+migration explicitly, then start the new image for these changes. In particular,
+Learnd migration 009 adds a stored generated search column and can rewrite
+`entries`. Keep rollout migrations additive and compatible with the previous
+image; use the manual migration path during maintenance for work that exceeds
+the startup budget.
+
 The goose CLI still works for inspecting or rolling back migrations by hand:
 
 ```bash
