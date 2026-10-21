@@ -23,18 +23,33 @@ func Apply(ctx context.Context, pool *pgxpool.Pool) error {
 }
 
 func apply(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS) error {
-	// A session-level advisory lock serializes concurrent startups (e.g. two
-	// replicas during a rolling update): the second waits, then finds nothing
-	// left to apply. Poll every second for up to five minutes.
-	locker, err := lock.NewPostgresSessionLocker(lock.WithLockTimeout(1, 300))
+	return applyWithTimeouts(ctx, pool, fsys, startupTimeouts)
+}
+
+func applyWithTimeouts(ctx context.Context, pool *pgxpool.Pool, fsys fs.FS, timeouts migrationTimeouts) (retErr error) {
+	// One deadline includes connection acquisition, lock waiting, SQL, and the
+	// final version check. Cleanup has a separate, bounded allowance.
+	ctx, cancel := context.WithTimeout(ctx, timeouts.total)
+	defer cancel()
+	defer func() {
+		if err := ctx.Err(); err != nil {
+			// Do not log the SQL or connection details from a canceled operation.
+			retErr = fmt.Errorf("migrate: startup interrupted: %w", err)
+		}
+	}()
+	locker, err := lock.NewPostgresSessionLocker(
+		lock.WithLockTimeout(1, 30),
+		lock.WithUnlockTimeout(1, 5),
+	)
 	if err != nil {
 		return fmt.Errorf("migrate: create session locker: %w", err)
 	}
+	boundedLocker := deadlineLocker{locker: locker, timeouts: timeouts}
 
 	db := stdlib.OpenDBFromPool(pool)
 	defer db.Close()
 
-	provider, err := goose.NewProvider(goose.DialectPostgres, db, fsys, goose.WithSessionLocker(locker))
+	provider, err := goose.NewProvider(goose.DialectPostgres, db, fsys, goose.WithSessionLocker(boundedLocker))
 	if err != nil {
 		return fmt.Errorf("migrate: create goose provider: %w", err)
 	}
