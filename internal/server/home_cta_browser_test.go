@@ -36,7 +36,7 @@ func TestHomeCTAFitsBothAudiencesAtMobileAndDesktopWidths(t *testing.T) {
 		name, href, alt string
 		authenticated   bool
 	}{
-		{"logged-out", "/dines", "View Dines", false},
+		{"logged-out", "/api/auth/google", "Log In", false},
 		{"logged-in", "/log", "Log a Dine", true},
 	} {
 		t.Run(audience.name, func(t *testing.T) {
