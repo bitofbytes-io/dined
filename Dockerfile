@@ -29,4 +29,7 @@ ENV LOG_LEVEL=info
 USER dined
 
 EXPOSE 4600
+# Startup applies migrations before listening (up to ~75s), so allow a 90s grace period.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
+    CMD wget -q -O - "http://127.0.0.1:${PORT:-4600}/health" || exit 1
 CMD ["./dined"]
