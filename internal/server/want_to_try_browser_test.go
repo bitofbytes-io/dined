@@ -7,10 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bitofbytes-io/dined/internal/middleware"
 	"github.com/bitofbytes-io/dined/internal/model"
 	"github.com/bitofbytes-io/dined/internal/repository"
-	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 )
 
@@ -59,32 +57,30 @@ func TestWantToTrySheetSavesWithoutLeavingThePage(t *testing.T) {
 	page := server.URL + "/restaurants/" + hank.ID.String()
 	var sheetName, savedText, location, pickText string
 	var sheetOpen, overflow bool
-	err = chromedp.Run(browserCtx,
-		network.Enable(),
+	err = chromedp.Do(browserCtx,
+		enableNetwork(),
 		chromedp.EmulateViewport(390, 844),
 		chromedp.Navigate(server.URL+"/health"),
-		chromedp.ActionFunc(func(ctx context.Context) error {
-			return network.SetCookie(middleware.CookieName, token).WithURL(server.URL).WithPath("/").Do(ctx)
-		}),
+		setSessionCookie(server.URL, token),
 		chromedp.Navigate(page),
-		chromedp.WaitVisible(`[data-want-to-try-open]`, chromedp.ByQuery),
-		chromedp.Click(`[data-want-to-try-open]`, chromedp.ByQuery),
-		chromedp.WaitVisible(`#want-to-try-sheet[open]`, chromedp.ByQuery),
-		chromedp.Text(`[data-want-to-try-sheet-name]`, &sheetName, chromedp.ByQuery),
-		chromedp.SetValue(`#want-to-try-sheet select[name="suggested_by"]`, people[1].ID.String(), chromedp.ByQuery),
-		chromedp.SendKeys(`#want-to-try-sheet input[name="note"]`, "Fries for Jen", chromedp.ByQuery),
-		chromedp.Click(`[data-want-to-try-save]`, chromedp.ByQuery),
-		chromedp.WaitVisible(`.want-on`, chromedp.ByQuery),
-		chromedp.TextContent(`.want-on`, &savedText, chromedp.ByQuery),
-		chromedp.Evaluate(`document.getElementById("want-to-try-sheet").open`, &sheetOpen),
-		chromedp.Location(&location),
+		chromedp.WaitVisible(css(`[data-want-to-try-open]`)),
+		chromedp.Click(css(`[data-want-to-try-open]`)),
+		chromedp.WaitVisible(css(`#want-to-try-sheet[open]`)),
+		resultInto(chromedp.Text(css(`[data-want-to-try-sheet-name]`)), &sheetName),
+		chromedp.SetValue(css(`#want-to-try-sheet select[name="suggested_by"]`), people[1].ID.String()),
+		chromedp.SendKeys(css(`#want-to-try-sheet input[name="note"]`), "Fries for Jen"),
+		chromedp.Click(css(`[data-want-to-try-save]`)),
+		chromedp.WaitVisible(css(`.want-on`)),
+		resultInto(chromedp.TextContent(css(`.want-on`)), &savedText),
+		evalInto(`document.getElementById("want-to-try-sheet").open`, &sheetOpen),
+		resultInto(chromedp.Location(), &location),
 
 		chromedp.Navigate(server.URL+"/want-to-try"),
-		chromedp.WaitVisible(`[data-want-to-try-pick]`, chromedp.ByQuery),
-		chromedp.Click(`[data-want-to-try-pick]`, chromedp.ByQuery),
-		chromedp.WaitVisible(`[data-want-to-try-pick-result]`, chromedp.ByQuery),
-		chromedp.Text(`[data-want-to-try-pick-result]`, &pickText, chromedp.ByQuery),
-		chromedp.Evaluate(`document.documentElement.scrollWidth > window.innerWidth`, &overflow),
+		chromedp.WaitVisible(css(`[data-want-to-try-pick]`)),
+		chromedp.Click(css(`[data-want-to-try-pick]`)),
+		chromedp.WaitVisible(css(`[data-want-to-try-pick-result]`)),
+		resultInto(chromedp.Text(css(`[data-want-to-try-pick-result]`)), &pickText),
+		evalInto(`document.documentElement.scrollWidth > window.innerWidth`, &overflow),
 	)
 	if err != nil {
 		t.Fatal(err)

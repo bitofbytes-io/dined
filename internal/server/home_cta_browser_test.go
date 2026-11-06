@@ -10,10 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bitofbytes-io/dined/internal/middleware"
 	"github.com/bitofbytes-io/dined/internal/repository"
 	"github.com/chromedp/cdproto/emulation"
-	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 	"github.com/chromedp/chromedp/kb"
 )
@@ -44,13 +42,11 @@ func TestHomeCTAFitsBothAudiencesAtMobileAndDesktopWidths(t *testing.T) {
 			defer closeBrowser()
 			browser, cancel := context.WithTimeout(browser, 45*time.Second)
 			defer cancel()
-			if err := chromedp.Run(browser, network.Enable(), network.ClearBrowserCookies(), chromedp.Navigate(server.URL+"/health")); err != nil {
+			if err := chromedp.Do(browser, enableNetwork(), clearBrowserCookies(), chromedp.Navigate(server.URL+"/health")); err != nil {
 				t.Fatal(err)
 			}
 			if audience.authenticated {
-				if err := chromedp.Run(browser, chromedp.ActionFunc(func(ctx context.Context) error {
-					return network.SetCookie(middleware.CookieName, token).WithURL(server.URL).WithPath("/").Do(ctx)
-				})); err != nil {
+				if err := chromedp.Do(browser, setSessionCookie(server.URL, token)); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -60,11 +56,11 @@ func TestHomeCTAFitsBothAudiencesAtMobileAndDesktopWidths(t *testing.T) {
 					if width == 1440 {
 						height = 900
 					}
-					if err := chromedp.Run(browser,
-						emulation.SetEmulatedMedia().WithFeatures([]*emulation.MediaFeature{{Name: "prefers-reduced-motion", Value: "no-preference"}}),
+					if err := chromedp.Do(browser,
+						setEmulatedMediaFeatures([]*emulation.MediaFeature{{Name: "prefers-reduced-motion", Value: "no-preference"}}),
 						chromedp.EmulateViewport(width, height), chromedp.Navigate(server.URL+"/"),
-						chromedp.Poll(`(()=>{const i=document.querySelector('.image-cta img');return i && i.complete && i.naturalWidth>0;})()`, nil),
-						chromedp.Poll(`document.getAnimations().every(a=>a.playState!=="running" || a.effect.getComputedTiming().iterations===Infinity)`, nil),
+						chromedp.Poll[chromedp.Void](`(()=>{const i=document.querySelector('.image-cta img');return i && i.complete && i.naturalWidth>0;})()`),
+						chromedp.Poll[chromedp.Void](`document.getAnimations().every(a=>a.playState!=="running" || a.effect.getComputedTiming().iterations===Infinity)`),
 					); err != nil {
 						t.Fatal(err)
 					}
@@ -72,8 +68,8 @@ func TestHomeCTAFitsBothAudiencesAtMobileAndDesktopWidths(t *testing.T) {
 						if err := os.MkdirAll(dir, 0700); err != nil {
 							t.Fatal(err)
 						}
-						var data []byte
-						if err := chromedp.Run(browser, chromedp.CaptureScreenshot(&data)); err != nil {
+						data, err := chromedp.Run(browser, chromedp.CaptureScreenshot())
+						if err != nil {
 							t.Fatal(err)
 						}
 						if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("%s-%d.png", audience.name, width)), data, 0600); err != nil {
@@ -93,7 +89,7 @@ func TestHomeCTAFitsBothAudiencesAtMobileAndDesktopWidths(t *testing.T) {
 						Overflow    bool    `json:"overflow"`
 						Animated    bool    `json:"animated"`
 					}
-					if err := chromedp.Run(browser, chromedp.Evaluate(`(()=>{
+					if err := chromedp.Do(browser, evalInto(`(()=>{
       const a=document.querySelector('.image-cta'), i=a.querySelector('img'), r=a.getBoundingClientRect(), s=getComputedStyle(a);
       return {searchWidth:document.querySelector('.booth-search').getBoundingClientRect().width,href:a.getAttribute('href'),alt:i.alt,width:r.width,height:r.height,left:r.left,right:r.right,
        visible:s.display!=='none' && s.visibility==='visible' && r.width>0 && r.height>0,
@@ -124,14 +120,14 @@ func TestHomeCTAFitsBothAudiencesAtMobileAndDesktopWidths(t *testing.T) {
 					// where the collapsed menu changes the tab sequence.
 					focused := false
 					for n := 0; n < 30 && !focused; n++ {
-						if err := chromedp.Run(browser, chromedp.KeyEvent(kb.Tab), chromedp.Evaluate(`document.activeElement===document.querySelector('.image-cta')`, &focused)); err != nil {
+						if err := chromedp.Do(browser, chromedp.KeyEvent(kb.Tab), evalInto(`document.activeElement===document.querySelector('.image-cta')`, &focused)); err != nil {
 							t.Fatal(err)
 						}
 					}
 					var focusVisible, reduced bool
-					if err := chromedp.Run(browser, chromedp.Evaluate(`document.querySelector('.image-cta').matches(':focus-visible') && getComputedStyle(document.querySelector('.image-cta')).outlineStyle!=='none'`, &focusVisible),
-						emulation.SetEmulatedMedia().WithFeatures([]*emulation.MediaFeature{{Name: "prefers-reduced-motion", Value: "reduce"}}),
-						chromedp.Evaluate(`(()=>{const s=getComputedStyle(document.querySelector('.image-cta'));return parseFloat(s.animationDuration)<0.01 && s.animationIterationCount==='1';})()`, &reduced),
+					if err := chromedp.Do(browser, evalInto(`document.querySelector('.image-cta').matches(':focus-visible') && getComputedStyle(document.querySelector('.image-cta')).outlineStyle!=='none'`, &focusVisible),
+						setEmulatedMediaFeatures([]*emulation.MediaFeature{{Name: "prefers-reduced-motion", Value: "reduce"}}),
+						evalInto(`(()=>{const s=getComputedStyle(document.querySelector('.image-cta'));return parseFloat(s.animationDuration)<0.01 && s.animationIterationCount==='1';})()`, &reduced),
 					); err != nil {
 						t.Fatal(err)
 					}

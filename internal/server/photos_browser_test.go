@@ -11,11 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bitofbytes-io/dined/internal/middleware"
 	"github.com/bitofbytes-io/dined/internal/model"
 	"github.com/bitofbytes-io/dined/internal/repository"
 	"github.com/bitofbytes-io/dined/internal/testutil"
-	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 	"github.com/google/uuid"
 )
@@ -53,9 +51,7 @@ func TestPhotoThumbnailsAndOriginalModalAtMobileWidth(t *testing.T) {
 	browser, timeout := context.WithTimeout(browser, 45*time.Second)
 	defer timeout()
 	strip := fmt.Sprintf(`[data-photo-src="/photos/%s"]`, visit.Photos[0].ID)
-	if err = chromedp.Run(browser, network.Enable(), chromedp.EmulateViewport(390, 844), chromedp.Navigate(srv.URL+"/health"), chromedp.ActionFunc(func(ctx context.Context) error {
-		return network.SetCookie(middleware.CookieName, token).WithURL(srv.URL).WithPath("/").Do(ctx)
-	}), chromedp.Navigate(srv.URL+"/dines"), chromedp.WaitVisible(strip, chromedp.ByQuery), chromedp.ScrollIntoView(strip, chromedp.ByQuery), chromedp.Poll(`Array.from(document.querySelectorAll('.visit-photo-strip img')).every(i=>i.complete && i.naturalWidth>0 && i.naturalWidth<=320 && i.naturalHeight<=320 && i.src.includes('?variant=thumb-v1'))`, nil)); err != nil {
+	if err = chromedp.Do(browser, enableNetwork(), chromedp.EmulateViewport(390, 844), chromedp.Navigate(srv.URL+"/health"), setSessionCookie(srv.URL, token), chromedp.Navigate(srv.URL+"/dines"), chromedp.WaitVisible(css(strip)), chromedp.ScrollIntoView(css(strip)), chromedp.Poll[chromedp.Void](`Array.from(document.querySelectorAll('.visit-photo-strip img')).every(i=>i.complete && i.naturalWidth>0 && i.naturalWidth<=320 && i.naturalHeight<=320 && i.src.includes('?variant=thumb-v1'))`)); err != nil {
 		t.Fatal(err)
 	}
 	capture := func(name string) {
@@ -64,11 +60,11 @@ func TestPhotoThumbnailsAndOriginalModalAtMobileWidth(t *testing.T) {
 			if err := os.MkdirAll(dir, 0700); err != nil {
 				t.Fatal(err)
 			}
-			if err := chromedp.Run(browser, chromedp.Poll(`document.getAnimations().every(a=>a.playState!=="running" || a.effect.getComputedTiming().iterations===Infinity)`, nil)); err != nil {
+			if err := chromedp.Do(browser, chromedp.Poll[chromedp.Void](`document.getAnimations().every(a=>a.playState!=="running" || a.effect.getComputedTiming().iterations===Infinity)`)); err != nil {
 				t.Fatal(err)
 			}
-			var data []byte
-			if err := chromedp.Run(browser, chromedp.CaptureScreenshot(&data)); err != nil {
+			data, err := chromedp.Run(browser, chromedp.CaptureScreenshot())
+			if err != nil {
 				t.Fatal(err)
 			}
 			if err := os.WriteFile(filepath.Join(dir, name), data, 0600); err != nil {
@@ -81,15 +77,15 @@ func TestPhotoThumbnailsAndOriginalModalAtMobileWidth(t *testing.T) {
 	for i, photo := range visit.Photos {
 		selector := fmt.Sprintf(`[data-photo-src="/photos/%s"]`, photo.ID)
 		expected := fmt.Sprintf(`(()=>{let i=document.querySelector('#photo-preview-image');return i.complete && i.naturalWidth===%d && i.naturalHeight===%d && new URL(i.src).pathname==='/photos/%s' && new URL(i.src).search==='';})()`, sizes[i][0], sizes[i][1], photo.ID)
-		if err = chromedp.Run(browser, chromedp.Click(selector, chromedp.ByQuery), chromedp.WaitVisible(`#photo-preview-modal[open]`, chromedp.ByQuery), chromedp.Poll(expected, nil)); err != nil {
+		if err = chromedp.Do(browser, chromedp.Click(css(selector)), chromedp.WaitVisible(css(`#photo-preview-modal[open]`)), chromedp.Poll[chromedp.Void](expected)); err != nil {
 			t.Fatal(err)
 		}
 		if dir := os.Getenv("DINED_PHOTO_SCREENSHOT_DIR"); dir != "" {
 			if err = os.MkdirAll(dir, 0700); err != nil {
 				t.Fatal(err)
 			}
-			var screenshot []byte
-			if err = chromedp.Run(browser, chromedp.CaptureScreenshot(&screenshot)); err != nil {
+			screenshot, err := chromedp.Run(browser, chromedp.CaptureScreenshot())
+			if err != nil {
 				t.Fatal(err)
 			}
 			file := fmt.Sprintf("photo-%02d-%s.png", i+1, photo.ID)
@@ -100,11 +96,11 @@ func TestPhotoThumbnailsAndOriginalModalAtMobileWidth(t *testing.T) {
 		}
 		if i == len(visit.Photos)-1 {
 			previous := fmt.Sprintf(`document.querySelector('#photo-preview-image').complete && new URL(document.querySelector('#photo-preview-image').src).pathname==='/photos/%s'`, visit.Photos[i-1].ID)
-			if err = chromedp.Run(browser, chromedp.Click(`#photo-preview-prev`, chromedp.ByQuery), chromedp.Poll(previous, nil), chromedp.Click(`#photo-preview-next`, chromedp.ByQuery), chromedp.Poll(expected, nil)); err != nil {
+			if err = chromedp.Do(browser, chromedp.Click(css(`#photo-preview-prev`)), chromedp.Poll[chromedp.Void](previous), chromedp.Click(css(`#photo-preview-next`)), chromedp.Poll[chromedp.Void](expected)); err != nil {
 				t.Fatal(err)
 			}
 		}
-		if err = chromedp.Run(browser, chromedp.Click(`.photo-preview-close`, chromedp.ByQuery), chromedp.Poll(`!document.querySelector('#photo-preview-modal').open`, nil)); err != nil {
+		if err = chromedp.Do(browser, chromedp.Click(css(`.photo-preview-close`)), chromedp.Poll[chromedp.Void](`!document.querySelector('#photo-preview-modal').open`)); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -119,10 +115,10 @@ func TestPhotoThumbnailsAndOriginalModalAtMobileWidth(t *testing.T) {
 	}
 	// Saved-photo editing uses the same bounded URLs, while preview buttons retain
 	// original URLs. Existing form payloads carry only IDs for kept photos.
-	if err = chromedp.Run(browser, chromedp.Navigate(srv.URL+"/visits/"+visitID.String()+"/edit"), chromedp.WaitVisible(`[data-photo-item]`, chromedp.ByQuery), chromedp.Poll(`document.querySelectorAll('[name=keep_photo_id]').length===4 && document.querySelectorAll('[name=photo_data_uri]').length===0 && Array.from(document.querySelectorAll('[data-photo-item] img')).every(i=>new URL(i.src).search==='?variant=thumb-v1')`, nil)); err != nil {
+	if err = chromedp.Do(browser, chromedp.Navigate(srv.URL+"/visits/"+visitID.String()+"/edit"), chromedp.WaitVisible(css(`[data-photo-item]`)), chromedp.Poll[chromedp.Void](`document.querySelectorAll('[name=keep_photo_id]').length===4 && document.querySelectorAll('[name=photo_data_uri]').length===0 && Array.from(document.querySelectorAll('[data-photo-item] img')).every(i=>new URL(i.src).search==='?variant=thumb-v1')`)); err != nil {
 		t.Fatal(err)
 	}
-	if err = chromedp.Run(browser, chromedp.ScrollIntoView(`[data-photo-item]`, chromedp.ByQuery), chromedp.Poll(`Array.from(document.querySelectorAll("[data-photo-item] img")).every(i=>i.complete && i.naturalWidth>0)`, nil)); err != nil {
+	if err = chromedp.Do(browser, chromedp.ScrollIntoView(css(`[data-photo-item]`)), chromedp.Poll[chromedp.Void](`Array.from(document.querySelectorAll("[data-photo-item] img")).every(i=>i.complete && i.naturalWidth>0)`)); err != nil {
 		t.Fatal(err)
 	}
 	capture("saved-photo-edit.png")

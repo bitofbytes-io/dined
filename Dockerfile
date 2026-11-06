@@ -1,6 +1,6 @@
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
 
-FROM golang:1.26.10-alpine3.23 AS builder
+FROM golang:1.27.3-alpine3.23@sha256:8a5046497cda39860b832ffdbe8dd66018a0f05bb01352f533a36e7e2ced66a0 AS builder
 WORKDIR /src
 
 COPY go.mod go.sum ./
@@ -10,7 +10,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o /out/dined ./cmd/dined \
     && CGO_ENABLED=0 GOOS=linux go build -o /out/photo-storage ./cmd/photo-storage
 
-FROM alpine:3.23
+FROM alpine:3.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
 WORKDIR /app
 
 RUN apk add --no-cache ca-certificates wget

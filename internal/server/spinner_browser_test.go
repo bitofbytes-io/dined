@@ -44,38 +44,38 @@ func TestSpinnerSpinsToAPickInTheBrowser(t *testing.T) {
 		Spun   bool `json:"spun"`
 		Linked bool `json:"linked"`
 	}
-	err := chromedp.Run(browserCtx,
+	err := chromedp.Do(browserCtx,
 		chromedp.EmulateViewport(390, 844),
 		chromedp.Navigate(server.URL+"/where-to-eat"),
-		chromedp.WaitVisible(`.spin-form select[name="from"]`, chromedp.ByQuery),
-		chromedp.SetValue(`.spin-form select[name="from"]`, "cuisine:Pizza", chromedp.ByQuery),
-		chromedp.Evaluate(`window.firstSpinSettled = false;
-			document.addEventListener("htmx:afterSettle", function () { window.firstSpinSettled = true; }, {once: true});`, nil),
-		chromedp.Click(`.spin-form button`, chromedp.ByQuery),
-		chromedp.WaitVisible(`[data-spin-result]`, chromedp.ByQuery),
-		chromedp.WaitNotPresent(`[data-spin-result].is-spinning`, chromedp.ByQuery),
+		chromedp.WaitVisible(css(`.spin-form select[name="from"]`)),
+		chromedp.SetValue(css(`.spin-form select[name="from"]`), "cuisine:Pizza"),
+		chromedp.Evaluate[chromedp.Void](`window.firstSpinSettled = false;
+			document.addEventListener("htmx:afterSettle", function () { window.firstSpinSettled = true; }, {once: true});`),
+		chromedp.Click(css(`.spin-form button`)),
+		chromedp.WaitVisible(css(`[data-spin-result]`)),
+		chromedp.WaitNotPresent(css(`[data-spin-result].is-spinning`)),
 		// The result is visible before HTMX finishes initializing the replacement form.
-		chromedp.Poll(`window.firstSpinSettled === true`, nil),
-		chromedp.Text(`[data-spin-name]`, &name, chromedp.ByQuery),
-		chromedp.Text(`.spin-form button`, &again, chromedp.ByQuery),
-		chromedp.Location(&location),
-		chromedp.Evaluate(`document.documentElement.scrollWidth > window.innerWidth`, &overflow),
+		chromedp.Poll[chromedp.Void](`window.firstSpinSettled === true`),
+		resultInto(chromedp.Text(css(`[data-spin-name]`)), &name),
+		resultInto(chromedp.Text(css(`.spin-form button`)), &again),
+		resultInto(chromedp.Location(), &location),
+		evalInto(`document.documentElement.scrollWidth > window.innerWidth`, &overflow),
 
 		// Anywhere holds two places, so Spin again skips Old Haunt and the
 		// reel flashes the other name before the link comes back.
-		chromedp.SetValue(`.spin-form select[name="from"]`, "", chromedp.ByQuery),
-		chromedp.Evaluate(`window.spinWatch = {spun: false, linked: false};
+		chromedp.SetValue(css(`.spin-form select[name="from"]`), ""),
+		chromedp.Evaluate[chromedp.Void](`window.spinWatch = {spun: false, linked: false};
 			new MutationObserver(function () {
 				var card = document.querySelector("[data-spin-result].is-spinning");
 				if (!card) return;
 				window.spinWatch.spun = true;
 				if (card.querySelector("[data-spin-name]").hasAttribute("href")) window.spinWatch.linked = true;
-			}).observe(document.body, {subtree: true, childList: true, attributes: true, characterData: true}); true`, nil),
-		chromedp.Click(`.spin-form button`, chromedp.ByQuery),
-		chromedp.Poll(`location.search.includes("last=") && document.querySelector("[data-spin-result][data-spin-reel-done]:not(.is-spinning)") !== null`, nil),
-		chromedp.Text(`[data-spin-name]`, &nextName, chromedp.ByQuery),
-		chromedp.Evaluate(`document.querySelector("[data-spin-name]").getAttribute("href") || ""`, &nextHref),
-		chromedp.Evaluate(`window.spinWatch`, &watch),
+			}).observe(document.body, {subtree: true, childList: true, attributes: true, characterData: true}); true`),
+		chromedp.Click(css(`.spin-form button`)),
+		chromedp.Poll[chromedp.Void](`location.search.includes("last=") && document.querySelector("[data-spin-result][data-spin-reel-done]:not(.is-spinning)") !== null`),
+		resultInto(chromedp.Text(css(`[data-spin-name]`)), &nextName),
+		evalInto(`document.querySelector("[data-spin-name]").getAttribute("href") || ""`, &nextHref),
+		evalInto(`window.spinWatch`, &watch),
 	)
 	if err != nil {
 		t.Fatal(err)
