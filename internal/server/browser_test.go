@@ -13,11 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bitofbytes-io/dined/internal/middleware"
 	"github.com/bitofbytes-io/dined/internal/model"
 	"github.com/bitofbytes-io/dined/internal/repository"
 	"github.com/bitofbytes-io/dined/internal/testutil"
-	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 	"github.com/google/uuid"
 )
@@ -85,22 +83,17 @@ func TestSearchRemoveCancelDoesNotDeleteRestaurant(t *testing.T) {
 	defer cancelTimeout()
 
 	var dialogOpen bool
-	err = chromedp.Run(browserCtx,
-		network.Enable(),
+	err = chromedp.Do(browserCtx,
+		enableNetwork(),
 		chromedp.Navigate(server.URL+"/health"),
-		chromedp.ActionFunc(func(ctx context.Context) error {
-			return network.SetCookie(middleware.CookieName, token).
-				WithURL(server.URL).
-				WithPath("/").
-				Do(ctx)
-		}),
+		setSessionCookie(server.URL, token),
 		chromedp.Navigate(server.URL+"/search?q=Amigos"),
-		chromedp.WaitVisible(`.history-remove-button`, chromedp.ByQuery),
-		chromedp.Click(`.history-remove-button`, chromedp.ByQuery),
-		chromedp.WaitVisible(`#delete-dine-modal[open]`, chromedp.ByQuery),
-		chromedp.Click(`#delete-dine-cancel-button`, chromedp.ByQuery),
+		chromedp.WaitVisible(css(`.history-remove-button`)),
+		chromedp.Click(css(`.history-remove-button`)),
+		chromedp.WaitVisible(css(`#delete-dine-modal[open]`)),
+		chromedp.Click(css(`#delete-dine-cancel-button`)),
 		chromedp.Sleep(150*time.Millisecond),
-		chromedp.Evaluate(`document.getElementById("delete-dine-modal").open`, &dialogOpen),
+		evalInto(`document.getElementById("delete-dine-modal").open`, &dialogOpen),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -149,22 +142,22 @@ func TestDinesFilterDialogAppliesChosenFilters(t *testing.T) {
 	var closedAfterClose bool
 	var search, status string
 	var cards int
-	err := chromedp.Run(browserCtx,
+	err := chromedp.Do(browserCtx,
 		chromedp.Navigate(server.URL+"/dines"),
-		chromedp.WaitVisible(`[data-dines-filter-open]`, chromedp.ByQuery),
-		chromedp.Click(`[data-dines-filter-open]`, chromedp.ByQuery),
-		chromedp.WaitVisible(`#dines-filter-dialog[open]`, chromedp.ByQuery),
-		chromedp.Click(`[data-dines-filter-close]`, chromedp.ByQuery),
-		chromedp.Evaluate(`!document.getElementById("dines-filter-dialog").open`, &closedAfterClose),
-		chromedp.Click(`[data-dines-filter-open]`, chromedp.ByQuery),
-		chromedp.WaitVisible(`#dines-filter-dialog[open]`, chromedp.ByQuery),
-		chromedp.SetValue(`select[name="cuisine"]`, "Mexican", chromedp.ByQuery),
-		chromedp.SetValue(`select[name="picker"]`, "Jen", chromedp.ByQuery),
-		chromedp.Click(`.dines-filter-actions button`, chromedp.ByQuery),
-		chromedp.WaitVisible(`.dines-filter-summary`, chromedp.ByQuery),
-		chromedp.Evaluate(`window.location.search`, &search),
-		chromedp.Evaluate(`document.querySelector(".dines-filter-status").textContent`, &status),
-		chromedp.Evaluate(`document.querySelectorAll(".visit-card").length`, &cards),
+		chromedp.WaitVisible(css(`[data-dines-filter-open]`)),
+		chromedp.Click(css(`[data-dines-filter-open]`)),
+		chromedp.WaitVisible(css(`#dines-filter-dialog[open]`)),
+		chromedp.Click(css(`[data-dines-filter-close]`)),
+		evalInto(`!document.getElementById("dines-filter-dialog").open`, &closedAfterClose),
+		chromedp.Click(css(`[data-dines-filter-open]`)),
+		chromedp.WaitVisible(css(`#dines-filter-dialog[open]`)),
+		chromedp.SetValue(css(`select[name="cuisine"]`), "Mexican"),
+		chromedp.SetValue(css(`select[name="picker"]`), "Jen"),
+		chromedp.Click(css(`.dines-filter-actions button`)),
+		chromedp.WaitVisible(css(`.dines-filter-summary`)),
+		evalInto(`window.location.search`, &search),
+		evalInto(`document.querySelector(".dines-filter-status").textContent`, &status),
+		evalInto(`document.querySelectorAll(".visit-card").length`, &cards),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -251,19 +244,14 @@ func TestHomeRecentDinesFitInsideDesktopBoothScene(t *testing.T) {
 		RecentTop      float64 `json:"recentTop"`
 		RecentPosition string  `json:"recentPosition"`
 	}
-	err = chromedp.Run(browserCtx,
-		network.Enable(),
+	err = chromedp.Do(browserCtx,
+		enableNetwork(),
 		chromedp.EmulateViewport(1440, 900),
 		chromedp.Navigate(server.URL+"/health"),
-		chromedp.ActionFunc(func(ctx context.Context) error {
-			return network.SetCookie(middleware.CookieName, token).
-				WithURL(server.URL).
-				WithPath("/").
-				Do(ctx)
-		}),
+		setSessionCookie(server.URL, token),
 		chromedp.Navigate(server.URL+"/"),
-		chromedp.WaitVisible(`.booth-recent .visit-card`, chromedp.ByQuery),
-		chromedp.Evaluate(`(() => {
+		chromedp.WaitVisible(css(`.booth-recent .visit-card`)),
+		evalInto(`(() => {
 			const scene = document.querySelector(".booth-scene").getBoundingClientRect();
 			const action = document.querySelector(".booth-layer-action").getBoundingClientRect();
 			const recent = document.querySelector(".booth-recent");
@@ -355,19 +343,14 @@ func TestEditVisitPhotoAddTileIsFirstAndFullSizeOnMobile(t *testing.T) {
 		AddHeight      float64 `json:"addHeight"`
 		FirstPhotoLeft float64 `json:"firstPhotoLeft"`
 	}
-	err = chromedp.Run(browserCtx,
-		network.Enable(),
+	err = chromedp.Do(browserCtx,
+		enableNetwork(),
 		chromedp.EmulateViewport(390, 844),
 		chromedp.Navigate(server.URL+"/health"),
-		chromedp.ActionFunc(func(ctx context.Context) error {
-			return network.SetCookie(middleware.CookieName, token).
-				WithURL(server.URL).
-				WithPath("/").
-				Do(ctx)
-		}),
+		setSessionCookie(server.URL, token),
 		chromedp.Navigate(server.URL+"/visits/"+visitID.String()+"/edit"),
-		chromedp.WaitVisible(`[data-photo-add]`, chromedp.ByQuery),
-		chromedp.Evaluate(`(() => {
+		chromedp.WaitVisible(css(`[data-photo-add]`)),
+		evalInto(`(() => {
 			const add = document.querySelector("[data-photo-add]").getBoundingClientRect();
 			const firstPhoto = document.querySelector("[data-photo-item]").getBoundingClientRect();
 			return {
@@ -467,25 +450,23 @@ func TestLogFormPickingRestaurantReplacesOtherGooglePlace(t *testing.T) {
 	}
 	hanks := fields{GooglePlaceID: "demo-hanks", Phone: "919-555-0100", Website: "https://hanks.example", Latitude: "35.779600", Longitude: "-78.638200", GoogleRating: "4.3", GooglePriceLevel: "2", Category: "American"}
 	var picked, unpicked, patio, backToCorner fields
-	err = chromedp.Run(browserCtx,
-		network.Enable(),
+	err = chromedp.Do(browserCtx,
+		enableNetwork(),
 		chromedp.Navigate(server.URL+"/health"),
-		chromedp.ActionFunc(func(ctx context.Context) error {
-			return network.SetCookie(middleware.CookieName, token).WithURL(server.URL).WithPath("/").Do(ctx)
-		}),
+		setSessionCookie(server.URL, token),
 		chromedp.Navigate(logURL),
-		chromedp.WaitVisible(`[data-log-form]`, chromedp.ByQuery),
-		chromedp.Evaluate(helpers, nil),
+		chromedp.WaitVisible(css(`[data-log-form]`)),
+		chromedp.Evaluate[chromedp.Void](helpers),
 		// Pick Corner Noodles from the list, then clear Google's address so it matches.
-		chromedp.Evaluate(`dinedType("restaurant_name", "Corner Noodles"); dinedType("address", ""); dinedFields()`, &picked),
+		evalInto(`dinedType("restaurant_name", "Corner Noodles"); dinedType("address", ""); dinedFields()`, &picked),
 		// Typing a name that is not listed un-picks it and restores Hank's place.
-		chromedp.Evaluate(`dinedType("restaurant_name", "Corner Noodles Annex"); dinedFields()`, &unpicked),
+		evalInto(`dinedType("restaurant_name", "Corner Noodles Annex"); dinedFields()`, &unpicked),
 		// Pick a restaurant with its own place, then switch to Corner Noodles.
-		chromedp.Evaluate(`dinedType("restaurant_name", "El Patio Verde"); dinedFields()`, &patio),
-		chromedp.Evaluate(`dinedType("restaurant_name", "Corner Noodles"); dinedType("address", ""); dinedFields()`, &backToCorner),
-		chromedp.Evaluate(`dinedType("rating_`+people[0].ID.String()+`", "7")`, nil),
-		chromedp.Click(`[data-log-submit]`, chromedp.ByQuery),
-		chromedp.Poll(`location.pathname === "/dines"`, nil),
+		evalInto(`dinedType("restaurant_name", "El Patio Verde"); dinedFields()`, &patio),
+		evalInto(`dinedType("restaurant_name", "Corner Noodles"); dinedType("address", ""); dinedFields()`, &backToCorner),
+		chromedp.Evaluate[chromedp.Void](`dinedType("rating_`+people[0].ID.String()+`", "7")`),
+		chromedp.Click(css(`[data-log-submit]`)),
+		chromedp.Poll[chromedp.Void](`location.pathname === "/dines"`),
 	)
 	if err != nil {
 		t.Fatal(err)
