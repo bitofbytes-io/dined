@@ -59,6 +59,32 @@ func setRestaurantClosed(t *testing.T, store DinerStore, id uuid.UUID, closed bo
 	return *updated
 }
 
+// seedClosedAt sets a closed restaurant's closing date directly in the store,
+// bypassing UpdateRestaurant, which only ever stamps today's date.
+func seedClosedAt(t *testing.T, store DinerStore, id uuid.UUID, closedAt time.Time) {
+	t.Helper()
+	switch s := store.(type) {
+	case *Store:
+		tag, err := s.pool.Exec(context.Background(), `UPDATE restaurants SET closed_at = $2::date WHERE id = $1`, id, closedAt)
+		if err != nil || tag.RowsAffected() != 1 {
+			t.Fatalf("seed closed_at: rows = %d, err = %v", tag.RowsAffected(), err)
+		}
+	case *MemoryStore:
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		for i := range s.restaurants {
+			if s.restaurants[i].ID == id {
+				s.restaurants[i].ClosedAt = &closedAt
+				s.syncRestaurant(s.restaurants[i])
+				return
+			}
+		}
+		t.Fatalf("seed closed_at: restaurant %s not found", id)
+	default:
+		t.Fatalf("seed closed_at: unsupported store %T", store)
+	}
+}
+
 func restedFavoriteNames(t *testing.T, store DinerStore) []string {
 	t.Helper()
 	favorites, err := store.RestedFavorites(context.Background(), 7, spinTestNow.AddDate(0, 0, -30))
@@ -158,12 +184,15 @@ func assertClosedRestaurantsKeepHistory(t *testing.T, store DinerStore) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	closed := setRestaurantClosed(t, store, closedID, true)
+	setRestaurantClosed(t, store, closedID, true)
 
-	// Closing again keeps the original date.
+	// Closing again keeps the original date. Move it into the past first, so
+	// overwriting it with today would be caught.
+	earlier := closingDate(time.Now()).AddDate(0, 0, -30)
+	seedClosedAt(t, store, closedID, earlier)
 	again := setRestaurantClosed(t, store, closedID, true)
-	if !again.ClosedAt.Equal(*closed.ClosedAt) {
-		t.Fatalf("closed again at %v, want original %v", again.ClosedAt, closed.ClosedAt)
+	if again.ClosedAt == nil || !again.ClosedAt.Equal(earlier) {
+		t.Fatalf("closed again at %v, want original %v", again.ClosedAt, earlier)
 	}
 
 	visits, err := store.Visits(ctx, 10)
