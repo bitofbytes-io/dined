@@ -102,9 +102,13 @@ func assertClosedRestaurantsLeaveSpinnerAndWantToTry(t *testing.T, store DinerSt
 		if err != nil || len(found) != 1 {
 			t.Fatalf("restaurants %q = %#v, err = %v", name, found, err)
 		}
+		// The save and the assertion can straddle Eastern midnight, so accept
+		// the date from either side of the save.
+		before := closingDate(time.Now())
 		closed := setRestaurantClosed(t, store, found[0].ID, true)
-		if !closed.IsClosed() || !closed.ClosedAt.Equal(closingDate(time.Now())) {
-			t.Fatalf("%s closed at %v, want today's date", name, closed.ClosedAt)
+		after := closingDate(time.Now())
+		if !closed.IsClosed() || !(closed.ClosedAt.Equal(before) || closed.ClosedAt.Equal(after)) {
+			t.Fatalf("%s closed at %v, want %v or %v", name, closed.ClosedAt, before, after)
 		}
 	}
 
