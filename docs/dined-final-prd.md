@@ -576,7 +576,7 @@ Reference:
 - Native iOS app
 - Push reminders
 - Random restaurant picker (shipped as the "Where should we eat?" spinner; see section 15)
-- Recommendation mode
+- Recommendation mode (shipped as the "Haven't been in a while" list on `/where-to-eat`; see section 15)
 - Import from location or spending history
 - More advanced chain detection
 
@@ -625,3 +625,4 @@ Dined MVP is successful if:
 - Trophy case visual direction is Concept #3 jukebox and records.
 - Tagline is: "Proof that nobody actually agreed on dinner."
 - The "Where should we eat?" spinner (`/where-to-eat`, public readonly) picks at random from the open Want to Try list plus places whose two-rater average is at least 7 and that nobody has dined at in 30 days. One dropdown narrows it to a cuisine or city. The result also names whose turn it would be to pick: the person with the fewest picks in the last 90 days, ties going to whoever picked longest ago.
+- Below the spinner, `/where-to-eat` lists "Haven't been in a while": open restaurants whose two-rater average is at least 7 and whose latest dine was over 6 months ago, best rated first and then longest ago, with the last dine date and average rating. It is public readonly, has no edit controls, and ignores the spinner filter. The threshold and months are the `pastFavoriteMinAverage` and `pastFavoriteMonths` constants in `internal/handler/spinner.go`.

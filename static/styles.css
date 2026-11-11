@@ -2719,6 +2719,28 @@ fieldset {
   font-size: .85rem;
 }
 
+/* "Haven't been in a while": well-rated places listed best first, each with
+   its average rating on the right. */
+.past-favorites { margin-top: 2rem; }
+.past-favorites h2 {
+  margin: 0 0 .15rem;
+  color: var(--night);
+  font-size: 1.6rem;
+}
+.past-favorites .want-card { margin-top: .8rem; }
+.past-rating {
+  flex: none;
+  min-width: 2.6rem;
+  padding: .2rem .55rem;
+  color: var(--aqua-dark);
+  font-family: var(--display);
+  font-size: 1.2rem;
+  text-align: center;
+  background: #fff1c2;
+  border: 2px solid var(--night);
+  border-radius: var(--radius);
+}
+
 @media (max-width: 680px) {
   .spin-form { grid-template-columns: minmax(0, 1fr); }
   .spin-card { padding: 1.1rem 1rem; }

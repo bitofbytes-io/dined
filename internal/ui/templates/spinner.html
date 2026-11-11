@@ -35,6 +35,22 @@
       <a class="secondary-button" href="/want-to-try">See Want to Try</a>
     </div>
     {{end}}
+    {{with .PastFavorites}}
+    <section class="past-favorites" aria-labelledby="past-favorites-title">
+      <h2 id="past-favorites-title">Haven't been in a while</h2>
+      <p class="want-meta">Favorites rated {{score $.Spin.PastFavoriteMinAverage}}+ that we haven't been to in over {{$.Spin.PastFavoriteMonths}} months.</p>
+      <ul class="want-card" data-past-favorites>
+        {{range .}}<li class="want-row">
+          <div class="want-main">
+            <strong><a href="/restaurants/{{.Restaurant.ID}}">{{.Restaurant.Name}}</a></strong>
+            {{with wantToTryPlaceLine .Restaurant}}<span class="want-meta">{{.}}</span>{{end}}
+            <span class="want-meta">Last here {{date .LastVisitedAt}} · {{wantToTryAge .LastVisitedAt}}</span>
+          </div>
+          <span class="past-rating" aria-label="Average rating {{score .AverageRating}}">{{score .AverageRating}}</span>
+        </li>{{end}}
+      </ul>
+    </section>
+    {{end}}
     {{end}}
   </section>
 </main>

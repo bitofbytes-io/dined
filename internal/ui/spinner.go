@@ -23,6 +23,12 @@ type Spin struct {
 	Pick     *SpinChoice
 	Turn     *model.Person
 	TurnDays int
+	// PastFavorites is the "Haven't been in a while" list, best rated first,
+	// for places averaging at least PastFavoriteMinAverage whose latest dine
+	// was over PastFavoriteMonths months ago. The spinner filter leaves it be.
+	PastFavorites          []model.RestedFavorite
+	PastFavoriteMonths     int
+	PastFavoriteMinAverage float64
 	// Reel is a few other names the result card flashes through before
 	// settling on the pick.
 	Reel []string

@@ -87,6 +87,53 @@ func TestRouterSpinnerPicksFromWantToTryAndRestedFavorites(t *testing.T) {
 	}
 }
 
+func TestRouterSpinnerListsPastFavoritesForReadOnlyVisitors(t *testing.T) {
+	ctx := context.Background()
+	store := spinnerTestStore(t)
+	people, err := store.People(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Old Haunt (60 days) is too recent for the list; Long Gone is not.
+	if _, err := store.CreateVisit(ctx, model.VisitInput{
+		RestaurantName: "Long Gone",
+		Address:        "3 Faraway Lane",
+		City:           "Cary",
+		Category:       "Thai",
+		VisitedAt:      time.Now().AddDate(0, -8, 0),
+		PriceLevel:     2,
+		Ratings:        map[uuid.UUID]float64{people[0].ID: 9, people[1].ID: 8},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	router, _ := newAuthenticatedTestRouter(t, store)
+
+	body := getPublic(router, "/where-to-eat").Body.String()
+	for _, want := range []string{"Haven't been in a while", "Long Gone", "Thai · Cary", "8 months ago", "data-past-favorites", `aria-label="Average rating 8.5"`} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("where to eat should list %q:\n%s", want, body)
+		}
+	}
+	list := body[strings.Index(body, "data-past-favorites"):]
+	list = list[:strings.Index(list, "</ul>")]
+	if strings.Contains(list, "Old Haunt") || strings.Contains(list, "<form") || strings.Contains(list, "<button") {
+		t.Fatalf("past favorites should leave out recent places and edit controls:\n%s", list)
+	}
+
+	body = getPublic(router, "/where-to-eat?from=cuisine:Pizza").Body.String()
+	if !strings.Contains(body, "Long Gone") {
+		t.Fatalf("the spinner filter should not narrow past favorites:\n%s", body)
+	}
+}
+
+func TestRouterSpinnerWithoutPastFavoritesOmitsTheSection(t *testing.T) {
+	router, _ := newAuthenticatedTestRouter(t, spinnerTestStore(t))
+
+	if body := getPublic(router, "/where-to-eat").Body.String(); strings.Contains(body, "Haven't been in a while") {
+		t.Fatalf("no place is old enough, so the section should be absent:\n%s", body)
+	}
+}
+
 func TestRouterSpinnerWithNothingInTheHat(t *testing.T) {
 	router, _ := newAuthenticatedTestRouter(t, repository.NewMemoryStore())
 
