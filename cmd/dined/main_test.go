@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"log/slog"
-	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -135,14 +134,7 @@ func TestOpenStoresPostgres(t *testing.T) {
 	})
 
 	// Scope the pool to the isolated schema through a pgx runtime parameter.
-	u, err := url.Parse(databaseURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	q := u.Query()
-	q.Set("search_path", schema+",public")
-	u.RawQuery = q.Encode()
-	cfg := &config.Config{DataStore: config.DataStorePostgres, DatabaseURL: u.String()}
+	cfg := &config.Config{DataStore: config.DataStorePostgres, DatabaseURL: withSearchPath(databaseURL, schema+",public")}
 
 	store, authRepo, pool, closeStores, err := openStores(ctx, cfg)
 	if err != nil {
@@ -180,5 +172,44 @@ func TestOpenStoresPostgres(t *testing.T) {
 	closed = true
 	if err := pool.Ping(ctx); err == nil {
 		t.Fatal("pool still usable after closeStores")
+	}
+}
+
+// withSearchPath scopes a pgx connection string to search_path through a
+// runtime parameter. It appends to the original string rather than
+// re-encoding it, so both URL and keyword/value (DSN) forms stay valid.
+func withSearchPath(connString, searchPath string) string {
+	if strings.HasPrefix(connString, "postgres://") || strings.HasPrefix(connString, "postgresql://") {
+		sep := "?"
+		if strings.Contains(connString, "?") {
+			sep = "&"
+		}
+		return connString + sep + "search_path=" + searchPath
+	}
+	return connString + " search_path=" + searchPath
+}
+
+func TestWithSearchPath(t *testing.T) {
+	tests := []struct {
+		name, in, want string
+	}{
+		{"url", "postgres://u:p@localhost:5432/db", "postgres://u:p@localhost:5432/db?search_path=s,public"},
+		{"url with query", "postgresql://u@localhost/db?sslmode=disable", "postgresql://u@localhost/db?sslmode=disable&search_path=s,public"},
+		{"keyword", "host=localhost dbname=db user=u", "host=localhost dbname=db user=u search_path=s,public"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := withSearchPath(tt.in, "s,public")
+			if got != tt.want {
+				t.Fatalf("withSearchPath = %q, want %q", got, tt.want)
+			}
+			cfg, err := pgx.ParseConfig(got)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if sp := cfg.RuntimeParams["search_path"]; sp != "s,public" {
+				t.Fatalf("search_path = %q, want %q", sp, "s,public")
+			}
+		})
 	}
 }
