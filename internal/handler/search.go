@@ -90,11 +90,11 @@ func (h *Handler) Nearby(w http.ResponseWriter, r *http.Request) {
 	} else if searched && !h.placesConfigured() {
 		locationStatus = "Google Places is not configured for this environment, so nearby restaurant results cannot load."
 	}
+	saved := h.savedPlaces(r, found)
+	found = withoutClosedPlaces(found, saved)
 	if searched && h.placesConfigured() && locationStatus == "" && len(found) == 0 {
 		locationStatus = "No nearby restaurants found. Try a restaurant/cuisine search or a wider city/address search."
 	}
-	saved := h.savedPlaces(r, found)
-	found = withoutClosedPlaces(found, saved)
 	data := ui.PageData{
 		Title:          "Nearby",
 		Places:         found,

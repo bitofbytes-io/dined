@@ -57,6 +57,34 @@ func TestNearbyLeavesOutPlacesMarkedClosed(t *testing.T) {
 	}
 }
 
+func TestNearbyExplainsWhenEveryPlaceIsClosed(t *testing.T) {
+	ctx := context.Background()
+	store := repository.NewMemoryStore()
+	if _, err := store.SaveWantToTry(ctx, model.WantToTryInput{RestaurantName: "Shuttered Cafe", GooglePlaceID: "place-shuttered"}); err != nil {
+		t.Fatal(err)
+	}
+	saved, err := store.RestaurantsByPlaceIDs(ctx, []string{"place-shuttered"})
+	if err != nil || len(saved) != 1 {
+		t.Fatalf("saved = %#v, err = %v", saved, err)
+	}
+	shuttered := saved["place-shuttered"]
+	if err := store.UpdateRestaurant(ctx, shuttered.ID, model.RestaurantInput{Name: shuttered.Name, Closed: true}); err != nil {
+		t.Fatal(err)
+	}
+	fakePlaces := &fakeGooglePlacesClient{
+		configured:   true,
+		nearbyPlaces: []places.Place{{ID: "place-shuttered", DisplayName: places.Name{Text: "Shuttered Cafe"}}},
+	}
+	rec := httptest.NewRecorder()
+
+	New(nil, store, fakePlaces, nil, nil).Nearby(rec, httptest.NewRequestWithContext(ctx, http.MethodGet, "/nearby?lat=35.7796&lng=-78.6382", nil))
+
+	body := rec.Body.String()
+	if !strings.Contains(body, "No nearby restaurants found") || strings.Contains(body, "Shuttered Cafe") {
+		t.Fatalf("nearby with only closed places:\n%s", body)
+	}
+}
+
 func TestRefreshRestaurantGoogleOnlySuggestsClosure(t *testing.T) {
 	ctx := context.Background()
 	store := repository.NewMemoryStore()
