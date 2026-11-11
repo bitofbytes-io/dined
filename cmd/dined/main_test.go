@@ -195,7 +195,10 @@ func TestOpenStoresPostgres(t *testing.T) {
 func withSearchPath(connString, searchPath string) string {
 	if strings.HasPrefix(connString, "postgres://") || strings.HasPrefix(connString, "postgresql://") {
 		sep := "?"
-		if strings.Contains(connString, "?") {
+		switch {
+		case strings.HasSuffix(connString, "?"), strings.HasSuffix(connString, "&"):
+			sep = ""
+		case strings.Contains(connString, "?"):
 			sep = "&"
 		}
 		return connString + sep + "search_path=" + searchPath
@@ -211,6 +214,7 @@ func TestWithSearchPath(t *testing.T) {
 	}{
 		{"url", "postgres://u:p@localhost:5432/db", "postgres://u:p@localhost:5432/db?search_path=s,public"},
 		{"url with query", "postgresql://u@localhost/db?sslmode=disable", "postgresql://u@localhost/db?sslmode=disable&search_path=s,public"},
+		{"url with empty query", "postgres://u@localhost/db?", "postgres://u@localhost/db?search_path=s,public"},
 		{"keyword", "host=localhost dbname=db user=u", "host=localhost dbname=db user=u search_path=s,public"},
 	}
 	for _, tt := range tests {
