@@ -15,6 +15,8 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+// TestSlogLevel checks the exact-match mapping from level names to slog levels,
+// including the LevelInfo fallback for unrecognized input.
 func TestSlogLevel(t *testing.T) {
 	tests := []struct {
 		level string
@@ -26,7 +28,8 @@ func TestSlogLevel(t *testing.T) {
 		{"error", slog.LevelError},
 		{"", slog.LevelInfo},
 		{"verbose", slog.LevelInfo},
-		// Matching is exact: config is expected to normalize case.
+		// Matching is exact and case-sensitive: slogLevel does no case folding or
+		// trimming, and config passes LOG_LEVEL through unchanged.
 		{"DEBUG", slog.LevelInfo},
 		{"Warn", slog.LevelInfo},
 		{" error ", slog.LevelInfo},
@@ -40,6 +43,8 @@ func TestSlogLevel(t *testing.T) {
 	}
 }
 
+// TestOpenStoresMemory checks that the memory data store builds without a
+// database pool or any database access.
 func TestOpenStoresMemory(t *testing.T) {
 	// The memory store must not touch the database URL.
 	cfg := &config.Config{DataStore: config.DataStoreMemory, DatabaseURL: "postgres://invalid.invalid:1/none"}
@@ -63,6 +68,8 @@ func TestOpenStoresMemory(t *testing.T) {
 	closeStores()
 }
 
+// TestOpenStoresPostgresErrors checks that connection failures are wrapped,
+// redact credentials, and return no partially built stores.
 func TestOpenStoresPostgresErrors(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -95,6 +102,9 @@ func TestOpenStoresPostgresErrors(t *testing.T) {
 	}
 }
 
+// TestOpenStoresPostgres checks the Postgres path end to end against a
+// disposable schema: migrations, a store query, and pool shutdown. It skips
+// without DINED_TEST_DATABASE_URL.
 func TestOpenStoresPostgres(t *testing.T) {
 	databaseURL := os.Getenv("DINED_TEST_DATABASE_URL")
 	if databaseURL == "" {
@@ -170,8 +180,12 @@ func TestOpenStoresPostgres(t *testing.T) {
 
 	closeStores()
 	closed = true
-	if err := pool.Ping(ctx); err == nil {
-		t.Fatal("pool still usable after closeStores")
+	// Use a fresh context so an expired ctx cannot satisfy the assertion; a
+	// closed pgxpool surfaces puddle's "closed pool" error.
+	pingCtx, pingCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer pingCancel()
+	if err := pool.Ping(pingCtx); err == nil || !strings.Contains(err.Error(), "closed pool") {
+		t.Fatalf("Ping after closeStores = %v, want closed pool error", err)
 	}
 }
 
@@ -189,6 +203,8 @@ func withSearchPath(connString, searchPath string) string {
 	return connString + " search_path=" + searchPath
 }
 
+// TestWithSearchPath checks that withSearchPath yields a parseable connection
+// string with the search_path runtime parameter for URL and keyword forms.
 func TestWithSearchPath(t *testing.T) {
 	tests := []struct {
 		name, in, want string
