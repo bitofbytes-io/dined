@@ -18,6 +18,19 @@ func TestFieldMasksAreScopedToEndpointShape(t *testing.T) {
 	if strings.Contains(detailsFieldMask, "places.") {
 		t.Fatalf("details field mask must use unprefixed Place fields: %s", detailsFieldMask)
 	}
+	if !strings.Contains(detailsFieldMask, "businessStatus") {
+		t.Fatalf("details field mask must ask for businessStatus: %s", detailsFieldMask)
+	}
+}
+
+func TestPlaceDecodesBusinessStatus(t *testing.T) {
+	var place Place
+	if err := json.Unmarshal([]byte(`{"id":"p1","businessStatus":"CLOSED_PERMANENTLY"}`), &place); err != nil {
+		t.Fatal(err)
+	}
+	if place.BusinessStatus != BusinessStatusClosedPermanently {
+		t.Fatalf("BusinessStatus = %q", place.BusinessStatus)
+	}
 }
 
 func TestTextSearchNearAddsLocationBias(t *testing.T) {

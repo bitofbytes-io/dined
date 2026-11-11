@@ -64,6 +64,23 @@ func TestMetadataFromPlaceIncludesMappedCategory(t *testing.T) {
 	}
 }
 
+func TestSuggestsClosureOnlyForPermanentClosure(t *testing.T) {
+	tests := []struct {
+		status string
+		want   bool
+	}{
+		{status: "CLOSED_PERMANENTLY", want: true},
+		{status: "CLOSED_TEMPORARILY"},
+		{status: "OPERATIONAL"},
+		{status: ""},
+	}
+	for _, tt := range tests {
+		if got := SuggestsClosure(places.Place{BusinessStatus: tt.status}); got != tt.want {
+			t.Fatalf("SuggestsClosure(%q) = %v, want %v", tt.status, got, tt.want)
+		}
+	}
+}
+
 type fakeDetailsClient struct {
 	configured bool
 	places     map[string]places.Place

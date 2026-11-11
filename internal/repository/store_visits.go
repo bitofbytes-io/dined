@@ -239,6 +239,7 @@ func (s *Store) scanVisits(ctx context.Context, rows pgx.Rows, photos photoDetai
 			&visit.Restaurant.GooglePriceLevel,
 			&visit.Restaurant.Category,
 			&visit.Restaurant.IsChain,
+			&visit.Restaurant.ClosedAt,
 			&visit.Restaurant.CreatedAt,
 			&visit.Restaurant.UpdatedAt,
 		)
@@ -344,7 +345,7 @@ func visitSelectSQL() string {
 		       p.id, p.name, p.avatar_color,
 		       r.id, r.name, r.address, r.city, r.latitude, r.longitude, r.phone, r.website,
 		       r.google_place_id, r.google_rating, r.google_price_level, r.category,
-		       r.is_chain, r.created_at, r.updated_at
+		       r.is_chain, r.closed_at, r.created_at, r.updated_at
 		FROM dining_visits v
 		LEFT JOIN persons p ON p.id = v.picked_by_person_id
 		JOIN restaurants r ON r.id = v.restaurant_id`

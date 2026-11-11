@@ -28,8 +28,17 @@ type Restaurant struct {
 	GooglePriceLevel *int
 	Category         *string
 	IsChain          bool
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	// ClosedAt is the date the restaurant was marked permanently closed, or
+	// nil while it is open. Closed restaurants keep their visits but leave the
+	// spinner, Want to Try and Nearby.
+	ClosedAt  *time.Time
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+// IsClosed reports whether the restaurant is marked permanently closed.
+func (r Restaurant) IsClosed() bool {
+	return r.ClosedAt != nil
 }
 
 type RestaurantMapPoint struct {
@@ -156,6 +165,9 @@ type RestaurantInput struct {
 	GooglePriceLevel *int
 	Category         string
 	IsChain          bool
+	// Closed marks the restaurant permanently closed. A restaurant already
+	// closed keeps its original closing date.
+	Closed bool
 }
 
 // WantToTryItem is a restaurant on the family's Want to Try list.

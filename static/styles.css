@@ -1563,6 +1563,11 @@ fieldset {
   font-weight: 900;
   text-transform: uppercase;
 }
+/* Permanently closed restaurants stay in history under a red "Closed" badge. */
+.badge.badge-closed, .restaurant-row em.closed-tag {
+  color: var(--milk);
+  background: var(--red-dark);
+}
 .place-row {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;

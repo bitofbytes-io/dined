@@ -10,8 +10,8 @@ import (
 
 // RestedFavorites lists the restaurants whose ratings average at least
 // minAverage, counting only visits whose ratings count in aggregates, and
-// whose latest visit, rated or not, was before lastVisitedBefore. They are
-// ordered by name.
+// whose latest visit, rated or not, was before lastVisitedBefore. Restaurants
+// marked permanently closed are left out. They are ordered by name.
 func (s *Store) RestedFavorites(ctx context.Context, minAverage float64, lastVisitedBefore time.Time) ([]model.RestedFavorite, error) {
 	rows, err := s.pool.Query(ctx, `WITH`+aggregateRatingsCTE+`,
 		favorites AS (
@@ -28,12 +28,13 @@ func (s *Store) RestedFavorites(ctx context.Context, minAverage float64, lastVis
 		)
 		SELECT r.id, r.name, r.address, r.city, r.latitude, r.longitude, r.phone, r.website,
 		       r.google_place_id, r.google_rating, r.google_price_level, r.category,
-		       r.is_chain, r.created_at, r.updated_at,
+		       r.is_chain, r.closed_at, r.created_at, r.updated_at,
 		       f.average_rating, l.last_visited_at
 		FROM favorites f
 		JOIN restaurants r ON r.id = f.restaurant_id
 		JOIN last_visits l ON l.restaurant_id = r.id
 		WHERE l.last_visited_at < $3
+		  AND r.closed_at IS NULL
 		ORDER BY r.name, r.id`, model.MinAggregateRaters, minAverage, lastVisitedBefore)
 	if err != nil {
 		return nil, fmt.Errorf("rested favorites: %w", err)
@@ -58,6 +59,7 @@ func (s *Store) RestedFavorites(ctx context.Context, minAverage float64, lastVis
 			&restaurant.GooglePriceLevel,
 			&restaurant.Category,
 			&restaurant.IsChain,
+			&restaurant.ClosedAt,
 			&restaurant.CreatedAt,
 			&restaurant.UpdatedAt,
 			&favorite.AverageRating,

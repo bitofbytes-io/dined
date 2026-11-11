@@ -106,7 +106,7 @@ func (h *Handler) UpdateRestaurant(w http.ResponseWriter, r *http.Request) {
 		h.renderRestaurantEditError(w, r, id, "Could not save this restaurant. Please try again.")
 		return
 	}
-	slog.Info("restaurant updated", "restaurant_id", id, "is_chain", input.IsChain)
+	slog.Info("restaurant updated", "restaurant_id", id, "is_chain", input.IsChain, "closed", input.Closed)
 	if returnVisitID != "" {
 		http.Redirect(w, r, "/visits/"+returnVisitID+"/edit", http.StatusSeeOther)
 		return
@@ -172,6 +172,10 @@ func (h *Handler) RefreshRestaurantGoogle(w http.ResponseWriter, r *http.Request
 		return
 	}
 	slog.Info("restaurant google metadata refreshed", "restaurant_id", id, "place_id", *restaurant.GooglePlaceID)
+	if placesync.SuggestsClosure(*place) && !restaurant.IsClosed() {
+		redirectRestaurantGoogleRefresh(w, r, id, "closed", returnVisitID)
+		return
+	}
 	redirectRestaurantGoogleRefresh(w, r, id, "updated", returnVisitID)
 }
 
@@ -187,6 +191,8 @@ func googleRefreshNotice(status string) string {
 	switch status {
 	case "updated":
 		return "Google info refreshed"
+	case "closed":
+		return "Google info refreshed. Google reports this place as permanently closed; check Permanently closed and save to hide it from the spinner."
 	case "failed":
 		return "Google info refresh failed"
 	case "missing-place-id":
@@ -217,6 +223,7 @@ func (h *Handler) restaurantInput(r *http.Request) (model.RestaurantInput, error
 		GooglePriceLevel: googlePriceLevel,
 		Category:         r.FormValue("category"),
 		IsChain:          r.FormValue("is_chain") == "true",
+		Closed:           r.FormValue("closed") == "true",
 	}
 	if err := input.Validate(); err != nil {
 		return model.RestaurantInput{}, err

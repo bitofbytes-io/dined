@@ -30,6 +30,7 @@ type Place struct {
 	Rating            float64            `json:"rating"`
 	PriceLevel        string             `json:"priceLevel"`
 	Types             []string           `json:"types"`
+	BusinessStatus    string             `json:"businessStatus"`
 }
 
 type Name struct {
@@ -73,7 +74,7 @@ type searchResponse struct {
 }
 
 const searchFieldMask = "places.id,places.displayName,places.formattedAddress,places.addressComponents,places.location,places.nationalPhoneNumber,places.websiteUri,places.rating,places.priceLevel,places.types"
-const detailsFieldMask = "id,displayName,formattedAddress,addressComponents,location,nationalPhoneNumber,websiteUri,rating,priceLevel,types"
+const detailsFieldMask = "id,displayName,formattedAddress,addressComponents,location,nationalPhoneNumber,websiteUri,rating,priceLevel,types,businessStatus"
 const staticMapEndpoint = "https://maps.googleapis.com/maps/api/staticmap"
 const staticMapMaxBytes = 4 << 20
 const staticMapMaxMarkers = 100
@@ -311,6 +312,10 @@ func PriceLevelNumber(priceLevel string) int {
 		return 0
 	}
 }
+
+// BusinessStatusClosedPermanently is the businessStatus Google reports for a
+// place that has shut down for good.
+const BusinessStatusClosedPermanently = "CLOSED_PERMANENTLY"
 
 func Category(place Place) string {
 	for _, typ := range place.Types {
