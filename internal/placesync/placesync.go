@@ -49,6 +49,13 @@ func MetadataFromPlace(place places.Place) model.GoogleRestaurantMetadata {
 	return metadata
 }
 
+// SuggestsClosure reports whether Google Places says the place is permanently
+// closed. It only suggests: nothing is hidden until someone marks the
+// restaurant closed.
+func SuggestsClosure(place places.Place) bool {
+	return place.BusinessStatus == places.BusinessStatusClosedPermanently
+}
+
 func applyPlaceDetails(input model.VisitInput, place places.Place) model.VisitInput {
 	if strings.TrimSpace(input.GooglePlaceID) == "" {
 		input.GooglePlaceID = place.ID

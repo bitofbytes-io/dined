@@ -29,7 +29,7 @@ func (m *MemoryStore) WantToTry(context.Context) ([]model.WantToTryItem, error) 
 		if stored.doneAt != nil {
 			continue
 		}
-		if item, ok := m.wantToTryItem(stored); ok {
+		if item, ok := m.wantToTryItem(stored); ok && !item.Restaurant.IsClosed() {
 			items = append(items, item)
 		}
 	}

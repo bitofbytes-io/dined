@@ -15,15 +15,16 @@ const wantToTrySelectSQL = `
 	       p.id, p.name, p.avatar_color,
 	       r.id, r.name, r.address, r.city, r.latitude, r.longitude, r.phone, r.website,
 	       r.google_place_id, r.google_rating, r.google_price_level, r.category,
-	       r.is_chain, r.created_at, r.updated_at
+	       r.is_chain, r.closed_at, r.created_at, r.updated_at
 	FROM want_to_try w
 	JOIN restaurants r ON r.id = w.restaurant_id
 	LEFT JOIN persons p ON p.id = w.suggested_by_person_id`
 
 // WantToTry lists the places still on the Want to Try list, newest first.
+// Restaurants marked permanently closed are left out.
 func (s *Store) WantToTry(ctx context.Context) ([]model.WantToTryItem, error) {
 	rows, err := s.pool.Query(ctx, wantToTrySelectSQL+`
-		WHERE w.done_at IS NULL
+		WHERE w.done_at IS NULL AND r.closed_at IS NULL
 		ORDER BY w.created_at DESC, w.id`)
 	if err != nil {
 		return nil, fmt.Errorf("list want to try: %w", err)
@@ -152,6 +153,7 @@ func scanWantToTryItem(row pgx.Row) (model.WantToTryItem, error) {
 		&item.Restaurant.GooglePriceLevel,
 		&item.Restaurant.Category,
 		&item.Restaurant.IsChain,
+		&item.Restaurant.ClosedAt,
 		&item.Restaurant.CreatedAt,
 		&item.Restaurant.UpdatedAt,
 	)

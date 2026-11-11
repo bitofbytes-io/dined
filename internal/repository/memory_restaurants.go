@@ -175,6 +175,13 @@ func (m *MemoryStore) UpdateRestaurant(_ context.Context, id uuid.UUID, input mo
 		m.restaurants[i].GooglePriceLevel = intPtrOrNil(input.GooglePriceLevel)
 		m.restaurants[i].Category = strPtrOrNil(input.Category)
 		m.restaurants[i].IsChain = input.IsChain
+		switch {
+		case !input.Closed:
+			m.restaurants[i].ClosedAt = nil
+		case m.restaurants[i].ClosedAt == nil:
+			closedAt := closingDate(time.Now())
+			m.restaurants[i].ClosedAt = &closedAt
+		}
 		m.restaurants[i].UpdatedAt = time.Now()
 		m.syncRestaurant(m.restaurants[i])
 		return nil

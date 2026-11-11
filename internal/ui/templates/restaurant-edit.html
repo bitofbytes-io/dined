@@ -23,7 +23,7 @@
     </section>
     <div class="form-actions console-actions">
       <div>{{with $.ReturnVisitID}}<a class="secondary-button" href="/visits/{{.}}/edit">Return to Edit Dine</a>{{end}}</div>
-      <div class="section-actions"><label class="inline-check"><input type="checkbox" name="is_chain" value="true" {{if .IsChain}}checked{{end}}> Mark as chain</label>{{if .GooglePlaceID}}<button class="secondary-button" type="submit" form="restaurant-google-refresh-form">Refresh Google Info</button>{{end}}<button class="primary-button">Save Restaurant</button></div>
+      <div class="section-actions"><label class="inline-check"><input type="checkbox" name="is_chain" value="true" {{if .IsChain}}checked{{end}}> Mark as chain</label><label class="inline-check"><input type="checkbox" name="closed" value="true" {{if .ClosedAt}}checked{{end}}> Permanently closed{{with .ClosedAt}} since {{calendarDate .}}{{end}}</label>{{if .GooglePlaceID}}<button class="secondary-button" type="submit" form="restaurant-google-refresh-form">Refresh Google Info</button>{{end}}<button class="primary-button">Save Restaurant</button></div>
     </div>
   </form>
   {{end}}

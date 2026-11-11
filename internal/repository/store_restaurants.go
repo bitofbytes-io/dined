@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/bitofbytes-io/dined/internal/apptime"
 	"github.com/bitofbytes-io/dined/internal/model"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -14,7 +16,7 @@ import (
 func (s *Store) Restaurants(ctx context.Context, q string) ([]model.Restaurant, error) {
 	query := `
 		SELECT id, name, address, city, latitude, longitude, phone, website, google_place_id,
-		       google_rating, google_price_level, category, is_chain, created_at, updated_at
+		       google_rating, google_price_level, category, is_chain, closed_at, created_at, updated_at
 		FROM restaurants
 		WHERE $1 = '' OR name ILIKE '%' || $1 || '%' OR coalesce(address, '') ILIKE '%' || $1 || '%'
 		ORDER BY name
@@ -39,7 +41,7 @@ func (s *Store) Restaurants(ctx context.Context, q string) ([]model.Restaurant, 
 func (s *Store) Restaurant(ctx context.Context, id uuid.UUID) (*model.Restaurant, error) {
 	row := s.pool.QueryRow(ctx, `
 		SELECT id, name, address, city, latitude, longitude, phone, website, google_place_id,
-		       google_rating, google_price_level, category, is_chain, created_at, updated_at
+		       google_rating, google_price_level, category, is_chain, closed_at, created_at, updated_at
 		FROM restaurants
 		WHERE id = $1`, id)
 	restaurant, err := scanRestaurant(row)
@@ -61,7 +63,7 @@ func (s *Store) RestaurantsByPlaceIDs(ctx context.Context, placeIDs []string) (m
 	}
 	rows, err := s.pool.Query(ctx, `
 		SELECT id, name, address, city, latitude, longitude, phone, website, google_place_id,
-		       google_rating, google_price_level, category, is_chain, created_at, updated_at
+		       google_rating, google_price_level, category, is_chain, closed_at, created_at, updated_at
 		FROM restaurants
 		WHERE google_place_id = ANY($1)`, placeIDs)
 	if err != nil {
@@ -153,7 +155,8 @@ func (s *Store) UpdateRestaurant(ctx context.Context, id uuid.UUID, input model.
 		    google_rating = $7,
 		    google_price_level = $8,
 		    category = $9,
-		    is_chain = $10
+		    is_chain = $10,
+		    closed_at = CASE WHEN $11 THEN COALESCE(closed_at, $12::date) ELSE NULL END
 		WHERE id = $1`,
 		id,
 		strings.TrimSpace(input.Name),
@@ -165,6 +168,8 @@ func (s *Store) UpdateRestaurant(ctx context.Context, id uuid.UUID, input model.
 		input.GooglePriceLevel,
 		nullableString(input.Category),
 		input.IsChain,
+		input.Closed,
+		closingDate(time.Now()),
 	)
 	if err != nil {
 		return fmt.Errorf("update restaurant: %w", err)
@@ -178,6 +183,13 @@ func (s *Store) UpdateRestaurant(ctx context.Context, id uuid.UUID, input model.
 func (s *Store) ToggleChain(ctx context.Context, id uuid.UUID, isChain bool) error {
 	_, err := s.pool.Exec(ctx, `UPDATE restaurants SET is_chain = $2 WHERE id = $1`, id, isChain)
 	return err
+}
+
+// closingDate is the calendar date, in the app's Eastern time, a restaurant is
+// marked closed on, as midnight UTC the way a DATE column reads back.
+func closingDate(now time.Time) time.Time {
+	year, month, day := now.In(apptime.EasternLocation()).Date()
+	return time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
 }
 
 type restaurantScanner interface {
@@ -200,6 +212,7 @@ func scanRestaurant(row restaurantScanner) (model.Restaurant, error) {
 		&restaurant.GooglePriceLevel,
 		&restaurant.Category,
 		&restaurant.IsChain,
+		&restaurant.ClosedAt,
 		&restaurant.CreatedAt,
 		&restaurant.UpdatedAt,
 	)

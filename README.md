@@ -61,6 +61,12 @@ Do not commit this file. `AUTH_GOOGLE_ALLOWED_DOMAINS` can replace or supplement
 
 The database URL, Places key, OAuth client ID, and OAuth secret support corresponding `*_FILE` variables and default secret paths under `/run/secrets/dined_*`.
 
+## Permanently closed restaurants
+
+Tick **Permanently closed** on `/restaurants/{id}/edit` to stamp the restaurant with a closing date (`restaurants.closed_at`, added by migration 009). A closed restaurant leaves the "Where should we eat?" spinner, the Want to Try list, and Nearby results. It keeps its visits, which still count in history, stats, and trophies, under a "Closed" badge. Unticking the box reopens it.
+
+Dined never closes a restaurant on its own. When **Refresh Google Info** finds that Google Places reports `CLOSED_PERMANENTLY`, the edit page only suggests ticking the box. This needs no new configuration; without `GOOGLE_PLACES_API_KEY` the manual toggle still works and no suggestion appears.
+
 ## Database and migrations
 
 ```bash

@@ -36,7 +36,7 @@ func (m *MemoryStore) RestedFavorites(_ context.Context, minAverage float64, las
 			continue
 		}
 		restaurant, ok := m.findRestaurant(&id)
-		if !ok {
+		if !ok || restaurant.IsClosed() {
 			continue
 		}
 		favorites = append(favorites, model.RestedFavorite{Restaurant: restaurant, AverageRating: averageRating, LastVisitedAt: lastVisits[id]})

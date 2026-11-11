@@ -173,6 +173,11 @@ func funcs() template.FuncMap {
 			}
 			return t.In(apptime.EasternLocation()).Format("Jan 2, 2006")
 		},
+		// calendarDate formats a DATE value, which carries no time zone and so
+		// must not be shifted into Eastern time like a timestamp.
+		"calendarDate": func(t time.Time) string {
+			return t.Format("Jan 2, 2006")
+		},
 		"monthYear": func(t time.Time) string {
 			return t.In(apptime.EasternLocation()).Format("Jan 2006")
 		},

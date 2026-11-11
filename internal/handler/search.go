@@ -90,13 +90,15 @@ func (h *Handler) Nearby(w http.ResponseWriter, r *http.Request) {
 	} else if searched && !h.placesConfigured() {
 		locationStatus = "Google Places is not configured for this environment, so nearby restaurant results cannot load."
 	}
+	saved := h.savedPlaces(r, found)
+	found = withoutClosedPlaces(found, saved)
 	if searched && h.placesConfigured() && locationStatus == "" && len(found) == 0 {
 		locationStatus = "No nearby restaurants found. Try a restaurant/cuisine search or a wider city/address search."
 	}
 	data := ui.PageData{
 		Title:          "Nearby",
 		Places:         found,
-		DinedPlaces:    h.dinedPlaces(r, found),
+		DinedPlaces:    h.dinedPlaces(r, saved),
 		Query:          q,
 		LocationQuery:  near,
 		LocationStatus: locationStatus,
@@ -112,9 +114,10 @@ func (h *Handler) Nearby(w http.ResponseWriter, r *http.Request) {
 	h.render(w, "nearby", r, data)
 }
 
-// dinedPlaces looks up the visit history of the found places we have dined
-// at, keyed by Google place ID. A failed lookup only leaves out the history.
-func (h *Handler) dinedPlaces(r *http.Request, found []places.Place) map[string]*ui.RestaurantResult {
+// savedPlaces looks up the saved restaurants linked to the found places, keyed
+// by Google place ID. A failed lookup only leaves out saved details, so
+// nothing is hidden and no history shows.
+func (h *Handler) savedPlaces(r *http.Request, found []places.Place) map[string]model.Restaurant {
 	placeIDs := make([]string, 0, len(found))
 	for _, place := range found {
 		if place.ID != "" {
@@ -129,6 +132,30 @@ func (h *Handler) dinedPlaces(r *http.Request, found []places.Place) map[string]
 		slog.Warn("nearby saved restaurants", "error", err)
 		return nil
 	}
+	return saved
+}
+
+// withoutClosedPlaces drops the found places whose saved restaurant is marked
+// permanently closed. A place Google alone calls closed stays: only the flag
+// hides it.
+func withoutClosedPlaces(found []places.Place, saved map[string]model.Restaurant) []places.Place {
+	if len(saved) == 0 {
+		return found
+	}
+	open := make([]places.Place, 0, len(found))
+	for _, place := range found {
+		if restaurant, ok := saved[place.ID]; ok && restaurant.IsClosed() {
+			continue
+		}
+		open = append(open, place)
+	}
+	return open
+}
+
+// dinedPlaces looks up the visit history of the saved restaurants we have
+// dined at, keyed by Google place ID. A failed lookup only leaves out the
+// history.
+func (h *Handler) dinedPlaces(r *http.Request, saved map[string]model.Restaurant) map[string]*ui.RestaurantResult {
 	if len(saved) == 0 {
 		return nil
 	}
