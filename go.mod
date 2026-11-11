@@ -1,6 +1,6 @@
 module github.com/bitofbytes-io/dined
 
-go 1.26.10
+go 1.26.11
 
 require (
 	github.com/chromedp/cdproto v0.159.2
