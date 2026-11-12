@@ -1,8 +1,9 @@
 package repository
 
 import (
+	"cmp"
 	"context"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/bitofbytes-io/dined/internal/model"
@@ -13,6 +14,36 @@ import (
 // ratings average at least minAverage and whose latest visit was before
 // lastVisitedBefore, by name.
 func (m *MemoryStore) RestedFavorites(_ context.Context, minAverage float64, lastVisitedBefore time.Time) ([]model.RestedFavorite, error) {
+	favorites := m.restedFavorites(minAverage, lastVisitedBefore)
+	sortFavorites(favorites, func(a, b model.RestedFavorite) int { return 0 })
+	return favorites, nil
+}
+
+// PastFavorites mirrors the Postgres store: RestedFavorites by highest average
+// rating, then the longest since the last visit, then name.
+func (m *MemoryStore) PastFavorites(_ context.Context, minAverage float64, lastVisitedBefore time.Time) ([]model.RestedFavorite, error) {
+	favorites := m.restedFavorites(minAverage, lastVisitedBefore)
+	sortFavorites(favorites, func(a, b model.RestedFavorite) int {
+		return cmp.Or(
+			cmp.Compare(b.AverageRating, a.AverageRating),
+			a.LastVisitedAt.Compare(b.LastVisitedAt),
+		)
+	})
+	return favorites, nil
+}
+
+// sortFavorites orders by first, then by name and ID.
+func sortFavorites(favorites []model.RestedFavorite, first func(a, b model.RestedFavorite) int) {
+	slices.SortFunc(favorites, func(a, b model.RestedFavorite) int {
+		return cmp.Or(
+			first(a, b),
+			cmp.Compare(a.Restaurant.Name, b.Restaurant.Name),
+			cmp.Compare(a.Restaurant.ID.String(), b.Restaurant.ID.String()),
+		)
+	})
+}
+
+func (m *MemoryStore) restedFavorites(minAverage float64, lastVisitedBefore time.Time) []model.RestedFavorite {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	scores := map[uuid.UUID][]float64{}
@@ -41,13 +72,7 @@ func (m *MemoryStore) RestedFavorites(_ context.Context, minAverage float64, las
 		}
 		favorites = append(favorites, model.RestedFavorite{Restaurant: restaurant, AverageRating: averageRating, LastVisitedAt: lastVisits[id]})
 	}
-	sort.Slice(favorites, func(i, j int) bool {
-		if favorites[i].Restaurant.Name == favorites[j].Restaurant.Name {
-			return favorites[i].Restaurant.ID.String() < favorites[j].Restaurant.ID.String()
-		}
-		return favorites[i].Restaurant.Name < favorites[j].Restaurant.Name
-	})
-	return favorites, nil
+	return favorites
 }
 
 // PickCounts mirrors the Postgres store: each person's picks since a time and

@@ -21,6 +21,12 @@ const (
 	spinRestDays = 30
 	// spinTurnDays is how far back whose turn it is counts picks.
 	spinTurnDays = 90
+	// pastFavoriteMinAverage is the lowest average, over visits at least two
+	// people rated, that lists a place under "Haven't been in a while".
+	pastFavoriteMinAverage = 7.0
+	// pastFavoriteMonths is how long since the latest dine puts a favorite on
+	// that list.
+	pastFavoriteMonths = 6
 	// spinReelSize caps the other names the result card flashes through.
 	spinReelSize = 8
 
@@ -44,9 +50,17 @@ func (h *Handler) Spinner(w http.ResponseWriter, r *http.Request) {
 		h.error(w, "spinner favorites", err)
 		return
 	}
+	past, err := h.store.PastFavorites(ctx, pastFavoriteMinAverage, now.AddDate(0, -pastFavoriteMonths, 0))
+	if err != nil {
+		h.error(w, "spinner past favorites", err)
+		return
+	}
 	choices := spinChoices(items, favorites)
 	query := r.URL.Query()
 	spin, matching := spinPage(choices, query.Get("from"))
+	spin.PastFavorites = past
+	spin.PastFavoriteMonths = pastFavoriteMonths
+	spin.PastFavoriteMinAverage = pastFavoriteMinAverage
 	if query.Get("spin") != "" && len(matching) > 0 {
 		last, _ := uuid.Parse(query.Get("last"))
 		pick := pickSpinChoice(matching, last, rand.IntN)

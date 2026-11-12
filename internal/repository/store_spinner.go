@@ -13,6 +13,18 @@ import (
 // whose latest visit, rated or not, was before lastVisitedBefore. Restaurants
 // marked permanently closed are left out. They are ordered by name.
 func (s *Store) RestedFavorites(ctx context.Context, minAverage float64, lastVisitedBefore time.Time) ([]model.RestedFavorite, error) {
+	return s.restedFavorites(ctx, minAverage, lastVisitedBefore, "r.name, r.id")
+}
+
+// PastFavorites is RestedFavorites ordered for the "Haven't been in a while"
+// list: highest average rating first, then the longest since the last visit.
+func (s *Store) PastFavorites(ctx context.Context, minAverage float64, lastVisitedBefore time.Time) ([]model.RestedFavorite, error) {
+	return s.restedFavorites(ctx, minAverage, lastVisitedBefore, "f.average_rating DESC, l.last_visited_at, r.name, r.id")
+}
+
+// restedFavorites runs the shared query. orderBy is always one of the constant
+// clauses above, never caller input.
+func (s *Store) restedFavorites(ctx context.Context, minAverage float64, lastVisitedBefore time.Time, orderBy string) ([]model.RestedFavorite, error) {
 	rows, err := s.pool.Query(ctx, `WITH`+aggregateRatingsCTE+`,
 		favorites AS (
 			SELECT v.restaurant_id, AVG(vr.rating) AS average_rating
@@ -35,7 +47,7 @@ func (s *Store) RestedFavorites(ctx context.Context, minAverage float64, lastVis
 		JOIN last_visits l ON l.restaurant_id = r.id
 		WHERE l.last_visited_at < $3
 		  AND r.closed_at IS NULL
-		ORDER BY r.name, r.id`, model.MinAggregateRaters, minAverage, lastVisitedBefore)
+		ORDER BY `+orderBy, model.MinAggregateRaters, minAverage, lastVisitedBefore)
 	if err != nil {
 		return nil, fmt.Errorf("rested favorites: %w", err)
 	}
