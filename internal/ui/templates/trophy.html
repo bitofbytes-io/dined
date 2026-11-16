@@ -19,7 +19,7 @@
     </div>
     <div class="dined-map-panel">
       <div class="dined-map-heading"><p>Places We've Dined</p>{{if .TrophyMapPoints}}<span>{{len .TrophyMapPoints}} pinned</span>{{end}}</div>
-      {{if .TrophyMapReady}}<button type="button" class="dined-map-preview" onclick="dinedOpenTrophyMap()" aria-haspopup="dialog" aria-controls="trophy-map-modal" aria-label="Open larger map of places we've dined"><img src="/trophy-case/map.png" alt="Map of places where the family has dined" width="640" height="360" loading="lazy"></button>{{else}}<div class="dined-map-empty">{{default .TrophyMapFallback "No mapped dines yet"}}</div>{{end}}
+      {{if .TrophyMapReady}}<button type="button" class="dined-map-preview" data-trophy-map-open aria-haspopup="dialog" aria-controls="trophy-map-modal" aria-label="Open larger map of places we've dined"><img src="/trophy-case/map.png" alt="Map of places where the family has dined" width="640" height="360" loading="lazy"></button>{{else}}<div class="dined-map-empty">{{default .TrophyMapFallback "No mapped dines yet"}}</div>{{end}}
     </div>
     <div class="track-list">
       <h2>All-Time Top Restaurants</h2>

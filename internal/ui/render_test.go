@@ -291,7 +291,7 @@ func TestRenderTrophyShowsMapProxyImageWithoutGoogleKey(t *testing.T) {
 		"1 pinned",
 		`class="dined-map-preview"`,
 		`aria-controls="trophy-map-modal"`,
-		`dinedOpenTrophyMap()`,
+		`data-trophy-map-open`,
 		`id="trophy-map-modal"`,
 		`class="trophy-map-stage"`,
 		`class="trophy-map-label"`,
@@ -407,38 +407,84 @@ func TestRenderLogPreservesPrefillCity(t *testing.T) {
 	}
 	script := appScript(t)
 	if strings.Contains(script, `if (city) city.value = "";`) {
-		t.Fatal("app.js clears hidden city on unmatched datalist input")
+		t.Fatal("static JS clears hidden city on unmatched datalist input")
 	}
 	if !strings.Contains(script, `if (city) city.value = option.dataset.city || "";`) {
-		t.Fatal("app.js does not overwrite city on matched datalist input")
+		t.Fatal("static JS does not overwrite city on matched datalist input")
 	}
 }
 
 func TestAppScriptIsStaticAndHandlesPageBehaviour(t *testing.T) {
 	script := appScript(t)
 	if strings.Contains(script, "{{") {
-		t.Fatal("app.js contains template actions, but it is served as a static file")
+		t.Fatal("static JS contains template actions, but it is served as a static file")
 	}
 	for _, fragment := range []string{
-		`function dinedUpdateLogValidation(form)`,
-		`function dinedCompressPhoto(file, maxBytes)`,
+		`function updateLogValidation(form)`,
+		`function compressPhoto(file, maxBytes)`,
 		`uploader.dataset.photoMaxBytes`,
-		`function dinedConfirmDelete(event, form)`,
-		`document.addEventListener("htmx:load", dinedInitializePage);`,
+		`function confirmDelete(event, form)`,
+		`document.addEventListener("htmx:load", initializeLogValidation);`,
 	} {
 		if !strings.Contains(script, fragment) {
-			t.Fatalf("app.js missing %q", fragment)
+			t.Fatalf("static JS missing %q", fragment)
 		}
 	}
 }
 
+// staticScripts returns the entry point static/app.js and the feature modules
+// in static/js, keyed by path relative to static.
+func staticScripts(t *testing.T) map[string]string {
+	t.Helper()
+	root := filepath.Join("..", "..", "static")
+	scripts := map[string]string{}
+	for _, pattern := range []string{"app.js", filepath.Join("js", "*.js")} {
+		paths, err := filepath.Glob(filepath.Join(root, pattern))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, path := range paths {
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			rel, err := filepath.Rel(root, path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			scripts[filepath.ToSlash(rel)] = string(data)
+		}
+	}
+	if len(scripts) < 2 {
+		t.Fatalf("found %d static scripts, want app.js and its feature modules", len(scripts))
+	}
+	return scripts
+}
+
+// appScript returns every static script joined, for checks on behaviour that
+// may live in any feature module.
 func appScript(t *testing.T) string {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join("..", "..", "static", "app.js"))
-	if err != nil {
-		t.Fatal(err)
+	var all strings.Builder
+	for _, script := range staticScripts(t) {
+		all.WriteString(script)
+		all.WriteString("\n")
 	}
-	return string(data)
+	return all.String()
+}
+
+func TestStaticScriptsAreSplitByFeature(t *testing.T) {
+	const maxLines = 300
+	scripts := staticScripts(t)
+	entry := scripts["app.js"]
+	for path, script := range scripts {
+		if lines := strings.Count(script, "\n"); lines > maxLines {
+			t.Errorf("static/%s has %d lines, want at most %d", path, lines, maxLines)
+		}
+		if path != "app.js" && !strings.Contains(entry, `import "./`+path+`";`) {
+			t.Errorf("static/app.js does not import static/%s", path)
+		}
+	}
 }
 
 func TestRenderLogCarriesGoogleMetadataPrefill(t *testing.T) {
@@ -531,7 +577,7 @@ func TestRenderLogValidationAndPreservedState(t *testing.T) {
 		`Dinner notes</textarea>`,
 		`name="is_chain" value="true" checked`,
 		`data-log-submit`,
-		`<script src="/static/app.js"></script>`,
+		`<script type="module" src="/static/app.js"></script>`,
 	} {
 		if !strings.Contains(rendered, fragment) {
 			t.Fatalf("rendered log missing %q:\n%s", fragment, rendered)
@@ -569,7 +615,7 @@ func TestRenderLogIncludesPhotoUploadAndPrefilledPhotos(t *testing.T) {
 		`name="photo_data_uri" value="` + strings.ReplaceAll(testPhotoDataURI, "+", "&#43;") + `"`,
 		`type="file" accept="image/*" multiple data-photo-input`,
 		`id="photo-preview-modal"`,
-		`<script src="/static/app.js"></script>`,
+		`<script type="module" src="/static/app.js"></script>`,
 	} {
 		if !strings.Contains(rendered, fragment) {
 			t.Fatalf("rendered log missing %q:\n%s", fragment, rendered)
@@ -605,7 +651,7 @@ func TestRenderAuthenticatedDinesUsesEditLinkAndDeleteConfirmationModal(t *testi
 	for _, fragment := range []string{
 		`/visits/` + visitID.String() + `/edit`,
 		`action="/visits/` + visitID.String() + `/delete" hx-boost="false" data-delete-dine-form`,
-		`onsubmit="return dinedConfirmDelete(event, this)"`,
+		`data-delete-form`,
 		`data-delete-title="Delete this dine?"`,
 		`data-delete-message="This removes the dine and its ratings from the ledger."`,
 		`<dialog class="confirm-modal" id="delete-dine-modal"`,
@@ -805,7 +851,7 @@ func TestRenderSearchShowsRemoveOnlyForZeroVisitSavedSpots(t *testing.T) {
 		`hx-boost="false"`,
 		`data-delete-title="Remove saved spot?"`,
 		`data-delete-confirm="Remove"`,
-		`onsubmit="return dinedConfirmDelete(event, this)"`,
+		`data-delete-form`,
 		`<dialog class="confirm-modal" id="delete-dine-modal"`,
 	} {
 		if !strings.Contains(rendered, fragment) {
