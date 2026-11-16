@@ -41,8 +41,20 @@ function adjustPendingPhotos(uploader, delta) {
     setPhotoError(uploader, "");
   }
   updatePhotoUploader(uploader);
+  syncPhotoSubmit(uploader.closest("form"));
   // Lets the log form refresh its submit button.
   uploader.dispatchEvent(new CustomEvent("photos:pending", { bubbles: true }));
+}
+
+// Disables the save button of photo forms that don't manage it themselves
+// (edit); the log form's button follows its own validation.
+function syncPhotoSubmit(form) {
+  if (!form || form.matches("[data-log-form]")) return;
+  var submit = form.querySelector("[data-photo-submit]");
+  if (!submit) return;
+  var pending = hasPendingPhotos(form);
+  submit.disabled = pending;
+  submit.setAttribute("aria-disabled", pending ? "true" : "false");
 }
 
 export function setPhotoError(uploader, message) {
@@ -230,11 +242,20 @@ document.addEventListener("click", function (event) {
   removePhoto(removeButton);
 });
 
-// The log form blocks pending photos in its own submit handler; this covers
-// the other photo forms (edit).
+// Native submits on photo forms other than the log form (which blocks them in
+// its own handler).
 document.addEventListener("submit", function (event) {
   var form = event.target;
   if (!form || !form.matches || form.matches("[data-log-form]") || !hasPendingPhotos(form)) return;
+  event.preventDefault();
+  setPhotoError(form.querySelector("[data-photo-uploader]"), PHOTO_PENDING_MESSAGE);
+});
+
+// hx-boost forms are sent from htmx's own form-level submit handler, which runs
+// before the document listeners above, so cancel the request itself.
+document.addEventListener("htmx:beforeRequest", function (event) {
+  var form = event.detail && event.detail.elt;
+  if (!form || !form.matches || !form.matches("form") || !hasPendingPhotos(form)) return;
   event.preventDefault();
   setPhotoError(form.querySelector("[data-photo-uploader]"), PHOTO_PENDING_MESSAGE);
 });
