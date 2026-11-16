@@ -60,7 +60,7 @@ func (s *Store) YearInReview(ctx context.Context, year int) (model.YearInReview,
 		WHERE v.visited_at >= $1 AND v.visited_at < $2
 		GROUP BY r.id, r.name
 		HAVING COUNT(*) >= 2
-		ORDER BY COUNT(*) DESC, MAX(v.visited_at) DESC, r.name
+		ORDER BY COUNT(*) DESC, MAX(v.visited_at) DESC, r.name, r.id
 		LIMIT 1`, start, end).Scan(&mostVisited.ID, &mostVisited.Name, &mostVisited.VisitCount)
 	switch {
 	case err == nil:
@@ -77,7 +77,7 @@ func (s *Store) YearInReview(ctx context.Context, year int) (model.YearInReview,
 		JOIN aggregate_ratings vr ON vr.visit_id = v.id
 		WHERE v.visited_at >= $2 AND v.visited_at < $3
 		GROUP BY r.id, r.name
-		ORDER BY AVG(vr.rating) DESC, COUNT(vr.rating) DESC, r.name
+		ORDER BY AVG(vr.rating) DESC, COUNT(vr.rating) DESC, r.name, r.id
 		LIMIT 1`, model.MinAggregateRaters, start, end).Scan(&highestRated.ID, &highestRated.Name, &highestRated.VisitCount, &highestRated.AverageRating)
 	switch {
 	case err == nil:
@@ -107,7 +107,7 @@ func (s *Store) YearInReview(ctx context.Context, year int) (model.YearInReview,
 			SELECT *,
 			       ROW_NUMBER() OVER (
 			           PARTITION BY person_id
-			           ORDER BY average_rating DESC, rating_count DESC, restaurant
+			           ORDER BY average_rating DESC, rating_count DESC, restaurant, restaurant_id
 			       ) AS pick_rank
 			FROM person_picks
 		)

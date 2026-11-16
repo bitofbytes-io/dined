@@ -869,6 +869,10 @@ func TestPostgresYearInReview(t *testing.T) {
 	assertYearInReview(t, postgresStore(t))
 }
 
+func TestPostgresYearInReviewTiesBreakByRestaurantID(t *testing.T) {
+	assertYearInReviewTiesBreakByRestaurantID(t, postgresStore(t))
+}
+
 func TestPostgresYearInReviewWithoutVisits(t *testing.T) {
 	assertYearInReviewWithoutVisits(t, postgresStore(t))
 }

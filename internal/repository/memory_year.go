@@ -89,7 +89,8 @@ func (m *MemoryStore) YearInReview(_ context.Context, year int) (model.YearInRev
 			current := review.MostVisited
 			if current == nil || entry.visits > current.VisitCount ||
 				(entry.visits == current.VisitCount && (entry.lastAt > mostVisitedAt ||
-					(entry.lastAt == mostVisitedAt && entry.name < current.Name))) {
+					(entry.lastAt == mostVisitedAt && (entry.name < current.Name ||
+						(entry.name == current.Name && id.String() < current.ID.String()))))) {
 				review.MostVisited = &model.YearRestaurantStat{ID: id, Name: entry.name, VisitCount: entry.visits}
 				mostVisitedAt = entry.lastAt
 			}
@@ -99,7 +100,8 @@ func (m *MemoryStore) YearInReview(_ context.Context, year int) (model.YearInRev
 			current := review.HighestRated
 			if current == nil || avg > current.AverageRating ||
 				(avg == current.AverageRating && (len(entry.ratings) > highestRatings ||
-					(len(entry.ratings) == highestRatings && entry.name < current.Name))) {
+					(len(entry.ratings) == highestRatings && (entry.name < current.Name ||
+						(entry.name == current.Name && id.String() < current.ID.String()))))) {
 				review.HighestRated = &model.YearRestaurantStat{ID: id, Name: entry.name, VisitCount: entry.countedVisit, AverageRating: avg}
 				highestRatings = len(entry.ratings)
 			}
@@ -121,7 +123,8 @@ func (m *MemoryStore) YearInReview(_ context.Context, year int) (model.YearInRev
 			next := candidate{id: key.restaurant, name: pick.restaurant, average: average(pick.ratings), count: len(pick.ratings)}
 			if best == nil || next.average > best.average ||
 				(next.average == best.average && (next.count > best.count ||
-					(next.count == best.count && next.name < best.name))) {
+					(next.count == best.count && (next.name < best.name ||
+						(next.name == best.name && next.id.String() < best.id.String()))))) {
 				best = &next
 			}
 		}

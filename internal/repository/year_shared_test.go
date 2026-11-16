@@ -104,6 +104,48 @@ func assertYearInReview(t *testing.T, store DinerStore) {
 	}
 }
 
+// assertYearInReviewTiesBreakByRestaurantID checks that two same-name
+// locations with identical visits and ratings always rank the lower ID first,
+// so the restaurant a highlight links to never changes between loads.
+func assertYearInReviewTiesBreakByRestaurantID(t *testing.T, store DinerStore) {
+	t.Helper()
+	ctx := context.Background()
+	daniel, jen, _, _ := storePeople(t, store)
+	for _, address := range []string{"1 North St", "2 South St"} {
+		for _, day := range []int{5, 6} {
+			input := model.VisitInput{
+				RestaurantName: "Twin Grill",
+				Address:        address,
+				VisitedAt:      time.Date(2025, time.May, day, 18, 0, 0, 0, time.UTC),
+				PriceLevel:     2,
+				PickerID:       &daniel.ID,
+				Ratings:        map[uuid.UUID]float64{daniel.ID: 8, jen.ID: 8},
+			}
+			if _, err := store.CreateVisit(ctx, input); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	twins, err := store.Restaurants(ctx, "Twin Grill")
+	if err != nil || len(twins) != 2 {
+		t.Fatalf("twin restaurants = %#v, err = %v; want 2", twins, err)
+	}
+	want := twins[0].ID
+	if twins[1].ID.String() < want.String() {
+		want = twins[1].ID
+	}
+
+	review, err := store.YearInReview(ctx, 2025)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if review.MostVisited == nil || review.MostVisited.ID != want ||
+		review.HighestRated == nil || review.HighestRated.ID != want ||
+		len(review.TopPicks) != 1 || review.TopPicks[0].RestaurantID != want {
+		t.Fatalf("year in review = %#v, want every highlight on restaurant %s", review, want)
+	}
+}
+
 // assertYearInReviewWithoutVisits checks a year with no visits, in a store
 // that has visits in other years.
 func assertYearInReviewWithoutVisits(t *testing.T, store DinerStore) {

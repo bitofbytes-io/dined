@@ -201,6 +201,10 @@ func TestMemoryStoreYearInReview(t *testing.T) {
 	assertYearInReview(t, emptyMemoryStore())
 }
 
+func TestMemoryStoreYearInReviewTiesBreakByRestaurantID(t *testing.T) {
+	assertYearInReviewTiesBreakByRestaurantID(t, emptyMemoryStore())
+}
+
 func TestMemoryStoreYearInReviewWithoutVisits(t *testing.T) {
 	assertYearInReviewWithoutVisits(t, emptyMemoryStore())
 }
