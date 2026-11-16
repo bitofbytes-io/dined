@@ -1,6 +1,7 @@
 // Log form validation: half-step ratings, at least one rating, and the
 // submit button's enabled state.
 import { syncRestaurantSelection } from "./restaurant-selection.js";
+import { hasPendingPhotos, setPhotoError, PHOTO_PENDING_MESSAGE } from "./photos.js";
 
 function validateHalfStepRating(input) {
   if (!input || input.value === "") {
@@ -41,7 +42,7 @@ function updateLogValidation(form) {
   var visitedAt = form.querySelector("input[name='visited_at']");
   var submit = form.querySelector("[data-log-submit]");
   var hasRequiredFields = (!restaurant || restaurant.value.trim()) && (!visitedAt || visitedAt.value.trim());
-  var canSubmit = Boolean(hasRequiredFields && hasRating && form.checkValidity());
+  var canSubmit = Boolean(hasRequiredFields && hasRating && form.checkValidity() && !hasPendingPhotos(form));
   form.classList.toggle("log-form-incomplete", !canSubmit);
   if (submit) {
     submit.disabled = !canSubmit;
@@ -76,6 +77,11 @@ function handleFieldEvent(event) {
 function handleSubmit(event) {
   var form = event.target;
   if (!form || !form.matches("[data-log-form]")) return;
+  if (hasPendingPhotos(form)) {
+    event.preventDefault();
+    setPhotoError(form.querySelector("[data-photo-uploader]"), PHOTO_PENDING_MESSAGE);
+    return;
+  }
   syncRestaurantSelection(form);
   if (!updateLogValidation(form)) {
     event.preventDefault();
@@ -87,6 +93,7 @@ function handleSubmit(event) {
 
 document.addEventListener("input", handleFieldEvent);
 document.addEventListener("change", handleFieldEvent);
+document.addEventListener("photos:pending", handleFieldEvent);
 document.addEventListener("submit", handleSubmit);
 document.addEventListener("htmx:load", initializeLogValidation);
 initializeLogValidation();

@@ -15,7 +15,37 @@ function photoCount(uploader) {
   return uploader ? uploader.querySelectorAll("[data-photo-item]").length : 0;
 }
 
-function setPhotoError(uploader, message) {
+export var PHOTO_PENDING_MESSAGE = "Photos are still being prepared. Try again in a moment.";
+
+// Photos picked but not yet compressed into tiles, per uploader. They hold a
+// slot against the limit and block saving until they land or fail.
+var pendingPhotos = new WeakMap();
+
+function pendingPhotoCount(uploader) {
+  return uploader ? pendingPhotos.get(uploader) || 0 : 0;
+}
+
+export function hasPendingPhotos(form) {
+  var uploaders = form ? form.querySelectorAll("[data-photo-uploader]") : [];
+  for (var i = 0; i < uploaders.length; i += 1) {
+    if (pendingPhotoCount(uploaders[i]) > 0) return true;
+  }
+  return false;
+}
+
+function adjustPendingPhotos(uploader, delta) {
+  var pending = Math.max(0, pendingPhotoCount(uploader) + delta);
+  pendingPhotos.set(uploader, pending);
+  var error = uploader.querySelector("[data-photo-error]");
+  if (pending === 0 && error && error.textContent === PHOTO_PENDING_MESSAGE) {
+    setPhotoError(uploader, "");
+  }
+  updatePhotoUploader(uploader);
+  // Lets the log form refresh its submit button.
+  uploader.dispatchEvent(new CustomEvent("photos:pending", { bubbles: true }));
+}
+
+export function setPhotoError(uploader, message) {
   var error = uploader ? uploader.querySelector("[data-photo-error]") : null;
   if (!error) return;
   error.textContent = message || "";
@@ -26,7 +56,7 @@ function updatePhotoUploader(uploader) {
   if (!uploader) return;
   var addTile = uploader.querySelector("[data-photo-add]");
   var input = uploader.querySelector("[data-photo-input]");
-  var count = photoCount(uploader);
+  var count = photoCount(uploader) + pendingPhotoCount(uploader);
   var atLimit = count >= photoLimit(uploader);
   if (addTile) addTile.hidden = atLimit;
   if (input) input.disabled = atLimit;
@@ -139,7 +169,7 @@ function handlePhotoInput(input) {
   if (!uploader) return;
   setPhotoError(uploader, "");
   var files = Array.prototype.slice.call(input.files || []);
-  var slots = photoLimit(uploader) - photoCount(uploader);
+  var slots = photoLimit(uploader) - photoCount(uploader) - pendingPhotoCount(uploader);
   if (slots <= 0) {
     setPhotoError(uploader, "Remove a photo before adding another.");
     input.value = "";
@@ -151,6 +181,7 @@ function handlePhotoInput(input) {
   }
   if (!files.length) return;
 
+  adjustPendingPhotos(uploader, files.length);
   var index = 0;
   function next() {
     if (index >= files.length) {
@@ -158,12 +189,19 @@ function handlePhotoInput(input) {
       updatePhotoUploader(uploader);
       return;
     }
+    var released = false;
+    function release() {
+      if (released) return;
+      released = true;
+      adjustPendingPhotos(uploader, -1);
+    }
     compressPhoto(files[index], photoMaxBytes(uploader)).then(function (dataURI) {
+      release();
       addPhotoTile(uploader, dataURI);
-      index += 1;
-      next();
     }).catch(function (error) {
+      release();
       setPhotoError(uploader, error.message || "Photo could not be added.");
+    }).then(function () {
       index += 1;
       next();
     });
@@ -190,6 +228,15 @@ document.addEventListener("click", function (event) {
   if (!removeButton) return;
   event.preventDefault();
   removePhoto(removeButton);
+});
+
+// The log form blocks pending photos in its own submit handler; this covers
+// the other photo forms (edit).
+document.addEventListener("submit", function (event) {
+  var form = event.target;
+  if (!form || !form.matches || form.matches("[data-log-form]") || !hasPendingPhotos(form)) return;
+  event.preventDefault();
+  setPhotoError(form.querySelector("[data-photo-uploader]"), PHOTO_PENDING_MESSAGE);
 });
 
 document.addEventListener("htmx:load", initializePhotoUploaders);
