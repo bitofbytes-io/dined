@@ -41,6 +41,7 @@ type DinerStore interface {
 	UpdateRestaurant(context.Context, uuid.UUID, model.RestaurantInput) error
 	ToggleChain(context.Context, uuid.UUID, bool) error
 	Stats(context.Context) (model.Stats, error)
+	YearInReview(ctx context.Context, year int) (model.YearInReview, error)
 	WantToTry(context.Context) ([]model.WantToTryItem, error)
 	WantToTryItem(context.Context, uuid.UUID) (*model.WantToTryItem, error)
 	SaveWantToTry(context.Context, model.WantToTryInput) (*uuid.UUID, error)

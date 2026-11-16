@@ -1,0 +1,45 @@
+{{define "year"}}
+{{template "top" .}}
+<main class="jukebox-stage">
+  {{with .YearReview}}
+  <section class="year-panel">
+    <div class="year-title">
+      <p>Dined Family Soundtrack</p>
+      <h1>{{.Year}} in Review</h1>
+      <nav class="year-nav" aria-label="Other years">
+        {{if $.YearPrev}}<a href="/year/{{$.YearPrev}}">&larr; {{$.YearPrev}}</a>{{end}}
+        <a href="/trophy-case">Trophy Case</a>
+        {{if $.YearNext}}<a href="/year/{{$.YearNext}}">{{$.YearNext}} &rarr;</a>{{end}}
+      </nav>
+    </div>
+    {{if .TotalVisits}}
+    <div class="year-card">
+      <h2>Dines By Month</h2>
+      <ol class="year-months" aria-label="Dines per month in {{.Year}}">
+        {{range monthBars .MonthlyVisits}}<li><span class="year-month-count">{{.Visits}}</span><span class="year-month-bar" style="--bar-height: {{.Height}};"></span><span class="year-month-label">{{.Label}}</span></li>{{end}}
+      </ol>
+    </div>
+    <div class="year-stats" aria-label="{{.Year}} totals">
+      <div class="year-stat"><span class="year-stat-value">{{.TotalVisits}}</span><p>Total Dines</p></div>
+      <div class="year-stat"><span class="year-stat-value">{{.NewRestaurants}}</span><p>New Places</p></div>
+      <div class="year-stat"><span class="year-stat-value">{{.RepeatRestaurants}}</span><p>Repeat Places</p></div>
+    </div>
+    <div class="year-card">
+      <h2>Highlights</h2>
+      <ul class="top-restaurant-list cuisine-restaurant-list year-highlights">
+        <li><span class="track-cuisine">Most Visited</span>{{if .MostVisited}}<span class="track-name"><a href="/restaurants/{{.MostVisited.ID}}">{{.MostVisited.Name}}</a></span><span class="track-score">{{.MostVisited.VisitCount}} visits</span>{{else}}<span class="track-name">No repeats yet</span>{{end}}</li>
+        <li><span class="track-cuisine">Highest Rated</span>{{if .HighestRated}}<span class="track-name"><a href="/restaurants/{{.HighestRated.ID}}">{{.HighestRated.Name}}</a></span><span class="track-score">{{score .HighestRated.AverageRating}} avg</span>{{else}}<span class="track-name">Waiting on ratings</span>{{end}}</li>
+      </ul>
+      <h2 class="track-section-title">Top Pick By Person</h2>
+      {{if .TopPicks}}<ul class="top-restaurant-list cuisine-restaurant-list year-highlights">{{range .TopPicks}}<li><span class="track-cuisine">{{.Person}}</span><span class="track-name"><a href="/restaurants/{{.RestaurantID}}">{{.Restaurant}}</a></span><span class="track-score">{{score .AverageRating}} avg</span></li>{{end}}</ul>{{else}}<p class="track-empty">Waiting on rated picks</p>{{end}}
+    </div>
+    {{else}}
+    <div class="year-card">
+      <p class="track-empty">No dines logged in {{.Year}}.</p>
+    </div>
+    {{end}}
+  </section>
+  {{end}}
+</main>
+{{template "bottom" .}}
+{{end}}

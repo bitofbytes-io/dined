@@ -865,6 +865,14 @@ func TestPostgresTrophyRecords(t *testing.T) {
 	assertTrophyRecords(t, postgresStore(t))
 }
 
+func TestPostgresYearInReview(t *testing.T) {
+	assertYearInReview(t, postgresStore(t))
+}
+
+func TestPostgresYearInReviewWithoutVisits(t *testing.T) {
+	assertYearInReviewWithoutVisits(t, postgresStore(t))
+}
+
 func TestPostgresRejectsPlaceIDOwnedByAnotherRestaurant(t *testing.T) {
 	assertChosenRestaurantPlaceOwnedElsewhereRejected(t, postgresStore(t))
 }

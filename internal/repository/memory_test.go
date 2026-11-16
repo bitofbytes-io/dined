@@ -197,6 +197,14 @@ func TestMemoryStoreTrophyRecords(t *testing.T) {
 	assertTrophyRecords(t, emptyMemoryStore())
 }
 
+func TestMemoryStoreYearInReview(t *testing.T) {
+	assertYearInReview(t, emptyMemoryStore())
+}
+
+func TestMemoryStoreYearInReviewWithoutVisits(t *testing.T) {
+	assertYearInReviewWithoutVisits(t, emptyMemoryStore())
+}
+
 func TestMemoryStoreCreateVisitDoesNotReuseNameOnlyMatch(t *testing.T) {
 	store := NewMemoryStore()
 	people, err := store.People(context.Background())

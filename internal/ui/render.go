@@ -30,25 +30,32 @@ var pageTemplates = template.Must(template.New("dined").Funcs(funcs()).Funcs(wan
 var assetVersions atomic.Pointer[map[string]string]
 
 type PageData struct {
-	Title                   string
-	Authenticated           bool
-	Error                   string
-	Notice                  string
-	Visits                  []model.Visit
-	ReadOnlyVisits          bool
-	DinesFilter             *DinesFilter
-	DinesURL                string
-	Visit                   *model.Visit
-	People                  []model.Person
-	Tags                    []model.Tag
-	Restaurants             []model.Restaurant
-	SearchResults           []RestaurantResult
-	Restaurant              *model.Restaurant
-	Stats                   model.Stats
-	TrophyMapPoints         []model.RestaurantMapPoint
-	TrophyMapLabels         []TrophyMapLabel
-	TrophyMapReady          bool
-	TrophyMapFallback       string
+	Title             string
+	Authenticated     bool
+	Error             string
+	Notice            string
+	Visits            []model.Visit
+	ReadOnlyVisits    bool
+	DinesFilter       *DinesFilter
+	DinesURL          string
+	Visit             *model.Visit
+	People            []model.Person
+	Tags              []model.Tag
+	Restaurants       []model.Restaurant
+	SearchResults     []RestaurantResult
+	Restaurant        *model.Restaurant
+	Stats             model.Stats
+	TrophyMapPoints   []model.RestaurantMapPoint
+	TrophyMapLabels   []TrophyMapLabel
+	TrophyMapReady    bool
+	TrophyMapFallback string
+	// ReviewYears are the years the trophy case links to, newest first.
+	ReviewYears []int
+	// YearReview is the year in review page; YearPrev and YearNext are
+	// the neighboring years, or 0 at either end.
+	YearReview              *model.YearInReview
+	YearPrev                int
+	YearNext                int
 	Places                  []places.Place
 	DinedPlaces             map[string]*RestaurantResult // visit history of Places we have dined at, by place ID
 	Query                   string
@@ -291,6 +298,7 @@ func funcs() template.FuncMap {
 		"prefillRatingValue": prefillRatingValue,
 		"prefillTagChecked":  prefillTagChecked,
 		"prefillHasRating":   prefillHasRating,
+		"monthBars":          monthBars,
 		"add1": func(value int) int {
 			return value + 1
 		},
