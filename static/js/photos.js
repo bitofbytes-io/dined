@@ -78,6 +78,9 @@ function initializePhotoUploaders() {
   var uploaders = document.querySelectorAll("[data-photo-uploader]");
   for (var i = 0; i < uploaders.length; i += 1) {
     updatePhotoUploader(uploaders[i]);
+    // A form restored from the htmx history cache can carry a Save button
+    // disabled for photos that were pending when it was cached.
+    syncPhotoSubmit(uploaders[i].closest("form"));
   }
 }
 
@@ -119,12 +122,19 @@ function compressPhoto(file, maxBytes) {
         { dimension: 960, quality: .64 },
         { dimension: 800, quality: .6 }
       ];
-      for (var i = 0; i < attempts.length; i += 1) {
-        var dataURI = drawPhotoDataURI(image, attempts[i].dimension, attempts[i].quality);
-        if (dataURIByteCount(dataURI) <= maxBytes) {
-          resolve(dataURI);
-          return;
+      // Runs outside the executor, so a throw (e.g. no 2d canvas context) must
+      // reject here or the promise never settles and saving stays blocked.
+      try {
+        for (var i = 0; i < attempts.length; i += 1) {
+          var dataURI = drawPhotoDataURI(image, attempts[i].dimension, attempts[i].quality);
+          if (dataURIByteCount(dataURI) <= maxBytes) {
+            resolve(dataURI);
+            return;
+          }
         }
+      } catch (error) {
+        reject(new Error("That photo could not be prepared. Try a different image."));
+        return;
       }
       reject(new Error("That photo is too large to save here. Try a smaller image."));
     };
