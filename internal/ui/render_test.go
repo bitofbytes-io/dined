@@ -89,17 +89,31 @@ func TestRenderLoginOAuthLinkOptsOutOfBoost(t *testing.T) {
 func TestAppScriptIsStaticAndHandlesPageBehaviour(t *testing.T) {
 	script := appScript(t)
 	if strings.Contains(script, "{{") {
-		t.Fatal("app.js contains template actions, but it is served as a static file")
+		t.Fatal("static JS contains template actions, but it is served as a static file")
 	}
 	for _, fragment := range []string{
-		`function dinedUpdateLogValidation(form)`,
-		`function dinedCompressPhoto(file, maxBytes)`,
+		`function updateLogValidation(form)`,
+		`function compressPhoto(file, maxBytes)`,
 		`uploader.dataset.photoMaxBytes`,
-		`function dinedConfirmDelete(event, form)`,
-		`document.addEventListener("htmx:load", dinedInitializePage);`,
+		`function confirmDelete(event, form)`,
+		`document.addEventListener("htmx:load", initializeLogValidation);`,
 	} {
 		if !strings.Contains(script, fragment) {
-			t.Fatalf("app.js missing %q", fragment)
+			t.Fatalf("static JS missing %q", fragment)
+		}
+	}
+}
+
+func TestStaticScriptsAreSplitByFeature(t *testing.T) {
+	const maxLines = 300
+	scripts := staticScripts(t)
+	entry := scripts["app.js"]
+	for path, script := range scripts {
+		if lines := strings.Count(script, "\n"); lines > maxLines {
+			t.Errorf("static/%s has %d lines, want at most %d", path, lines, maxLines)
+		}
+		if path != "app.js" && !strings.Contains(entry, `import "./`+path+`";`) {
+			t.Errorf("static/app.js does not import static/%s", path)
 		}
 	}
 }

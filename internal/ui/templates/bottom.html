@@ -4,7 +4,7 @@
 	  {{if and .Authenticated .WantToTrySheet}}{{template "want-to-try-sheet" .}}{{end}}
 	  {{template "photo-preview-modal" .}}
 	  {{if .TrophyMapReady}}{{template "trophy-map-modal" .}}{{end}}
-	  <script src="{{asset "/static/app.js"}}"></script>
+	  <script type="module" src="{{asset "/static/app.js"}}"></script>
 	</body>
 	</html>
 {{end}}

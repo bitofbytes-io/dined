@@ -3,15 +3,15 @@
     <div class="photo-preview-card">
       <div class="photo-preview-head">
         <h2 id="photo-preview-title">Dine Photo</h2>
-        <button type="button" class="secondary-button photo-preview-close" onclick="dinedClosePhotoPreview()">Close</button>
+        <button type="button" class="secondary-button photo-preview-close" data-photo-preview-close>Close</button>
       </div>
       <div class="photo-preview-stage">
         <img id="photo-preview-image" alt="Dine photo">
       </div>
       <div class="photo-preview-actions">
-        <button type="button" class="secondary-button" id="photo-preview-prev" onclick="dinedShiftPhotoPreview(-1)">Previous</button>
+        <button type="button" class="secondary-button" id="photo-preview-prev" data-photo-preview-shift="-1">Previous</button>
         <span id="photo-preview-count">1 / 1</span>
-        <button type="button" class="secondary-button" id="photo-preview-next" onclick="dinedShiftPhotoPreview(1)">Next</button>
+        <button type="button" class="secondary-button" id="photo-preview-next" data-photo-preview-shift="1">Next</button>
       </div>
     </div>
   </dialog>

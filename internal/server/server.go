@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/bitofbytes-io/dined/internal/auth"
@@ -44,7 +45,7 @@ func (s *Server) Router() http.Handler {
 	r.Use(middleware.SameOrigin)
 
 	static := http.FileServer(http.Dir("static"))
-	r.Handle("/static/*", http.StripPrefix("/static/", static))
+	r.Handle("/static/*", http.StripPrefix("/static/", revalidateModules(static)))
 	r.Get("/favicon.ico", serveFile("static/favicon.ico"))
 	r.Get("/favicon-16x16.png", serveFile("static/favicon-16x16.png"))
 	r.Get("/favicon-32x32.png", serveFile("static/favicon-32x32.png"))
@@ -117,6 +118,18 @@ func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
 		Status string `json:"status"`
 		DB     string `json:"db"`
 	}{status, db})
+}
+
+// revalidateModules makes browsers recheck the feature modules under js/ on
+// each use. app.js imports them by plain relative path, so unlike app.js they
+// have no ?v= version in their URL to change when they do.
+func revalidateModules(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "js/") {
+			w.Header().Set("Cache-Control", "no-cache")
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func serveFile(path string) http.HandlerFunc {

@@ -49,7 +49,7 @@ func TestRenderAuthenticatedDinesUsesEditLinkAndDeleteConfirmationModal(t *testi
 	for _, fragment := range []string{
 		`/visits/` + visitID.String() + `/edit`,
 		`action="/visits/` + visitID.String() + `/delete" hx-boost="false" data-delete-dine-form`,
-		`onsubmit="return dinedConfirmDelete(event, this)"`,
+		`data-delete-form`,
 		`data-delete-title="Delete this dine?"`,
 		`data-delete-message="This removes the dine and its ratings from the ledger."`,
 		`<dialog class="confirm-modal" id="delete-dine-modal"`,

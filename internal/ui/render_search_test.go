@@ -51,7 +51,7 @@ func TestRenderSearchShowsRemoveOnlyForZeroVisitSavedSpots(t *testing.T) {
 		`hx-boost="false"`,
 		`data-delete-title="Remove saved spot?"`,
 		`data-delete-confirm="Remove"`,
-		`onsubmit="return dinedConfirmDelete(event, this)"`,
+		`data-delete-form`,
 		`<dialog class="confirm-modal" id="delete-dine-modal"`,
 	} {
 		if !strings.Contains(rendered, fragment) {

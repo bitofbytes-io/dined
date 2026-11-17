@@ -122,7 +122,7 @@ func TestRenderTrophyShowsMapProxyImageWithoutGoogleKey(t *testing.T) {
 		"1 pinned",
 		`class="dined-map-preview"`,
 		`aria-controls="trophy-map-modal"`,
-		`dinedOpenTrophyMap()`,
+		`data-trophy-map-open`,
 		`id="trophy-map-modal"`,
 		`class="trophy-map-stage"`,
 		`class="trophy-map-label"`,

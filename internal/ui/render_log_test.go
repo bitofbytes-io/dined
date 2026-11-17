@@ -75,10 +75,10 @@ func TestRenderLogPreservesPrefillCity(t *testing.T) {
 	}
 	script := appScript(t)
 	if strings.Contains(script, `if (city) city.value = "";`) {
-		t.Fatal("app.js clears hidden city on unmatched datalist input")
+		t.Fatal("static JS clears hidden city on unmatched datalist input")
 	}
 	if !strings.Contains(script, `if (city) city.value = option.dataset.city || "";`) {
-		t.Fatal("app.js does not overwrite city on matched datalist input")
+		t.Fatal("static JS does not overwrite city on matched datalist input")
 	}
 }
 
@@ -172,7 +172,7 @@ func TestRenderLogValidationAndPreservedState(t *testing.T) {
 		`Dinner notes</textarea>`,
 		`name="is_chain" value="true" checked`,
 		`data-log-submit`,
-		`<script src="/static/app.js"></script>`,
+		`<script type="module" src="/static/app.js"></script>`,
 	} {
 		if !strings.Contains(rendered, fragment) {
 			t.Fatalf("rendered log missing %q:\n%s", fragment, rendered)
@@ -210,7 +210,7 @@ func TestRenderLogIncludesPhotoUploadAndPrefilledPhotos(t *testing.T) {
 		`name="photo_data_uri" value="` + strings.ReplaceAll(testPhotoDataURI, "+", "&#43;") + `"`,
 		`type="file" accept="image/*" multiple data-photo-input`,
 		`id="photo-preview-modal"`,
-		`<script src="/static/app.js"></script>`,
+		`<script type="module" src="/static/app.js"></script>`,
 	} {
 		if !strings.Contains(rendered, fragment) {
 			t.Fatalf("rendered log missing %q:\n%s", fragment, rendered)

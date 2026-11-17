@@ -15,7 +15,7 @@
           {{if .Note}}<p class="want-note">{{.Note}}</p>{{end}}
           <span class="want-meta">{{wantToTryIdea .SuggestedBy}} · {{wantToTryAge .CreatedAt}}</span>
         </div>
-        {{if $.Authenticated}}<div class="want-actions"><a class="want-log" href="/log?want_to_try={{.ID}}">Log it</a><form method="post" action="/want-to-try/{{.ID}}/delete" hx-boost="false" data-delete-title="Remove from Want to Try?" data-delete-message="{{.Restaurant.Name}} comes off the list. Nothing else changes." data-delete-confirm="Remove" onsubmit="return dinedConfirmDelete(event, this)"><button class="want-remove" type="submit" aria-label="Remove {{.Restaurant.Name}} from Want to Try">Remove</button></form></div>{{end}}
+        {{if $.Authenticated}}<div class="want-actions"><a class="want-log" href="/log?want_to_try={{.ID}}">Log it</a><form method="post" action="/want-to-try/{{.ID}}/delete" hx-boost="false" data-delete-title="Remove from Want to Try?" data-delete-message="{{.Restaurant.Name}} comes off the list. Nothing else changes." data-delete-confirm="Remove" data-delete-form><button class="want-remove" type="submit" aria-label="Remove {{.Restaurant.Name}} from Want to Try">Remove</button></form></div>{{end}}
       </li>{{end}}
     </ul>
     <p class="want-pick" data-want-to-try-pick-area hidden><span class="want-pick-result" data-want-to-try-pick-result aria-live="polite"></span><button type="button" class="want-link" data-want-to-try-pick>Can't decide? Pick one for us</button></p>
