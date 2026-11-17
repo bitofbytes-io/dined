@@ -46,6 +46,7 @@ func (h *Handler) Trophy(w http.ResponseWriter, r *http.Request) {
 		Stats:           stats,
 		TrophyMapPoints: mapPoints,
 		TrophyMapLabels: trophyMapLabels(mapPoints),
+		ReviewYears:     trophyReviewYears(time.Now()),
 	}
 	switch {
 	case len(mapPoints) == 0:

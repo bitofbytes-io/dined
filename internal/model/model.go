@@ -241,6 +241,46 @@ type Stats struct {
 	TasteProfiles []PersonTasteStat
 }
 
+// YearInReview is one Eastern calendar year of dines. A year with no visits is
+// all zero values.
+type YearInReview struct {
+	Year        int
+	TotalVisits int
+	// MonthlyVisits counts the visits in each month, January first.
+	MonthlyVisits [12]int
+	// NewRestaurants were first visited this year; RepeatRestaurants were
+	// visited this year and also in an earlier one.
+	NewRestaurants    int
+	RepeatRestaurants int
+	// MostVisited is the restaurant with the most visits this year, once any
+	// restaurant has been visited at least twice. It is nil otherwise.
+	MostVisited *YearRestaurantStat
+	// HighestRated is the restaurant with the best average this year, counting
+	// only visits whose ratings count in aggregates. It is nil without any.
+	HighestRated *YearRestaurantStat
+	// TopPicks holds each person's best-rated pick this year, in people order.
+	// People whose picks were not rated enough to count are left out.
+	TopPicks []PersonTopPick
+}
+
+// YearRestaurantStat is a restaurant's showing in a year in review.
+// AverageRating is zero unless the stat came from ratings.
+type YearRestaurantStat struct {
+	ID            uuid.UUID
+	Name          string
+	VisitCount    int
+	AverageRating float64
+}
+
+// PersonTopPick is the restaurant a person picked that the family rated
+// highest on average in a year.
+type PersonTopPick struct {
+	Person        string
+	RestaurantID  uuid.UUID
+	Restaurant    string
+	AverageRating float64
+}
+
 // PersonTasteStat is the category a person rates highest on average.
 type PersonTasteStat struct {
 	Person        string

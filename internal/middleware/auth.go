@@ -98,6 +98,7 @@ func isPublicReadRequest(r *http.Request) bool {
 		path == "/dines" ||
 		path == "/trophy-case" ||
 		path == "/trophy-case/map.png" ||
+		isYearPagePath(path) ||
 		path == "/want-to-try" ||
 		path == "/where-to-eat" ||
 		path == "/health" ||
@@ -115,6 +116,12 @@ func isPublicReadRequest(r *http.Request) bool {
 func isRestaurantPagePath(path string) bool {
 	id, ok := strings.CutPrefix(path, "/restaurants/")
 	return ok && id != "" && !strings.Contains(id, "/")
+}
+
+// isYearPagePath matches the read-only /year/{yyyy} page.
+func isYearPagePath(path string) bool {
+	year, ok := strings.CutPrefix(path, "/year/")
+	return ok && year != "" && !strings.Contains(year, "/")
 }
 
 func isSafeMethod(method string) bool {

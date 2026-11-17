@@ -37,6 +37,25 @@ func TestAuthAllowsPublicTrophyMapImage(t *testing.T) {
 	}
 }
 
+func TestAuthYearPageRouteIsExact(t *testing.T) {
+	for path, wantPublic := range map[string]bool{
+		"/year/2026":     true,
+		"/year/2026/":    false,
+		"/year/":         false,
+		"/year/2026/new": false,
+		"/years":         false,
+	} {
+		rec := httptest.NewRecorder()
+		called := false
+		Auth(testAuthService(t), false)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			called = true
+		})).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		if called != wantPublic {
+			t.Fatalf("%s public = %v, want %v", path, called, wantPublic)
+		}
+	}
+}
+
 func TestAuthAllowsPublicPhotos(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/photos/0b1d5a9e-7b6f-4a53-9d6e-6f3c1f9d2a10", nil)
 	rec := httptest.NewRecorder()
