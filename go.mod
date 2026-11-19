@@ -3,8 +3,8 @@ module github.com/bitofbytes-io/dined
 go 1.26.11
 
 require (
-	github.com/chromedp/cdproto v0.160.0
-	github.com/chromedp/chromedp v0.23.0
+	github.com/chromedp/cdproto v0.160.5
+	github.com/chromedp/chromedp v0.24.0
 	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/go-chi/chi/v5 v5.5.0
 	github.com/google/uuid v1.6.0
