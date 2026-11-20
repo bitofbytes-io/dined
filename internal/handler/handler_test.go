@@ -433,6 +433,9 @@ type fakeGooglePlacesClient struct {
 	staticMapErr     error
 	staticMapRequest places.StaticMapRequest
 	staticMapCalls   int
+	linkPlace        *places.Place
+	linkErr          error
+	linkRequests     []string
 }
 
 func (f *fakeGooglePlacesClient) Configured() bool {
@@ -453,6 +456,11 @@ func (f *fakeGooglePlacesClient) Nearby(context.Context, float64, float64) ([]pl
 
 func (f *fakeGooglePlacesClient) Details(_ context.Context, _ string) (*places.Place, error) {
 	return f.detailsPlace, nil
+}
+
+func (f *fakeGooglePlacesClient) ResolveMapsLink(_ context.Context, raw string) (*places.Place, error) {
+	f.linkRequests = append(f.linkRequests, raw)
+	return f.linkPlace, f.linkErr
 }
 
 func (f *fakeGooglePlacesClient) StaticMap(_ context.Context, request places.StaticMapRequest) (*places.StaticMapImage, error) {

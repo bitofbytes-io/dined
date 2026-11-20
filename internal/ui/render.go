@@ -33,6 +33,7 @@ type PageData struct {
 	Title             string
 	Authenticated     bool
 	Error             string
+	MapsLink          string
 	Notice            string
 	Visits            []model.Visit
 	ReadOnlyVisits    bool

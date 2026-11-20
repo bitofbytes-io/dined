@@ -20,6 +20,7 @@ type googlePlacesClient interface {
 	TextSearchNear(context.Context, string, float64, float64) ([]places.Place, error)
 	Nearby(context.Context, float64, float64) ([]places.Place, error)
 	Details(context.Context, string) (*places.Place, error)
+	ResolveMapsLink(context.Context, string) (*places.Place, error)
 	StaticMap(context.Context, places.StaticMapRequest) (*places.StaticMapImage, error)
 }
 

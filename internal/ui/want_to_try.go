@@ -46,6 +46,12 @@ func wantToTryFuncs() template.FuncMap {
 // wantToTryPlaceLink links a Google place to the Want to Try save form with
 // the same details a "Log this dine" link carries.
 func wantToTryPlaceLink(data PageData, place places.Place) WantToTryLink {
+	values := WantToTryPlaceValues(place)
+	return wantToTryLink(data, place.ID, place.DisplayName.Text, place.Address, values)
+}
+
+// WantToTryPlaceValues is the save form query that names a Google place.
+func WantToTryPlaceValues(place places.Place) url.Values {
 	values := url.Values{}
 	values.Set("restaurant_name", place.DisplayName.Text)
 	values.Set("address", place.Address)
@@ -68,7 +74,7 @@ func wantToTryPlaceLink(data PageData, place places.Place) WantToTryLink {
 		values.Set("longitude", fmt.Sprintf("%.6f", place.Location.Longitude))
 	}
 	values.Set("category", places.Category(place))
-	return wantToTryLink(data, place.ID, place.DisplayName.Text, place.Address, values)
+	return values
 }
 
 // wantToTryRestaurantLink links a saved restaurant to the Want to Try save form.
