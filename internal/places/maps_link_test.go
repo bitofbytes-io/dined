@@ -231,6 +231,43 @@ func TestResolveMapsLinkUnresolvable(t *testing.T) {
 	}
 }
 
+func TestResolveMapsLinkPlaceNameWithoutCoordinatesIsRejected(t *testing.T) {
+	// A chain's name alone would resolve to an arbitrary branch, so no search is made.
+	transport := &linkTransport{handle: func(*http.Request) *http.Response {
+		return respond(http.StatusOK, `{"places":[{"id":"`+hanksPlaceID+`","displayName":{"text":"Hank's Downtown Diner"},"location":{"latitude":35.7797,"longitude":-78.6383}}]}`, nil)
+	}}
+
+	_, err := linkClient(transport).ResolveMapsLink(context.Background(), "https://www.google.com/maps/place/Hank's+Downtown+Diner")
+	if !errors.Is(err, ErrLinkUnresolved) {
+		t.Fatalf("err = %v, want ErrLinkUnresolved", err)
+	}
+	if len(transport.requests) != 0 {
+		t.Fatalf("requests = %v, want none", transport.requests)
+	}
+}
+
+func TestResolveMapsLinkPlaceNameWithViewCoordinatesSearchesNearThem(t *testing.T) {
+	var searchBody string
+	transport := &linkTransport{handle: func(req *http.Request) *http.Response {
+		data, _ := io.ReadAll(req.Body)
+		searchBody = string(data)
+		return respond(http.StatusOK, `{"places":[
+			{"id":"otherbranch","displayName":{"text":"Hank's Downtown Diner"},"location":{"latitude":36.5,"longitude":-79.5}},
+			{"id":"`+hanksPlaceID+`","displayName":{"text":"Hank's Downtown Diner"},"location":{"latitude":35.7797,"longitude":-78.6383}}]}`, nil)
+	}}
+
+	place, err := linkClient(transport).ResolveMapsLink(context.Background(), "https://www.google.com/maps/place/Hank's+Downtown+Diner/@35.7796,-78.6382,17z")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if place.ID != hanksPlaceID {
+		t.Fatalf("place = %#v, want the branch at the link's coordinates", place)
+	}
+	if !strings.Contains(searchBody, "locationBias") || !strings.Contains(searchBody, "35.7796") {
+		t.Fatalf("search body = %s, want a bias on the link's coordinates", searchBody)
+	}
+}
+
 func TestResolveMapsLinkNeedsConfiguredClient(t *testing.T) {
 	_, err := NewClient("").ResolveMapsLink(context.Background(), hanksPlaceURL)
 	if err == nil || errors.Is(err, ErrNotMapsLink) || errors.Is(err, ErrLinkUnresolved) {

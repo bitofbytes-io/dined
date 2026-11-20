@@ -80,7 +80,7 @@ func IsMapsLink(raw string) bool {
 // ResolveMapsLink turns a pasted Google Maps share link into a place. Short
 // links are followed by hand, never to a host outside the allowlist, and the
 // place is then read from the final URL: its place ID when it has one, else
-// its name and coordinates searched through Places.
+// its name searched through Places near its coordinates.
 func (c *Client) ResolveMapsLink(ctx context.Context, raw string) (*Place, error) {
 	if !c.Configured() {
 		return nil, fmt.Errorf("google places client is not configured")
@@ -225,26 +225,20 @@ func validCoordinates(latText, lngText string) (float64, float64, bool) {
 	return lat, lng, true
 }
 
-// placeByName searches Places for the link's name, near its coordinates when
-// it has them, and takes the best match that is actually at those coordinates.
+// placeByName searches Places for the link's name near its coordinates and
+// takes the best match that is actually at those coordinates. A name alone is
+// not enough: for a chain it would pick an arbitrary branch, so a link without
+// coordinates is left unresolved.
 func (c *Client) placeByName(ctx context.Context, ref mapsReference) (*Place, error) {
-	var (
-		found []Place
-		err   error
-	)
-	if ref.hasCoords {
-		found, err = c.TextSearchNear(ctx, ref.name, ref.latitude, ref.longitude)
-	} else {
-		found, err = c.TextSearch(ctx, ref.name)
+	if !ref.hasCoords {
+		return nil, ErrLinkUnresolved
 	}
+	found, err := c.TextSearchNear(ctx, ref.name, ref.latitude, ref.longitude)
 	if err != nil {
 		return nil, fmt.Errorf("google places search for maps link: %w", err)
 	}
 	for i := range found {
-		if found[i].ID == "" {
-			continue
-		}
-		if ref.hasCoords && DistanceMiles(ref.latitude, ref.longitude, found[i]) > mapsLinkMaxMiles {
+		if found[i].ID == "" || DistanceMiles(ref.latitude, ref.longitude, found[i]) > mapsLinkMaxMiles {
 			continue
 		}
 		return &found[i], nil
