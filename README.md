@@ -67,6 +67,12 @@ Tick **Permanently closed** on `/restaurants/{id}/edit` to stamp the restaurant 
 
 Dined never closes a restaurant on its own. When **Refresh Google Info** finds that Google Places reports `CLOSED_PERMANENTLY`, the edit page only suggests ticking the box. This needs no new configuration; without `GOOGLE_PLACES_API_KEY` the manual toggle still works and no suggestion appears.
 
+## Adding to Want to Try from a Google Maps link
+
+The Want to Try page has an **Add from a Google Maps link** box. Paste a `maps.app.goo.gl/...` share link or a `google.com/maps/place/...` URL and Dined fills the save form with the place's name, address, and Google place ID for you to confirm. Short links are followed by the server one redirect at a time, only to `maps.app.goo.gl`, `goo.gl/maps`, `google.com/maps`, and `maps.google.com` over HTTPS, with a timeout and a redirect cap, so a link cannot send the server to any other host. Links on other hosts, links that loop, and links that do not lead to a place show an error and nothing is saved.
+
+The place is looked up with the existing `GOOGLE_PLACES_API_KEY`; no other setting is needed. Without the key the box reports that Places is not configured.
+
 ## Database and migrations
 
 ```bash

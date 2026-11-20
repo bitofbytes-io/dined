@@ -23,17 +23,28 @@ const (
 )
 
 func (h *Handler) WantToTry(w http.ResponseWriter, r *http.Request) {
-	items, err := h.store.WantToTry(r.Context())
-	if err != nil {
-		h.error(w, "want to try", err)
-		return
-	}
 	notice, err := h.wantToTryNotice(r)
 	if err != nil {
 		h.error(w, "want to try notice", err)
 		return
 	}
-	h.render(w, "want-to-try", r, ui.PageData{Title: "Want to Try", WantToTryItems: items, Notice: notice})
+	h.renderWantToTry(w, r, http.StatusOK, ui.PageData{Notice: notice})
+}
+
+// renderWantToTry shows the list with whatever the caller put in data, such
+// as a notice or the error and pasted link of a failed lookup.
+func (h *Handler) renderWantToTry(w http.ResponseWriter, r *http.Request, status int, data ui.PageData) {
+	items, err := h.store.WantToTry(r.Context())
+	if err != nil {
+		h.error(w, "want to try", err)
+		return
+	}
+	data.Title = "Want to Try"
+	data.WantToTryItems = items
+	if status != http.StatusOK {
+		w.WriteHeader(status)
+	}
+	h.render(w, "want-to-try", r, data)
 }
 
 // wantToTryNotice confirms the save or dine that led back to the list.
@@ -60,7 +71,14 @@ func (h *Handler) wantToTryNotice(r *http.Request) (string, error) {
 
 // NewWantToTryPage is the save form for browsers without the save sheet.
 func (h *Handler) NewWantToTryPage(w http.ResponseWriter, r *http.Request) {
-	data, ok := h.wantToTryFormData(w, r, r.URL.Query())
+	values := r.URL.Query()
+	if link := strings.TrimSpace(values.Get(mapsLinkParam)); link != "" {
+		var ok bool
+		if values, ok = h.wantToTryLinkValues(w, r, link); !ok {
+			return
+		}
+	}
+	data, ok := h.wantToTryFormData(w, r, values)
 	if !ok {
 		return
 	}

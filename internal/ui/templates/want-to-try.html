@@ -6,6 +6,10 @@
       <h1>Want to Try</h1>
       {{with len .WantToTryItems}}<p class="want-meta">{{.}} {{if eq . 1}}place{{else}}places{{end}} we want to try</p>{{end}}
     </div>
+    {{if .Authenticated}}<form class="want-link-form" method="get" action="/want-to-try/new" hx-boost="false">
+      <label for="want-maps-link">Add from a Google Maps link</label>
+      <div class="want-link-row"><input id="want-maps-link" name="maps_url" type="text" inputmode="url" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="https://maps.app.goo.gl/…" value="{{.MapsLink}}" required><button class="secondary-button">Add</button></div>
+    </form>{{end}}
     {{if .WantToTryItems}}
     <ul class="want-card">
       {{range .WantToTryItems}}<li class="want-row" data-want-to-try-row data-want-to-try-name="{{.Restaurant.Name}}">
