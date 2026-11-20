@@ -196,9 +196,6 @@ func parseMapsReference(u *url.URL) mapsReference {
 			ref.name = strings.TrimSpace(name)
 		}
 	}
-	if ref.name == "" && q != "" && !strings.HasPrefix(q, placeIDPrefix) && !plainCoordsPattern.MatchString(q) {
-		ref.name = strings.TrimSpace(q)
-	}
 	ref.latitude, ref.longitude, ref.hasCoords = mapsCoordinates(u)
 	return ref
 }

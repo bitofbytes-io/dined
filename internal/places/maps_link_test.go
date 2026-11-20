@@ -214,6 +214,8 @@ func TestResolveMapsLinkUnresolvable(t *testing.T) {
 		{"short link that does not redirect", func(*http.Request) *http.Response { return respond(http.StatusOK, "<html>", nil) }, "https://maps.app.goo.gl/abc", ErrLinkUnresolved},
 		{"short link that is gone", func(*http.Request) *http.Response { return respond(http.StatusNotFound, "", nil) }, "https://maps.app.goo.gl/abc", ErrLinkUnresolved},
 		{"maps page without a place", func(*http.Request) *http.Response { return nil }, "https://www.google.com/maps", ErrLinkUnresolved},
+		{"search page names no single place", func(*http.Request) *http.Response { return nil }, "https://www.google.com/maps/search/?api=1&query=pizza", ErrLinkUnresolved},
+		{"q search names no single place", func(*http.Request) *http.Response { return nil }, "https://maps.google.com/?q=pizza", ErrLinkUnresolved},
 		{"coordinates only", func(*http.Request) *http.Response { return nil }, "https://www.google.com/maps/place/35.7796,-78.6382/@35.7796,-78.6382,17z", ErrLinkUnresolved},
 		{"no match near the link", func(*http.Request) *http.Response {
 			return respond(http.StatusOK, `{"places":[{"id":"far","location":{"latitude":40,"longitude":-74}}]}`, nil)
