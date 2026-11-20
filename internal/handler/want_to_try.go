@@ -42,6 +42,7 @@ func (h *Handler) renderWantToTry(w http.ResponseWriter, r *http.Request, status
 	data.Title = "Want to Try"
 	data.WantToTryItems = items
 	if status != http.StatusOK {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(status)
 	}
 	h.render(w, "want-to-try", r, data)

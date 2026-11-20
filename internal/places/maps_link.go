@@ -26,7 +26,12 @@ const (
 	mapsLinkTimeout      = 12 * time.Second
 	// mapsLinkMaxMiles is how far from the link's coordinates a found place may be.
 	mapsLinkMaxMiles = 0.5
-	placeIDPrefix    = "place_id:"
+	// mapsLinkPinMiles is how close a result must be to the link's pin to be
+	// taken over other results in range, and mapsLinkMinGapMiles is how much
+	// farther the next one must be. Anything less is ambiguous.
+	mapsLinkPinMiles    = 0.05
+	mapsLinkMinGapMiles = 0.05
+	placeIDPrefix       = "place_id:"
 )
 
 var (
@@ -226,9 +231,10 @@ func validCoordinates(latText, lngText string) (float64, float64, bool) {
 }
 
 // placeByName searches Places for the link's name near its coordinates and
-// takes the best match that is actually at those coordinates. A name alone is
-// not enough: for a chain it would pick an arbitrary branch, so a link without
-// coordinates is left unresolved.
+// takes the match that sits on them. A name alone is not enough: for a chain it
+// would pick an arbitrary branch, so a link without coordinates is left
+// unresolved. When several results are near, the one on the pin wins only if
+// it is clearly closer than the rest; otherwise the link is ambiguous.
 func (c *Client) placeByName(ctx context.Context, ref mapsReference) (*Place, error) {
 	if !ref.hasCoords {
 		return nil, ErrLinkUnresolved
@@ -237,11 +243,26 @@ func (c *Client) placeByName(ctx context.Context, ref mapsReference) (*Place, er
 	if err != nil {
 		return nil, fmt.Errorf("google places search for maps link: %w", err)
 	}
+	var nearest *Place
+	nearestMiles, runnerUpMiles := math.Inf(1), math.Inf(1)
+	count := 0
 	for i := range found {
-		if found[i].ID == "" || DistanceMiles(ref.latitude, ref.longitude, found[i]) > mapsLinkMaxMiles {
+		miles := DistanceMiles(ref.latitude, ref.longitude, found[i])
+		if found[i].ID == "" || miles > mapsLinkMaxMiles {
 			continue
 		}
-		return &found[i], nil
+		count++
+		if miles < nearestMiles {
+			nearest, runnerUpMiles, nearestMiles = &found[i], nearestMiles, miles
+		} else if miles < runnerUpMiles {
+			runnerUpMiles = miles
+		}
+	}
+	switch {
+	case count == 1:
+		return nearest, nil
+	case count > 1 && nearestMiles <= mapsLinkPinMiles && runnerUpMiles-nearestMiles >= mapsLinkMinGapMiles:
+		return nearest, nil
 	}
 	return nil, ErrLinkUnresolved
 }

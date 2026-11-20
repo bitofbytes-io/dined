@@ -31,6 +31,9 @@ func TestRouterWantToTryMapsLinkErrorKeepsThePastedLink(t *testing.T) {
 	if rec.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusServiceUnavailable)
 	}
+	if got := rec.Header().Get("Content-Type"); got != "text/html; charset=utf-8" {
+		t.Fatalf("Content-Type = %q, want HTML", got)
+	}
 	body := rec.Body.String()
 	if !strings.Contains(body, "Google Places is not configured") || !strings.Contains(body, `value="`+link+`"`) {
 		t.Fatalf("want the error and the pasted link back in the form:\n%s", body)

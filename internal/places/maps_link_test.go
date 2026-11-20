@@ -268,6 +268,49 @@ func TestResolveMapsLinkPlaceNameWithViewCoordinatesSearchesNearThem(t *testing.
 	}
 }
 
+func TestResolveMapsLinkChoosesAmongNearbyBranchesByPin(t *testing.T) {
+	// Pin is 35.7797,-78.6383. 0.0043 degrees of latitude is about 0.3 miles and
+	// 0.0007 about 0.05, so every branch below is inside the search radius.
+	const (
+		onPin    = `{"id":"onpin","displayName":{"text":"Hank's Downtown Diner"},"location":{"latitude":35.7797,"longitude":-78.6383}}`
+		nearby   = `{"id":"nearby","displayName":{"text":"Hank's Downtown Diner"},"location":{"latitude":35.7840,"longitude":-78.6383}}`
+		northish = `{"id":"north","displayName":{"text":"Hank's Downtown Diner"},"location":{"latitude":35.7804,"longitude":-78.6383}}`
+		southish = `{"id":"south","displayName":{"text":"Hank's Downtown Diner"},"location":{"latitude":35.7790,"longitude":-78.6383}}`
+		farther  = `{"id":"farther","displayName":{"text":"Hank's Downtown Diner"},"location":{"latitude":35.7740,"longitude":-78.6383}}`
+	)
+	tests := []struct {
+		name    string
+		results string
+		wantID  string
+	}{
+		{"branch on the pin beats a more relevant one in range", nearby + "," + onPin, "onpin"},
+		{"branch on the pin beats the rest whatever the order", onPin + "," + nearby, "onpin"},
+		{"branch on the pin beats two others in range", nearby + "," + farther + "," + onPin, "onpin"},
+		{"branches equally close to the pin are ambiguous", northish + "," + southish, ""},
+		{"nobody on the pin is ambiguous", nearby + "," + farther, ""},
+		{"similarly close branches are ambiguous even if one is on the pin", onPin + "," + `{"id":"beside","location":{"latitude":35.7801,"longitude":-78.6383}}`, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			transport := &linkTransport{handle: func(*http.Request) *http.Response {
+				return respond(http.StatusOK, `{"places":[`+tt.results+`]}`, nil)
+			}}
+
+			place, err := linkClient(transport).ResolveMapsLink(context.Background(), hanksPlaceURL)
+
+			if tt.wantID == "" {
+				if !errors.Is(err, ErrLinkUnresolved) {
+					t.Fatalf("place = %#v, err = %v, want ErrLinkUnresolved", place, err)
+				}
+				return
+			}
+			if err != nil || place.ID != tt.wantID {
+				t.Fatalf("place = %#v, err = %v, want %q", place, err, tt.wantID)
+			}
+		})
+	}
+}
+
 func TestResolveMapsLinkNeedsConfiguredClient(t *testing.T) {
 	_, err := NewClient("").ResolveMapsLink(context.Background(), hanksPlaceURL)
 	if err == nil || errors.Is(err, ErrNotMapsLink) || errors.Is(err, ErrLinkUnresolved) {
