@@ -246,25 +246,19 @@ func TestResolveMapsLinkPlaceNameWithoutCoordinatesIsRejected(t *testing.T) {
 	}
 }
 
-func TestResolveMapsLinkPlaceNameWithViewCoordinatesSearchesNearThem(t *testing.T) {
-	var searchBody string
-	transport := &linkTransport{handle: func(req *http.Request) *http.Response {
-		data, _ := io.ReadAll(req.Body)
-		searchBody = string(data)
-		return respond(http.StatusOK, `{"places":[
-			{"id":"otherbranch","displayName":{"text":"Hank's Downtown Diner"},"location":{"latitude":36.5,"longitude":-79.5}},
-			{"id":"`+hanksPlaceID+`","displayName":{"text":"Hank's Downtown Diner"},"location":{"latitude":35.7797,"longitude":-78.6383}}]}`, nil)
+func TestResolveMapsLinkPlaceNameWithOnlyViewCoordinatesIsUnresolved(t *testing.T) {
+	// The viewport center is not the restaurant's pin: centered near another
+	// branch of the chain, it would prefill that branch.
+	transport := &linkTransport{handle: func(*http.Request) *http.Response {
+		return respond(http.StatusOK, `{"places":[{"id":"otherbranch","displayName":{"text":"Hank's Downtown Diner"},"location":{"latitude":35.7796,"longitude":-78.6382}}]}`, nil)
 	}}
 
 	place, err := linkClient(transport).ResolveMapsLink(context.Background(), "https://www.google.com/maps/place/Hank's+Downtown+Diner/@35.7796,-78.6382,17z")
-	if err != nil {
-		t.Fatal(err)
+	if !errors.Is(err, ErrLinkUnresolved) {
+		t.Fatalf("place = %#v, err = %v, want ErrLinkUnresolved", place, err)
 	}
-	if place.ID != hanksPlaceID {
-		t.Fatalf("place = %#v, want the branch at the link's coordinates", place)
-	}
-	if !strings.Contains(searchBody, "locationBias") || !strings.Contains(searchBody, "35.7796") {
-		t.Fatalf("search body = %s, want a bias on the link's coordinates", searchBody)
+	if len(transport.requests) != 0 {
+		t.Fatalf("requests = %v, want none", transport.requests)
 	}
 }
 
@@ -324,6 +318,7 @@ func TestResolveMapsLinkRequiresTheLinkedName(t *testing.T) {
 		{"name only shares a word", `{"id":"other","displayName":{"text":"Downtown Pizza"},` + onPin + `}`, "", true},
 		{"same name ignoring case and punctuation", `{"id":"same","displayName":{"text":"HANKS downtown diner"},` + onPin + `}`, "same", false},
 		{"linked name is part of the place's name", `{"id":"longer","displayName":{"text":"Hank's Downtown Diner & Bar"},` + onPin + `}`, "longer", false},
+		{"place's name has a word added inside the linked name", `{"id":"famous","displayName":{"text":"Hank's Famous Downtown Diner"},` + onPin + `}`, "famous", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -390,8 +385,12 @@ func TestParseMapsReference(t *testing.T) {
 		t.Fatalf("ref = %#v, want the name and the pin from !3d!4d", ref)
 	}
 	ref = parseMapsReference(mustParse(t, "https://www.google.com/maps/place/Caf%C3%A9+Luna/@35.5,-78.5,15z"))
-	if ref.name != "Café Luna" || ref.latitude != 35.5 || ref.longitude != -78.5 {
-		t.Fatalf("ref = %#v, want the view center when there is no pin", ref)
+	if ref.name != "Café Luna" || ref.hasCoords {
+		t.Fatalf("ref = %#v, want the name and no pin: the view center is not one", ref)
+	}
+	ref = parseMapsReference(mustParse(t, "https://www.google.com/maps/place/@Pizza/@35.5,-78.5,15z"))
+	if ref.name != "@Pizza" {
+		t.Fatalf("ref = %#v, want a name that starts with @ kept", ref)
 	}
 	ref = parseMapsReference(mustParse(t, "https://www.google.com/maps?q=place_id:"+hanksPlaceID))
 	if ref.placeID != hanksPlaceID || ref.name != "" {

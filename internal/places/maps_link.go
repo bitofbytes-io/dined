@@ -39,7 +39,7 @@ const (
 var (
 	placeIDPattern     = regexp.MustCompile(`^[A-Za-z0-9_-]{10,200}$`)
 	dataCoordsPattern  = regexp.MustCompile(`!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)`)
-	viewCoordsPattern  = regexp.MustCompile(`@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)`)
+	viewCoordsPattern  = regexp.MustCompile(`^@-?\d+(?:\.\d+)?,-?\d+(?:\.\d+)?(?:,[^,/]*)?$`)
 	plainCoordsPattern = regexp.MustCompile(`^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$`)
 )
 
@@ -200,7 +200,7 @@ func parseMapsReference(u *url.URL) mapsReference {
 	}
 	if segments := strings.Split(strings.TrimPrefix(u.EscapedPath(), "/"), "/"); len(segments) >= 3 && segments[0] == "maps" && segments[1] == "place" {
 		// "@lat,lng,zoom" in the name slot is a map view, not a place.
-		if name, err := url.QueryUnescape(segments[2]); err == nil && !plainCoordsPattern.MatchString(name) && !strings.HasPrefix(name, "@") {
+		if name, err := url.QueryUnescape(segments[2]); err == nil && !plainCoordsPattern.MatchString(name) && !viewCoordsPattern.MatchString(name) {
 			ref.name = strings.TrimSpace(name)
 		}
 	}
@@ -208,14 +208,13 @@ func parseMapsReference(u *url.URL) mapsReference {
 	return ref
 }
 
-// mapsCoordinates prefers the place's own pin (!3d..!4d..) over the map view
-// center (@lat,lng).
+// mapsCoordinates returns the place's own pin (!3d..!4d.., or q=lat,lng). The
+// map view center (@lat,lng) is deliberately not used: it is wherever the map
+// was panned to, so near a chain's other branch it would pick that branch.
 func mapsCoordinates(u *url.URL) (float64, float64, bool) {
-	for _, pattern := range []*regexp.Regexp{dataCoordsPattern, viewCoordsPattern} {
-		if m := pattern.FindStringSubmatch(u.EscapedPath()); m != nil {
-			if lat, lng, ok := validCoordinates(m[1], m[2]); ok {
-				return lat, lng, true
-			}
+	if m := dataCoordsPattern.FindStringSubmatch(u.EscapedPath()); m != nil {
+		if lat, lng, ok := validCoordinates(m[1], m[2]); ok {
+			return lat, lng, true
 		}
 	}
 	if m := plainCoordsPattern.FindStringSubmatch(u.Query().Get("q")); m != nil {
@@ -233,10 +232,10 @@ func validCoordinates(latText, lngText string) (float64, float64, bool) {
 	return lat, lng, true
 }
 
-// placeByName searches Places for the link's name near its coordinates and
-// takes the match that sits on them. A name alone is not enough: for a chain it
-// would pick an arbitrary branch, so a link without coordinates is left
-// unresolved. When several results are near, the one on the pin wins only if
+// placeByName searches Places for the link's name near its pin and takes the
+// match that sits on it. A name alone is not enough: for a chain it would pick
+// an arbitrary branch, and neither is a map view center, so a link without a
+// pin is left unresolved. When several results are near, the one on the pin wins only if
 // it is clearly closer than the rest; otherwise the link is ambiguous. Whatever
 // is chosen must also carry the link's name, so a stale link whose place has
 // closed or moved never prefills a different restaurant.
@@ -272,23 +271,21 @@ func (c *Client) placeByName(ctx context.Context, ref mapsReference) (*Place, er
 	return nil, ErrLinkUnresolved
 }
 
-// namesMatch reports whether two place names are the same once case and
-// punctuation are ignored, or one is the other with words added or dropped
-// ("Hank's" and "Hank's Downtown Diner").
+// namesMatch reports whether every word of the linked name appears in the
+// found name once case and punctuation are ignored, so "Hank's Downtown Diner"
+// matches "Hank's Famous Downtown Diner" but not "Downtown Pizza".
 func namesMatch(linked, found string) bool {
-	a, b := nameWords(linked), nameWords(found)
-	if len(a) == 0 || len(b) == 0 {
+	want := nameWords(linked)
+	if len(want) == 0 {
 		return false
 	}
-	if len(a) > len(b) {
-		a, b = b, a
-	}
-	for start := 0; start+len(a) <= len(b); start++ {
-		if slices.Equal(a, b[start:start+len(a)]) {
-			return true
+	have := nameWords(found)
+	for _, word := range want {
+		if !slices.Contains(have, word) {
+			return false
 		}
 	}
-	return false
+	return true
 }
 
 // nameWords lowercases name and splits it into runs of letters and digits,
