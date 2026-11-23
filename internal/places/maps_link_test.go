@@ -146,6 +146,7 @@ func TestResolveMapsLinkRejectsOtherHostsWithoutAnyRequest(t *testing.T) {
 		"https://maps.app.goo.gl.evil.example/abc",
 		"https://evil.example/https://maps.app.goo.gl/abc",
 		"https://www.google.com/search?q=hanks",
+		"https://goo.gl/maps-other/abc",
 		"https://google.com.evil.example/maps/place/Hanks",
 		"https://user@maps.app.goo.gl/abc",
 		"https://maps.app.goo.gl:8443/abc",
@@ -374,7 +375,9 @@ func TestResolveMapsLinkChoosesAmongNearbyBranchesByPin(t *testing.T) {
 		{"branch on the pin beats two others in range", nearby + "," + farther + "," + onPin, "onpin"},
 		{"branches equally close to the pin are ambiguous", northish + "," + southish, ""},
 		{"nobody on the pin is ambiguous", nearby + "," + farther, ""},
-		{"similarly close branches are ambiguous even if one is on the pin", onPin + "," + `{"id":"beside","location":{"latitude":35.7801,"longitude":-78.6383}}`, ""},
+		{"unrelated restaurant beside the pin does not veto the linked one", onPin + "," + `{"id":"pizza","displayName":{"text":"Joe's Pizza"},"location":{"latitude":35.7800,"longitude":-78.6383}}`, "onpin"},
+		{"unrelated restaurants do not break a tie either", `{"id":"pizza","displayName":{"text":"Joe's Pizza"},"location":{"latitude":35.7798,"longitude":-78.6383}}` + "," + onPin + "," + `{"id":"cafe","location":{"latitude":35.7796,"longitude":-78.6383}}`, "onpin"},
+		{"similarly close branches are ambiguous even if one is on the pin", onPin + "," + `{"id":"beside","displayName":{"text":"Hank's Downtown Diner"},"location":{"latitude":35.7801,"longitude":-78.6383}}`, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

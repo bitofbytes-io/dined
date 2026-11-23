@@ -28,12 +28,16 @@ func TestNewWantToTryPagePrefillsFromMapsLink(t *testing.T) {
 			{LongText: "Raleigh", Types: []string{"locality"}},
 		},
 	}}
+	store := repository.NewMemoryStore()
 	rec := httptest.NewRecorder()
 
-	New(nil, repository.NewMemoryStore(), fake, nil, nil).NewWantToTryPage(rec, newWantToTryLinkRequest("https://maps.app.goo.gl/abc"))
+	New(nil, store, fake, nil, nil).NewWantToTryPage(rec, newWantToTryLinkRequest("https://maps.app.goo.gl/abc"))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
+	}
+	if items, err := store.WantToTry(context.Background()); err != nil || len(items) != 0 {
+		t.Fatalf("want to try list = %v, err = %v, want it empty until the user confirms", items, err)
 	}
 	body := rec.Body.String()
 	for _, want := range []string{

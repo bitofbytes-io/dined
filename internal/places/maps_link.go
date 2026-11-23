@@ -64,7 +64,7 @@ func classifyMapsURL(u *url.URL) mapsLinkKind {
 	case "maps.app.goo.gl":
 		return shortLink
 	case "goo.gl":
-		if strings.HasPrefix(u.Path, "/maps") {
+		if u.Path == "/maps" || strings.HasPrefix(u.Path, "/maps/") {
 			return shortLink
 		}
 	case "google.com", "www.google.com":
@@ -272,11 +272,12 @@ func validCoordinates(latText, lngText string) (float64, float64, bool) {
 // placeByName searches Places for the link's name near its pin and takes the
 // match that sits on it. A name alone is not enough: for a chain it would pick
 // an arbitrary branch, and neither is a map view center, so a link without a
-// pin is left unresolved. Only a result on the pin is taken, and when several
-// results are near it must also be clearly closer than the rest; otherwise the
-// link is unresolved. Whatever
-// is chosen must also carry the link's name, so a stale link whose place has
-// closed or moved never prefills a different restaurant.
+// pin is left unresolved. Results that do not carry the link's name are dropped
+// first, so an unrelated restaurant next door can neither be chosen nor veto the
+// linked one, and a stale link whose place has closed or moved never prefills a
+// different restaurant. Of the rest only a result on the pin is taken, and when
+// several are near it must also be clearly closer than the others; otherwise
+// the link is unresolved.
 func (c *Client) placeByName(ctx context.Context, ref mapsReference) (*Place, error) {
 	if !ref.hasCoords {
 		return nil, ErrLinkUnresolved
@@ -290,7 +291,7 @@ func (c *Client) placeByName(ctx context.Context, ref mapsReference) (*Place, er
 	count := 0
 	for i := range found {
 		miles := DistanceMiles(ref.latitude, ref.longitude, found[i])
-		if found[i].ID == "" || miles > mapsLinkMaxMiles {
+		if found[i].ID == "" || miles > mapsLinkMaxMiles || !namesMatch(ref.name, found[i].DisplayName.Text) {
 			continue
 		}
 		count++
@@ -304,7 +305,7 @@ func (c *Client) placeByName(ctx context.Context, ref mapsReference) (*Place, er
 	// same-name branch down the street must not stand in for a linked branch
 	// that has closed or dropped out of the results.
 	onPin := nearest != nil && nearestMiles <= mapsLinkPinMiles
-	if onPin && (count == 1 || runnerUpMiles-nearestMiles >= mapsLinkMinGapMiles) && namesMatch(ref.name, nearest.DisplayName.Text) {
+	if onPin && (count == 1 || runnerUpMiles-nearestMiles >= mapsLinkMinGapMiles) {
 		return nearest, nil
 	}
 	return nil, ErrLinkUnresolved
