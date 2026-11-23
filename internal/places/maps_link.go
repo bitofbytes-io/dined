@@ -38,7 +38,7 @@ const (
 
 var (
 	placeIDPattern     = regexp.MustCompile(`^[A-Za-z0-9_-]{10,200}$`)
-	dataCoordsPattern  = regexp.MustCompile(`!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)`)
+	dataCoordsPattern  = regexp.MustCompile(`!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)(?:!|$)`)
 	viewCoordsPattern  = regexp.MustCompile(`^@-?\d+(?:\.\d+)?,-?\d+(?:\.\d+)?(?:,[^,/]*)?$`)
 	plainCoordsPattern = regexp.MustCompile(`^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*$`)
 )

@@ -256,6 +256,9 @@ func TestResolveMapsLinkPinComesOnlyFromTheDataSegment(t *testing.T) {
 		{"percent-encoded markers in the data segment", "https://www.google.com/maps/place/Hank's+Downtown+Diner/@35.7796,-78.6382,17z/data=!4m6!3m5%213d35.7797%214d-78.6383!16s%2Fg%2F1", "onpin"},
 		{"markers in the place name segment", "https://www.google.com/maps/place/Hank's+!3d35.7797!4d-78.6383/@35.7796,-78.6382,17z", ""},
 		{"encoded markers in the place name segment", "https://www.google.com/maps/place/Hank's+%213d35.7797%214d-78.6383/@35.7796,-78.6382,17z", ""},
+		{"longitude with trailing junk", "https://www.google.com/maps/place/Hank's+Downtown+Diner/@35.7796,-78.6382,17z/data=!4m6!3m5!8m2!3d35.7797!4d-78.6383junk!16s%2Fg%2F1", ""},
+		{"latitude with trailing junk", "https://www.google.com/maps/place/Hank's+Downtown+Diner/@35.7796,-78.6382,17z/data=!4m6!3m5!8m2!3d35.7797junk!4d-78.6383!16s%2Fg%2F1", ""},
+		{"pin ending the data segment", "https://www.google.com/maps/place/Hank's+Downtown+Diner/@35.7796,-78.6382,17z/data=!4m6!3m5!8m2!3d35.7797!4d-78.6383", "onpin"},
 		{"markers in the view segment", "https://www.google.com/maps/place/Hank's+Downtown+Diner/@!3d35.7797!4d-78.6383,17z", ""},
 	}
 	for _, tt := range tests {
@@ -457,6 +460,28 @@ func TestResolveMapsLinkUnknownPlaceIDIsUnresolved(t *testing.T) {
 
 			if !errors.Is(err, ErrLinkUnresolved) {
 				t.Fatalf("place = %#v, err = %v, want ErrLinkUnresolved", place, err)
+			}
+		})
+	}
+}
+
+func TestResolveMapsLinkCredentialErrorIsNotUnresolved(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{"invalid API key", `{"error":{"code":400,"message":"API key not valid.","status":"INVALID_ARGUMENT","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"API_KEY_INVALID","domain":"googleapis.com"}]}}`},
+		{"expired API key", `{"error":{"code":400,"status":"INVALID_ARGUMENT","details":[{"reason":"API_KEY_EXPIRED"}]}}`},
+		{"unparsable body", `<html>INVALID_ARGUMENT`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			transport := &linkTransport{handle: func(*http.Request) *http.Response { return respond(http.StatusBadRequest, tt.body, nil) }}
+
+			_, err := linkClient(transport).ResolveMapsLink(context.Background(), "https://www.google.com/maps/search/?api=1&query=Hanks&query_place_id="+hanksPlaceID)
+
+			if err == nil || errors.Is(err, ErrLinkUnresolved) {
+				t.Fatalf("err = %v, want a lookup failure", err)
 			}
 		})
 	}

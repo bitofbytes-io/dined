@@ -155,13 +155,44 @@ func (e *detailsStatusError) Error() string {
 }
 
 // unknownPlace reports whether Google said the place ID does not exist or is
-// malformed (HTTP 400 INVALID_ARGUMENT), as opposed to the request itself
-// failing.
+// malformed (HTTP 404, or a NOT_FOUND, INVALID_REQUEST or INVALID_ARGUMENT
+// status), as opposed to the request itself failing. INVALID_ARGUMENT also
+// carries credential errors, told apart by a detail reason, so those stay
+// lookup failures.
 func (e *detailsStatusError) unknownPlace() bool {
-	return e.status == http.StatusNotFound ||
-		strings.Contains(e.body, "NOT_FOUND") ||
-		strings.Contains(e.body, "INVALID_REQUEST") ||
-		strings.Contains(e.body, "INVALID_ARGUMENT")
+	var payload struct {
+		Error struct {
+			Status  string `json:"status"`
+			Details []struct {
+				Reason string `json:"reason"`
+			} `json:"details"`
+		} `json:"error"`
+	}
+	// An unparsable body (say, one cut off at the read limit) leaves only the HTTP status to go on.
+	_ = json.Unmarshal([]byte(e.body), &payload)
+	for _, detail := range payload.Error.Details {
+		if requestFailureReason(detail.Reason) {
+			return false
+		}
+	}
+	if e.status == http.StatusNotFound {
+		return true
+	}
+	switch payload.Error.Status {
+	case "NOT_FOUND", "INVALID_REQUEST", "INVALID_ARGUMENT":
+		return true
+	}
+	return false
+}
+
+// requestFailureReason reports whether an error detail reason blames the
+// credentials, the API's availability or the quota rather than the place ID.
+func requestFailureReason(reason string) bool {
+	switch reason {
+	case "SERVICE_DISABLED", "RATE_LIMIT_EXCEEDED", "RESOURCE_EXHAUSTED", "ACCESS_TOKEN_EXPIRED", "CONSUMER_INVALID", "BILLING_DISABLED":
+		return true
+	}
+	return strings.HasPrefix(reason, "API_KEY_")
 }
 
 func (c *Client) Details(ctx context.Context, placeID string) (*Place, error) {
