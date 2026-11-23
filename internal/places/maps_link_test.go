@@ -316,6 +316,7 @@ func TestResolveMapsLinkRequiresTheLinkedName(t *testing.T) {
 		{"only nearby result is a different restaurant", `{"id":"other","displayName":{"text":"Joe's Pizza"},` + onPin + `}`, "", true},
 		{"only nearby result has no name", `{"id":"other",` + onPin + `}`, "", true},
 		{"name only shares a word", `{"id":"other","displayName":{"text":"Downtown Pizza"},` + onPin + `}`, "", true},
+		{"name has the linked words in another order", `{"id":"other","displayName":{"text":"Diner Downtown Hank's"},` + onPin + `}`, "", true},
 		{"same name ignoring case and punctuation", `{"id":"same","displayName":{"text":"HANKS downtown diner"},` + onPin + `}`, "same", false},
 		{"linked name is part of the place's name", `{"id":"longer","displayName":{"text":"Hank's Downtown Diner & Bar"},` + onPin + `}`, "longer", false},
 		{"place's name has a word added inside the linked name", `{"id":"famous","displayName":{"text":"Hank's Famous Downtown Diner"},` + onPin + `}`, "famous", false},
@@ -338,6 +339,59 @@ func TestResolveMapsLinkRequiresTheLinkedName(t *testing.T) {
 				t.Fatalf("place = %#v, err = %v, want %q", place, err, tt.wantID)
 			}
 		})
+	}
+}
+
+func TestNamesMatchUsesEachFoundWordOnce(t *testing.T) {
+	tests := []struct {
+		linked, found string
+		want          bool
+	}{
+		{"Pizza Pizza", "Pizza Palace", false},
+		{"Pizza Pizza", "Pizza Palace Pizza", true},
+		{"Diner Hank's", "Hank's Diner", false},
+		{"Hank's Diner", "Hanks Famous Diner", true},
+	}
+	for _, tt := range tests {
+		if got := namesMatch(tt.linked, tt.found); got != tt.want {
+			t.Errorf("namesMatch(%q, %q) = %v, want %v", tt.linked, tt.found, got, tt.want)
+		}
+	}
+}
+
+func TestResolveMapsLinkUnknownPlaceIDIsUnresolved(t *testing.T) {
+	tests := []struct {
+		name   string
+		status int
+		body   string
+	}{
+		{"404", http.StatusNotFound, `{"error":{"code":404,"status":"NOT_FOUND"}}`},
+		{"404 without a body", http.StatusNotFound, ``},
+		{"not found status", http.StatusBadRequest, `{"error":{"status":"NOT_FOUND"}}`},
+		{"invalid request status", http.StatusBadRequest, `{"error":{"status":"INVALID_REQUEST"}}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			transport := &linkTransport{handle: func(*http.Request) *http.Response { return respond(tt.status, tt.body, nil) }}
+
+			place, err := linkClient(transport).ResolveMapsLink(context.Background(), "https://www.google.com/maps/search/?api=1&query=Hanks&query_place_id="+hanksPlaceID)
+
+			if !errors.Is(err, ErrLinkUnresolved) {
+				t.Fatalf("place = %#v, err = %v, want ErrLinkUnresolved", place, err)
+			}
+		})
+	}
+}
+
+func TestResolveMapsLinkDetailsServerErrorIsNotUnresolved(t *testing.T) {
+	transport := &linkTransport{handle: func(*http.Request) *http.Response {
+		return respond(http.StatusServiceUnavailable, `{"error":{"status":"UNAVAILABLE"}}`, nil)
+	}}
+
+	_, err := linkClient(transport).ResolveMapsLink(context.Background(), "https://www.google.com/maps/search/?api=1&query=Hanks&query_place_id="+hanksPlaceID)
+
+	if err == nil || errors.Is(err, ErrLinkUnresolved) {
+		t.Fatalf("err = %v, want a lookup failure", err)
 	}
 }
 

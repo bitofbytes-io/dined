@@ -144,6 +144,23 @@ func (c *Client) Nearby(ctx context.Context, lat, lng float64) ([]Place, error) 
 	return c.postSearch(ctx, "https://places.googleapis.com/v1/places:searchNearby", body)
 }
 
+// detailsStatusError is a non-success answer from the Place Details endpoint.
+type detailsStatusError struct {
+	status int
+	body   string
+}
+
+func (e *detailsStatusError) Error() string {
+	return fmt.Sprintf("google places details status %d: %s", e.status, e.body)
+}
+
+// unknownPlace reports whether Google said the place ID does not exist, as
+// opposed to the request itself failing.
+func (e *detailsStatusError) unknownPlace() bool {
+	return e.status == http.StatusNotFound ||
+		strings.Contains(e.body, "NOT_FOUND") || strings.Contains(e.body, "INVALID_REQUEST")
+}
+
 func (c *Client) Details(ctx context.Context, placeID string) (*Place, error) {
 	endpoint := "https://places.googleapis.com/v1/places/" + url.PathEscape(placeID)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
@@ -158,7 +175,7 @@ func (c *Client) Details(ctx context.Context, placeID string) (*Place, error) {
 	defer res.Body.Close()
 	if res.StatusCode >= 300 {
 		data, _ := io.ReadAll(io.LimitReader(res.Body, 2048))
-		return nil, fmt.Errorf("google places details status %d: %s", res.StatusCode, string(data))
+		return nil, &detailsStatusError{status: res.StatusCode, body: string(data)}
 	}
 	var place Place
 	if err := json.NewDecoder(res.Body).Decode(&place); err != nil {

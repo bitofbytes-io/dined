@@ -106,6 +106,11 @@ func (c *Client) ResolveMapsLink(ctx context.Context, raw string) (*Place, error
 	switch {
 	case ref.placeID != "":
 		place, err := c.Details(ctx, ref.placeID)
+		var statusErr *detailsStatusError
+		if errors.As(err, &statusErr) && statusErr.unknownPlace() {
+			// A stale or unknown place ID is a link that leads nowhere, not a failure.
+			return nil, fmt.Errorf("%w: place ID not found", ErrLinkUnresolved)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("google places details for maps link: %w", err)
 		}
@@ -271,19 +276,24 @@ func (c *Client) placeByName(ctx context.Context, ref mapsReference) (*Place, er
 	return nil, ErrLinkUnresolved
 }
 
-// namesMatch reports whether every word of the linked name appears in the
-// found name once case and punctuation are ignored, so "Hank's Downtown Diner"
-// matches "Hank's Famous Downtown Diner" but not "Downtown Pizza".
+// namesMatch reports whether the words of the linked name appear in the found
+// name, in order and each found word used once, once case and punctuation are
+// ignored. "Hank's Downtown Diner" matches "Hank's Famous Downtown Diner" but
+// not "Downtown Pizza" or the reordered "Diner Downtown Hank's", and "Pizza
+// Pizza" does not match "Pizza Palace".
 func namesMatch(linked, found string) bool {
 	want := nameWords(linked)
 	if len(want) == 0 {
 		return false
 	}
 	have := nameWords(found)
+	next := 0
 	for _, word := range want {
-		if !slices.Contains(have, word) {
+		i := slices.Index(have[next:], word)
+		if i < 0 {
 			return false
 		}
+		next += i + 1
 	}
 	return true
 }
