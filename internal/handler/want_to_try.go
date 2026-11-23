@@ -70,17 +70,28 @@ func (h *Handler) wantToTryNotice(r *http.Request) (string, error) {
 	return "", nil
 }
 
-// NewWantToTryPage is the save form for browsers without the save sheet.
+// NewWantToTryPage is the save form for browsers without the save sheet. It
+// only reads its query: a pasted link is looked up by LookupWantToTryLink.
 func (h *Handler) NewWantToTryPage(w http.ResponseWriter, r *http.Request) {
-	values := r.URL.Query()
-	// A present but blank link is still a link submission: it fails link
-	// validation on the list page rather than as a bare "restaurant is required".
-	if values.Has(mapsLinkParam) {
-		var ok bool
-		if values, ok = h.wantToTryLinkValues(w, r, strings.TrimSpace(values.Get(mapsLinkParam))); !ok {
-			return
-		}
+	h.renderWantToTryForm(w, r, r.URL.Query())
+}
+
+// LookupWantToTryLink resolves a pasted Google Maps link and shows the save
+// form for its place. It is a POST because the lookup spends Google Places
+// quota, which a cross-site navigation must not be able to trigger.
+func (h *Handler) LookupWantToTryLink(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Invalid form", http.StatusBadRequest)
+		return
 	}
+	values, ok := h.wantToTryLinkValues(w, r, strings.TrimSpace(r.PostFormValue(mapsLinkParam)))
+	if !ok {
+		return
+	}
+	h.renderWantToTryForm(w, r, values)
+}
+
+func (h *Handler) renderWantToTryForm(w http.ResponseWriter, r *http.Request, values url.Values) {
 	data, ok := h.wantToTryFormData(w, r, values)
 	if !ok {
 		return

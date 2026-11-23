@@ -14,11 +14,28 @@ import (
 )
 
 func newWantToTryLinkRequest(link string) *http.Request {
-	target := "/want-to-try/new?" + url.Values{"maps_url": {link}}.Encode()
-	return httptest.NewRequestWithContext(context.Background(), http.MethodGet, target, nil)
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/want-to-try/link", strings.NewReader(url.Values{"maps_url": {link}}.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	return req
 }
 
-func TestNewWantToTryPagePrefillsFromMapsLink(t *testing.T) {
+func TestNewWantToTryPageDoesNotLookUpALink(t *testing.T) {
+	fake := &fakeGooglePlacesClient{configured: true, linkPlace: &places.Place{ID: "x", DisplayName: places.Name{Text: "Hank's"}}}
+	target := "/want-to-try/new?" + url.Values{"maps_url": {"https://maps.app.goo.gl/abc"}}.Encode()
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, target, nil)
+	rec := httptest.NewRecorder()
+
+	New(nil, repository.NewMemoryStore(), fake, nil, nil).NewWantToTryPage(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d: a link alone names no restaurant", rec.Code, http.StatusBadRequest)
+	}
+	if len(fake.linkRequests) != 0 {
+		t.Fatalf("resolver calls = %v, want none on GET", fake.linkRequests)
+	}
+}
+
+func TestLookupWantToTryLinkPrefillsFromMapsLink(t *testing.T) {
 	fake := &fakeGooglePlacesClient{configured: true, linkPlace: &places.Place{
 		ID:          "ChIJhanks",
 		DisplayName: places.Name{Text: "Hank's Downtown Diner"},
@@ -31,7 +48,7 @@ func TestNewWantToTryPagePrefillsFromMapsLink(t *testing.T) {
 	store := repository.NewMemoryStore()
 	rec := httptest.NewRecorder()
 
-	New(nil, store, fake, nil, nil).NewWantToTryPage(rec, newWantToTryLinkRequest("https://maps.app.goo.gl/abc"))
+	New(nil, store, fake, nil, nil).LookupWantToTryLink(rec, newWantToTryLinkRequest("https://maps.app.goo.gl/abc"))
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
@@ -56,12 +73,12 @@ func TestNewWantToTryPagePrefillsFromMapsLink(t *testing.T) {
 	}
 }
 
-func TestNewWantToTryPageBlankMapsLinkStaysOnTheList(t *testing.T) {
+func TestLookupWantToTryLinkBlankMapsLinkStaysOnTheList(t *testing.T) {
 	for _, link := range []string{"", "   ", "\t "} {
 		fake := &fakeGooglePlacesClient{configured: true}
 		rec := httptest.NewRecorder()
 
-		New(nil, repository.NewMemoryStore(), fake, nil, nil).NewWantToTryPage(rec, newWantToTryLinkRequest(link))
+		New(nil, repository.NewMemoryStore(), fake, nil, nil).LookupWantToTryLink(rec, newWantToTryLinkRequest(link))
 
 		body := rec.Body.String()
 		if rec.Code != http.StatusBadRequest || !strings.Contains(body, strings.ReplaceAll(notMapsLinkMessage, "'", "&#39;")) || !strings.Contains(body, "Want to Try</h1>") {
@@ -73,7 +90,7 @@ func TestNewWantToTryPageBlankMapsLinkStaysOnTheList(t *testing.T) {
 	}
 }
 
-func TestNewWantToTryPageShowsErrorForBadMapsLink(t *testing.T) {
+func TestLookupWantToTryLinkShowsErrorForBadMapsLink(t *testing.T) {
 	tests := []struct {
 		name       string
 		link       string
@@ -97,7 +114,7 @@ func TestNewWantToTryPageShowsErrorForBadMapsLink(t *testing.T) {
 			fake := &fakeGooglePlacesClient{configured: tt.configured, linkErr: tt.err, linkPlace: tt.place}
 			rec := httptest.NewRecorder()
 
-			New(nil, repository.NewMemoryStore(), fake, nil, nil).NewWantToTryPage(rec, newWantToTryLinkRequest(tt.link))
+			New(nil, repository.NewMemoryStore(), fake, nil, nil).LookupWantToTryLink(rec, newWantToTryLinkRequest(tt.link))
 
 			if rec.Code != tt.status {
 				t.Fatalf("status = %d, want %d", rec.Code, tt.status)

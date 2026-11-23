@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	// mapsLinkParam carries a pasted Google Maps link to the save form page.
+	// mapsLinkParam names the field holding a pasted Google Maps link.
 	mapsLinkParam    = "maps_url"
 	maxMapsLinkBytes = 2048
 
@@ -22,7 +22,7 @@ const (
 )
 
 // wantToTryLinkValues resolves a pasted Google Maps link into the save form
-// query for its place. On failure it shows the Want to Try list again with the
+// values for its place. On failure it shows the Want to Try list again with the
 // reason and the pasted link, and returns false.
 func (h *Handler) wantToTryLinkValues(w http.ResponseWriter, r *http.Request, link string) (url.Values, bool) {
 	fail := func(status int, message string) (url.Values, bool) {
@@ -50,6 +50,6 @@ func (h *Handler) wantToTryLinkValues(w http.ResponseWriter, r *http.Request, li
 		return fail(http.StatusUnprocessableEntity, unresolvedMapsLinkMessage)
 	}
 	values := ui.WantToTryPlaceValues(*place)
-	values.Set("return_to", r.URL.Query().Get("return_to"))
+	values.Set("return_to", r.PostFormValue("return_to"))
 	return values, true
 }

@@ -81,6 +81,7 @@ func (s *Server) Router() http.Handler {
 		r.Get("/want-to-try", h.WantToTry)
 		r.Get("/want-to-try/new", h.NewWantToTryPage)
 		r.Post("/want-to-try", h.SaveWantToTry)
+		r.Post("/want-to-try/link", h.LookupWantToTryLink)
 		r.Post("/want-to-try/{id}/delete", h.DeleteWantToTry)
 		r.Get("/where-to-eat", h.Spinner)
 
