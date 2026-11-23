@@ -53,6 +53,38 @@ func countPostgresRows(t *testing.T, store *Store, query string, args ...any) in
 	return count
 }
 
+// backendPID returns the server backend PID of conn.
+func backendPID(ctx context.Context, t *testing.T, conn *pgx.Conn) int32 {
+	t.Helper()
+	var pid int32
+	if err := conn.QueryRow(ctx, `SELECT pg_backend_pid()`).Scan(&pid); err != nil {
+		t.Fatal(err)
+	}
+	return pid
+}
+
+// waitForBlockedBy polls until some backend is waiting on a lock held by blockerPID,
+// so an unrelated session on a shared test database cannot satisfy the wait.
+func waitForBlockedBy(ctx context.Context, t *testing.T, observer *pgx.Conn, blockerPID int32, failure string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		var waiting int
+		if err := observer.QueryRow(ctx, `
+			SELECT COUNT(*) FROM pg_stat_activity
+			WHERE wait_event_type = 'Lock' AND $1 = ANY(pg_blocking_pids(pid))`, blockerPID).Scan(&waiting); err != nil {
+			t.Fatal(err)
+		}
+		if waiting > 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal(failure)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 func TestPostgresCreateVisitMatchesRestaurantByPlaceID(t *testing.T) {
 	store := postgresStore(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -148,6 +180,7 @@ func TestPostgresCreateVisitUpsertsConcurrentPlaceIDInsert(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer tx.Rollback(context.Background())
+	racerPID := backendPID(ctx, t, racer)
 	var racerID uuid.UUID
 	if err := tx.QueryRow(ctx, `
 		INSERT INTO restaurants (name, google_place_id)
@@ -176,22 +209,7 @@ func TestPostgresCreateVisitUpsertsConcurrentPlaceIDInsert(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer observer.Close(context.Background())
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		var waiting int
-		if err := observer.QueryRow(ctx, `
-			SELECT COUNT(*) FROM pg_stat_activity
-			WHERE wait_event_type = 'Lock' AND query LIKE '%INSERT INTO restaurants%'`).Scan(&waiting); err != nil {
-			t.Fatal(err)
-		}
-		if waiting > 0 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("CreateVisit never blocked on the conflicting restaurant insert")
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+	waitForBlockedBy(ctx, t, observer, racerPID, "CreateVisit never blocked on the conflicting restaurant insert")
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -281,6 +299,7 @@ func TestPostgresChosenRestaurantPlaceCheckWaitsForConcurrentLink(t *testing.T) 
 		t.Fatal(err)
 	}
 	defer tx.Rollback(context.Background())
+	racerPID := backendPID(ctx, t, racer)
 	if _, err := tx.Exec(ctx, `UPDATE restaurants SET google_place_id = 'place-first' WHERE id = $1`, chosen.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -300,22 +319,7 @@ func TestPostgresChosenRestaurantPlaceCheckWaitsForConcurrentLink(t *testing.T) 
 		t.Fatal(err)
 	}
 	defer observer.Close(context.Background())
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		var waiting int
-		if err := observer.QueryRow(ctx, `
-			SELECT COUNT(*) FROM pg_stat_activity
-			WHERE wait_event_type = 'Lock' AND query LIKE '%restaurants%'`).Scan(&waiting); err != nil {
-			t.Fatal(err)
-		}
-		if waiting > 0 {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("CreateVisit never waited on the restaurant being linked")
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+	waitForBlockedBy(ctx, t, observer, racerPID, "CreateVisit never waited on the restaurant being linked")
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatal(err)
 	}
