@@ -45,6 +45,21 @@ func TestRouterWantToTryMapsLinkLookupRejectsCrossSitePost(t *testing.T) {
 	}
 }
 
+func TestRouterWantToTryMapsLinkLookupRejectsForeignOrigin(t *testing.T) {
+	router, token := newAuthenticatedTestRouter(t, repository.NewMemoryStore())
+	req := httptest.NewRequest(http.MethodPost, "/want-to-try/link", strings.NewReader(url.Values{"maps_url": {"https://maps.app.goo.gl/abc123"}}.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Origin", "https://evil.example")
+	req.AddCookie(&http.Cookie{Name: middleware.CookieName, Value: token})
+	rec := httptest.NewRecorder()
+
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusForbidden)
+	}
+}
+
 func TestRouterWantToTryMapsLinkErrorKeepsThePastedLink(t *testing.T) {
 	router, token := newAuthenticatedTestRouter(t, repository.NewMemoryStore())
 	link := "https://maps.app.goo.gl/abc123"

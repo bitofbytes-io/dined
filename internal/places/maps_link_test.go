@@ -276,6 +276,30 @@ func TestResolveMapsLinkUnresolvable(t *testing.T) {
 	}
 }
 
+func TestResolveMapsLinkSearchLinksMakeNoRequests(t *testing.T) {
+	// A search link names no single place, so it must be rejected before any
+	// outbound request, including a Places search.
+	for name, raw := range map[string]string{
+		"search page": "https://www.google.com/maps/search/?api=1&query=pizza",
+		"q search":    "https://maps.google.com/?q=pizza",
+	} {
+		t.Run(name, func(t *testing.T) {
+			transport := &linkTransport{handle: func(*http.Request) *http.Response {
+				return respond(http.StatusOK, `{"places":[{"id":"`+hanksPlaceID+`","displayName":{"text":"Hank's Downtown Diner"},"location":{"latitude":35.7797,"longitude":-78.6383}}]}`, nil)
+			}}
+
+			_, err := linkClient(transport).ResolveMapsLink(context.Background(), raw)
+
+			if !errors.Is(err, ErrLinkUnresolved) {
+				t.Fatalf("err = %v, want ErrLinkUnresolved", err)
+			}
+			if len(transport.requests) != 0 {
+				t.Fatalf("requests = %v, want none", transport.requests)
+			}
+		})
+	}
+}
+
 func TestResolveMapsLinkShortLinkHostFailureIsNotUnresolved(t *testing.T) {
 	for _, status := range []int{http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable} {
 		t.Run(strconv.Itoa(status), func(t *testing.T) {
