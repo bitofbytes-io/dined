@@ -305,6 +305,38 @@ func TestResolveMapsLinkChoosesAmongNearbyBranchesByPin(t *testing.T) {
 	}
 }
 
+func TestResolveMapsLinkSingleResultMustBeOnThePin(t *testing.T) {
+	// Pin is 35.7797,-78.6383. A branch 0.0043 degrees north is about 0.3 miles
+	// away: inside the search radius, but not the linked branch.
+	tests := []struct {
+		name   string
+		result string
+		wantID string
+	}{
+		{"same-name branch far from the pin", `{"id":"nearby","displayName":{"text":"Hank's Downtown Diner"},"location":{"latitude":35.7840,"longitude":-78.6383}}`, ""},
+		{"same-name branch on the pin", `{"id":"onpin","displayName":{"text":"Hank's Downtown Diner"},"location":{"latitude":35.7797,"longitude":-78.6383}}`, "onpin"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			transport := &linkTransport{handle: func(*http.Request) *http.Response {
+				return respond(http.StatusOK, `{"places":[`+tt.result+`]}`, nil)
+			}}
+
+			place, err := linkClient(transport).ResolveMapsLink(context.Background(), hanksPlaceURL)
+
+			if tt.wantID == "" {
+				if !errors.Is(err, ErrLinkUnresolved) {
+					t.Fatalf("place = %#v, err = %v, want ErrLinkUnresolved", place, err)
+				}
+				return
+			}
+			if err != nil || place.ID != tt.wantID {
+				t.Fatalf("place = %#v, err = %v, want %q", place, err, tt.wantID)
+			}
+		})
+	}
+}
+
 func TestResolveMapsLinkRequiresTheLinkedName(t *testing.T) {
 	const onPin = `"location":{"latitude":35.7797,"longitude":-78.6383}`
 	tests := []struct {

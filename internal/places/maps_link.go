@@ -240,8 +240,9 @@ func validCoordinates(latText, lngText string) (float64, float64, bool) {
 // placeByName searches Places for the link's name near its pin and takes the
 // match that sits on it. A name alone is not enough: for a chain it would pick
 // an arbitrary branch, and neither is a map view center, so a link without a
-// pin is left unresolved. When several results are near, the one on the pin wins only if
-// it is clearly closer than the rest; otherwise the link is ambiguous. Whatever
+// pin is left unresolved. Only a result on the pin is taken, and when several
+// results are near it must also be clearly closer than the rest; otherwise the
+// link is unresolved. Whatever
 // is chosen must also carry the link's name, so a stale link whose place has
 // closed or moved never prefills a different restaurant.
 func (c *Client) placeByName(ctx context.Context, ref mapsReference) (*Place, error) {
@@ -267,11 +268,12 @@ func (c *Client) placeByName(ctx context.Context, ref mapsReference) (*Place, er
 			runnerUpMiles = miles
 		}
 	}
-	switch {
-	case count == 1, count > 1 && nearestMiles <= mapsLinkPinMiles && runnerUpMiles-nearestMiles >= mapsLinkMinGapMiles:
-		if namesMatch(ref.name, nearest.DisplayName.Text) {
-			return nearest, nil
-		}
+	// The chosen place must sit on the pin even when it is the only result: a
+	// same-name branch down the street must not stand in for a linked branch
+	// that has closed or dropped out of the results.
+	onPin := nearest != nil && nearestMiles <= mapsLinkPinMiles
+	if onPin && (count == 1 || runnerUpMiles-nearestMiles >= mapsLinkMinGapMiles) && namesMatch(ref.name, nearest.DisplayName.Text) {
+		return nearest, nil
 	}
 	return nil, ErrLinkUnresolved
 }
