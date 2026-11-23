@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/bitofbytes-io/dined/internal/apptime"
 	"github.com/bitofbytes-io/dined/internal/metrics"
 	"github.com/bitofbytes-io/dined/internal/model"
 	"github.com/bitofbytes-io/dined/internal/placesync"
@@ -34,9 +33,6 @@ const (
 	// invalidPickerMessage answers a picker that is neither Everybody nor one of the people.
 	invalidPickerMessage = "Picked by must be Everybody or one of the family."
 )
-
-// errInvalidPicker means the picker form value is neither Everybody nor a UUID.
-var errInvalidPicker = errors.New("invalid picker")
 
 func (h *Handler) Dines(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
@@ -286,98 +282,6 @@ func (h *Handler) logData(r *http.Request) (ui.PageData, error) {
 	return data, h.addWantToTryLogPrefill(r, &data)
 }
 
-func (h *Handler) visitInput(r *http.Request) (model.VisitInput, error) {
-	visitedAt, err := apptime.ParseDatetimeLocal(r.FormValue("visited_at"))
-	if err != nil {
-		return model.VisitInput{}, err
-	}
-	pickerID, err := parsePickerID(r.FormValue("picker_id"))
-	if err != nil {
-		return model.VisitInput{}, err
-	}
-	priceLevel, _ := strconv.Atoi(r.FormValue("price_level"))
-	latitude, err := optionalCoordinate(r.FormValue("latitude"), "latitude", -90, 90)
-	if err != nil {
-		return model.VisitInput{}, err
-	}
-	longitude, err := optionalCoordinate(r.FormValue("longitude"), "longitude", -180, 180)
-	if err != nil {
-		return model.VisitInput{}, err
-	}
-	googleRating, err := optionalFloat(r.FormValue("google_rating"), "Google rating")
-	if err != nil {
-		return model.VisitInput{}, err
-	}
-	googlePriceLevel, err := optionalInt(r.FormValue("google_price_level"), "Google price level")
-	if err != nil {
-		return model.VisitInput{}, err
-	}
-	input := model.VisitInput{
-		RestaurantName: r.FormValue("restaurant_name"),
-		Address:        r.FormValue("address"),
-		City:           r.FormValue("city"),
-		GooglePlaceID:  r.FormValue("google_place_id"),
-		GoogleMetadata: model.GoogleRestaurantMetadata{
-			Latitude:         latitude,
-			Longitude:        longitude,
-			Phone:            r.FormValue("phone"),
-			Website:          r.FormValue("website"),
-			GoogleRating:     googleRating,
-			GooglePriceLevel: googlePriceLevel,
-		},
-		Category:   r.FormValue("category"),
-		IsChain:    r.FormValue("is_chain") == "true",
-		VisitedAt:  visitedAt,
-		PickerID:   pickerID,
-		PriceLevel: priceLevel,
-		Notes:      r.FormValue("notes"),
-		NewTag:     r.FormValue("new_tag"),
-		Ratings:    map[uuid.UUID]float64{},
-	}
-	if restaurantID := r.FormValue("restaurant_id"); restaurantID != "" {
-		id, err := uuid.Parse(restaurantID)
-		if err != nil {
-			return model.VisitInput{}, err
-		}
-		input.RestaurantID = &id
-	}
-	for key, values := range r.PostForm {
-		if len(values) == 0 || len(key) < len("rating_") || key[:len("rating_")] != "rating_" || values[0] == "" {
-			continue
-		}
-		personID, err := uuid.Parse(key[len("rating_"):])
-		if err != nil {
-			return model.VisitInput{}, err
-		}
-		score, err := strconv.ParseFloat(values[0], 64)
-		if err != nil {
-			return model.VisitInput{}, err
-		}
-		input.Ratings[personID] = score
-	}
-	for _, value := range r.PostForm["tag_id"] {
-		tagID, err := uuid.Parse(value)
-		if err != nil {
-			return model.VisitInput{}, err
-		}
-		input.TagIDs = append(input.TagIDs, tagID)
-	}
-	for _, value := range r.PostForm["keep_photo_id"] {
-		photoID, err := uuid.Parse(value)
-		if err != nil {
-			return model.VisitInput{}, err
-		}
-		input.KeepPhotoIDs = append(input.KeepPhotoIDs, photoID)
-	}
-	for _, value := range r.PostForm["photo_data_uri"] {
-		if strings.TrimSpace(value) == "" {
-			continue
-		}
-		input.Photos = append(input.Photos, model.VisitPhotoInput{DataURI: value})
-	}
-	return input, nil
-}
-
 // countPhotoUploads records the new photos in a parsed dine form as uploads
 // with *result once the handler returns, so photos are counted even when
 // another field is rejected.
@@ -399,28 +303,6 @@ func placeConflictMessage(conflict *model.PlaceConflictError) string {
 			", clear the Google Place ID; to log it at " + conflict.Owner + ", choose " + conflict.Owner + " instead."
 	}
 	return conflict.Restaurant + " is linked to a different Google place. Clear the Google Place ID to log this dine there."
-}
-
-// parsePickerID reads the picker form value: Everybody (or no value) is nil,
-// and anything else must be a person's UUID.
-func parsePickerID(value string) (*uuid.UUID, error) {
-	value = strings.TrimSpace(value)
-	if value == "" || value == ui.EverybodyPickerValue {
-		return nil, nil
-	}
-	id, err := uuid.Parse(value)
-	if err != nil {
-		return nil, errInvalidPicker
-	}
-	return &id, nil
-}
-
-// pickerLogValue names a picker in logs without dereferencing a nil (Everybody) picker.
-func pickerLogValue(id *uuid.UUID) string {
-	if id == nil {
-		return ui.EverybodyPickerValue
-	}
-	return id.String()
 }
 
 func (h *Handler) renderLogError(w http.ResponseWriter, r *http.Request, message string) {
