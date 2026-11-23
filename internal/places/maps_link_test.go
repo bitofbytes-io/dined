@@ -401,6 +401,7 @@ func TestResolveMapsLinkUnknownPlaceIDIsUnresolved(t *testing.T) {
 		{"404 without a body", http.StatusNotFound, ``},
 		{"not found status", http.StatusBadRequest, `{"error":{"status":"NOT_FOUND"}}`},
 		{"invalid request status", http.StatusBadRequest, `{"error":{"status":"INVALID_REQUEST"}}`},
+		{"invalid argument for a malformed ID", http.StatusBadRequest, `{"error":{"code":400,"message":"Invalid place ID.","status":"INVALID_ARGUMENT"}}`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

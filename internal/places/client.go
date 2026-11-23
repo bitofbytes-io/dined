@@ -154,11 +154,14 @@ func (e *detailsStatusError) Error() string {
 	return fmt.Sprintf("google places details status %d: %s", e.status, e.body)
 }
 
-// unknownPlace reports whether Google said the place ID does not exist, as
-// opposed to the request itself failing.
+// unknownPlace reports whether Google said the place ID does not exist or is
+// malformed (HTTP 400 INVALID_ARGUMENT), as opposed to the request itself
+// failing.
 func (e *detailsStatusError) unknownPlace() bool {
 	return e.status == http.StatusNotFound ||
-		strings.Contains(e.body, "NOT_FOUND") || strings.Contains(e.body, "INVALID_REQUEST")
+		strings.Contains(e.body, "NOT_FOUND") ||
+		strings.Contains(e.body, "INVALID_REQUEST") ||
+		strings.Contains(e.body, "INVALID_ARGUMENT")
 }
 
 func (c *Client) Details(ctx context.Context, placeID string) (*Place, error) {
