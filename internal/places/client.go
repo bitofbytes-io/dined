@@ -144,6 +144,57 @@ func (c *Client) Nearby(ctx context.Context, lat, lng float64) ([]Place, error) 
 	return c.postSearch(ctx, "https://places.googleapis.com/v1/places:searchNearby", body)
 }
 
+// detailsStatusError is a non-success answer from the Place Details endpoint.
+type detailsStatusError struct {
+	status int
+	body   string
+}
+
+func (e *detailsStatusError) Error() string {
+	return fmt.Sprintf("google places details status %d: %s", e.status, e.body)
+}
+
+// unknownPlace reports whether Google said the place ID does not exist or is
+// malformed (HTTP 404, or a NOT_FOUND, INVALID_REQUEST or INVALID_ARGUMENT
+// status), as opposed to the request itself failing. INVALID_ARGUMENT also
+// carries credential errors, told apart by a detail reason, so those stay
+// lookup failures.
+func (e *detailsStatusError) unknownPlace() bool {
+	var payload struct {
+		Error struct {
+			Status  string `json:"status"`
+			Details []struct {
+				Reason string `json:"reason"`
+			} `json:"details"`
+		} `json:"error"`
+	}
+	// An unparsable body (say, one cut off at the read limit) leaves only the HTTP status to go on.
+	_ = json.Unmarshal([]byte(e.body), &payload)
+	for _, detail := range payload.Error.Details {
+		if requestFailureReason(detail.Reason) {
+			return false
+		}
+	}
+	if e.status == http.StatusNotFound {
+		return true
+	}
+	switch payload.Error.Status {
+	case "NOT_FOUND", "INVALID_REQUEST", "INVALID_ARGUMENT":
+		return true
+	}
+	return false
+}
+
+// requestFailureReason reports whether an error detail reason blames the
+// credentials, the API's availability or the quota rather than the place ID.
+func requestFailureReason(reason string) bool {
+	switch reason {
+	case "SERVICE_DISABLED", "RATE_LIMIT_EXCEEDED", "RESOURCE_EXHAUSTED", "ACCESS_TOKEN_EXPIRED", "CONSUMER_INVALID", "BILLING_DISABLED":
+		return true
+	}
+	return strings.HasPrefix(reason, "API_KEY_")
+}
+
 func (c *Client) Details(ctx context.Context, placeID string) (*Place, error) {
 	endpoint := "https://places.googleapis.com/v1/places/" + url.PathEscape(placeID)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
@@ -158,7 +209,7 @@ func (c *Client) Details(ctx context.Context, placeID string) (*Place, error) {
 	defer res.Body.Close()
 	if res.StatusCode >= 300 {
 		data, _ := io.ReadAll(io.LimitReader(res.Body, 2048))
-		return nil, fmt.Errorf("google places details status %d: %s", res.StatusCode, string(data))
+		return nil, &detailsStatusError{status: res.StatusCode, body: string(data)}
 	}
 	var place Place
 	if err := json.NewDecoder(res.Body).Decode(&place); err != nil {
