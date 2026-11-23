@@ -328,7 +328,6 @@ func TestParseVisitFormRestaurantAndPhotos(t *testing.T) {
 	for name, tt := range map[string]struct {
 		form url.Values
 		post url.Values
-		want string
 	}{
 		"restaurant id": {form: visitFormValues(url.Values{"restaurant_id": {"hanks"}}), post: url.Values{}},
 		"kept photo id": {form: visitFormValues(nil), post: url.Values{"keep_photo_id": {"photo-1"}}},
@@ -382,14 +381,18 @@ func TestParseVisitFormFlagsAndText(t *testing.T) {
 
 func TestParseVisitFormCoordinates(t *testing.T) {
 	tests := []struct {
-		name      string
-		latitude  string
-		longitude string
-		wantErr   string
+		name          string
+		latitude      string
+		longitude     string
+		wantLatitude  *float64
+		wantLongitude *float64
+		wantErr       string
 	}{
 		{name: "missing"},
-		{name: "valid", latitude: "35.7796", longitude: "-78.6382"},
-		{name: "limits", latitude: "-90", longitude: "180"},
+		{name: "valid", latitude: "35.7796", longitude: "-78.6382", wantLatitude: floatPtr(35.7796), wantLongitude: floatPtr(-78.6382)},
+		{name: "limits", latitude: "-90", longitude: "180", wantLatitude: floatPtr(-90), wantLongitude: floatPtr(180)},
+		{name: "latitude only", latitude: "35.7796", wantLatitude: floatPtr(35.7796)},
+		{name: "longitude only", longitude: "-78.6382", wantLongitude: floatPtr(-78.6382)},
 		{name: "latitude too high", latitude: "90.5", wantErr: "latitude must be between -90 and 90"},
 		{name: "longitude too low", longitude: "-181", wantErr: "longitude must be between -180 and 180"},
 		{name: "latitude not a number", latitude: "north", wantErr: "latitude must be a number"},
@@ -397,14 +400,31 @@ func TestParseVisitFormCoordinates(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			form := visitFormValues(url.Values{"latitude": {tt.latitude}, "longitude": {tt.longitude}})
-			_, err := parseVisitForm(form, form)
-			switch {
-			case tt.wantErr == "" && err != nil:
-				t.Fatal(err)
-			case tt.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tt.wantErr)):
-				t.Fatalf("error = %v, want %q", err, tt.wantErr)
+			input, err := parseVisitForm(form, form)
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("error = %v, want %q", err, tt.wantErr)
+				}
+				return
 			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertFloatPtr(t, "Latitude", input.GoogleMetadata.Latitude, tt.wantLatitude)
+			assertFloatPtr(t, "Longitude", input.GoogleMetadata.Longitude, tt.wantLongitude)
 		})
+	}
+}
+
+func assertFloatPtr(t *testing.T, name string, got, want *float64) {
+	t.Helper()
+	switch {
+	case want == nil && got != nil:
+		t.Fatalf("%s = %v, want nil", name, *got)
+	case want != nil && got == nil:
+		t.Fatalf("%s = nil, want %v", name, *want)
+	case want != nil && *got != *want:
+		t.Fatalf("%s = %v, want %v", name, *got, *want)
 	}
 }
 
