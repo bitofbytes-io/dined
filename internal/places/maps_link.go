@@ -128,12 +128,9 @@ func (c *Client) ResolveMapsLink(ctx context.Context, raw string) (*Place, error
 // reaches a page link, checking each hop against the allowlist before any
 // request is made.
 func (c *Client) followMapsLink(ctx context.Context, current *url.URL) (*url.URL, error) {
-	httpClient := &http.Client{
-		Timeout:       mapsLinkHopTimeout,
-		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-	}
-	if c.http != nil {
-		httpClient.Transport = c.http.Transport
+	transport := http.DefaultTransport
+	if c.http != nil && c.http.Transport != nil {
+		transport = c.http.Transport
 	}
 	seen := make(map[string]bool)
 	for hop := 0; ; hop++ {
@@ -151,7 +148,7 @@ func (c *Client) followMapsLink(ctx context.Context, current *url.URL) (*url.URL
 			return nil, fmt.Errorf("%w: too many redirects", ErrLinkUnresolved)
 		}
 		seen[key] = true
-		next, err := redirectTarget(ctx, httpClient, current)
+		next, err := redirectTarget(ctx, transport, current)
 		if err != nil {
 			return nil, err
 		}
@@ -159,12 +156,18 @@ func (c *Client) followMapsLink(ctx context.Context, current *url.URL) (*url.URL
 	}
 }
 
-func redirectTarget(ctx context.Context, httpClient *http.Client, current *url.URL) (*url.URL, error) {
+// redirectTarget makes one request without following redirects and returns
+// where the response points. It calls the transport directly because
+// http.Client parses a 3xx Location before consulting CheckRedirect, so a
+// malformed one would surface as a request error instead of an unresolved link.
+func redirectTarget(ctx context.Context, transport http.RoundTripper, current *url.URL) (*url.URL, error) {
+	ctx, cancel := context.WithTimeout(ctx, mapsLinkHopTimeout)
+	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, current.String(), nil)
 	if err != nil {
 		return nil, ErrLinkUnresolved
 	}
-	res, err := httpClient.Do(req)
+	res, err := transport.RoundTrip(req)
 	if err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return nil, fmt.Errorf("google maps link request failed: %w", ctxErr)
@@ -180,9 +183,13 @@ func redirectTarget(ctx context.Context, httpClient *http.Client, current *url.U
 	if res.StatusCode < 300 || res.StatusCode > 399 {
 		return nil, fmt.Errorf("%w: status %d", ErrLinkUnresolved, res.StatusCode)
 	}
-	location, err := res.Location()
-	if err != nil {
+	header := res.Header.Get("Location")
+	if header == "" {
 		return nil, fmt.Errorf("%w: no redirect target", ErrLinkUnresolved)
+	}
+	location, err := current.Parse(header)
+	if err != nil {
+		return nil, fmt.Errorf("%w: malformed redirect target", ErrLinkUnresolved)
 	}
 	return location, nil
 }

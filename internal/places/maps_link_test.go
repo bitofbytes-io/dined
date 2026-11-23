@@ -2,9 +2,11 @@ package places
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strconv"
 	"strings"
@@ -86,8 +88,19 @@ func TestResolveMapsLinkShortLinkFollowsRedirectAndSearchesByNameAndCoordinates(
 	if place.ID != hanksPlaceID || place.DisplayName.Text != "Hank's Downtown Diner" || place.Address != "1 Main St" {
 		t.Fatalf("place = %#v", place)
 	}
-	if !strings.Contains(searchBody, `"textQuery":"Hank's Downtown Diner"`) || !strings.Contains(searchBody, "locationBias") {
-		t.Fatalf("search body = %s", searchBody)
+	var search struct {
+		TextQuery    string `json:"textQuery"`
+		LocationBias struct {
+			Circle struct {
+				Center Location `json:"center"`
+			} `json:"circle"`
+		} `json:"locationBias"`
+	}
+	if err := json.Unmarshal([]byte(searchBody), &search); err != nil {
+		t.Fatalf("search body %q: %v", searchBody, err)
+	}
+	if center := search.LocationBias.Circle.Center; search.TextQuery != "Hank's Downtown Diner" || center.Latitude != 35.7797 || center.Longitude != -78.6383 {
+		t.Fatalf("search body = %s, want the name biased around the pin 35.7797,-78.6383", searchBody)
 	}
 }
 
@@ -169,6 +182,36 @@ func TestResolveMapsLinkDoesNotFollowRedirectToOtherHost(t *testing.T) {
 	}
 	if hosts := transport.hosts(); len(hosts) != 1 || !hosts["maps.app.goo.gl"] {
 		t.Fatalf("requested hosts = %v, want only maps.app.goo.gl", hosts)
+	}
+}
+
+// rewriteTransport sends every request to an httptest server, whatever its host.
+type rewriteTransport struct {
+	target *url.URL
+	base   http.RoundTripper
+}
+
+func (r rewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	clone := req.Clone(req.Context())
+	clone.URL.Scheme = r.target.Scheme
+	clone.URL.Host = r.target.Host
+	return r.base.RoundTrip(clone)
+}
+
+func TestResolveMapsLinkMalformedRedirectLocationIsUnresolved(t *testing.T) {
+	for _, location := range []string{"http://[::1", "https://maps.app.goo.gl/%zz"} {
+		server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header()["Location"] = []string{location}
+			w.WriteHeader(http.StatusFound)
+		}))
+		target := mustParse(t, server.URL)
+		client := &Client{apiKey: "test-key", http: &http.Client{Transport: rewriteTransport{target: target, base: server.Client().Transport}}}
+
+		_, err := client.ResolveMapsLink(context.Background(), "https://maps.app.goo.gl/abc")
+		server.Close()
+		if !errors.Is(err, ErrLinkUnresolved) {
+			t.Fatalf("location %q: err = %v, want ErrLinkUnresolved", location, err)
+		}
 	}
 }
 
