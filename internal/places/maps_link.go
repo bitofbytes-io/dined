@@ -8,9 +8,11 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 )
 
 var (
@@ -197,7 +199,8 @@ func parseMapsReference(u *url.URL) mapsReference {
 		ref.placeID = id
 	}
 	if segments := strings.Split(strings.TrimPrefix(u.EscapedPath(), "/"), "/"); len(segments) >= 3 && segments[0] == "maps" && segments[1] == "place" {
-		if name, err := url.QueryUnescape(segments[2]); err == nil && !plainCoordsPattern.MatchString(name) {
+		// "@lat,lng,zoom" in the name slot is a map view, not a place.
+		if name, err := url.QueryUnescape(segments[2]); err == nil && !plainCoordsPattern.MatchString(name) && !strings.HasPrefix(name, "@") {
 			ref.name = strings.TrimSpace(name)
 		}
 	}
@@ -234,7 +237,9 @@ func validCoordinates(latText, lngText string) (float64, float64, bool) {
 // takes the match that sits on them. A name alone is not enough: for a chain it
 // would pick an arbitrary branch, so a link without coordinates is left
 // unresolved. When several results are near, the one on the pin wins only if
-// it is clearly closer than the rest; otherwise the link is ambiguous.
+// it is clearly closer than the rest; otherwise the link is ambiguous. Whatever
+// is chosen must also carry the link's name, so a stale link whose place has
+// closed or moved never prefills a different restaurant.
 func (c *Client) placeByName(ctx context.Context, ref mapsReference) (*Place, error) {
 	if !ref.hasCoords {
 		return nil, ErrLinkUnresolved
@@ -259,10 +264,38 @@ func (c *Client) placeByName(ctx context.Context, ref mapsReference) (*Place, er
 		}
 	}
 	switch {
-	case count == 1:
-		return nearest, nil
-	case count > 1 && nearestMiles <= mapsLinkPinMiles && runnerUpMiles-nearestMiles >= mapsLinkMinGapMiles:
-		return nearest, nil
+	case count == 1, count > 1 && nearestMiles <= mapsLinkPinMiles && runnerUpMiles-nearestMiles >= mapsLinkMinGapMiles:
+		if namesMatch(ref.name, nearest.DisplayName.Text) {
+			return nearest, nil
+		}
 	}
 	return nil, ErrLinkUnresolved
+}
+
+// namesMatch reports whether two place names are the same once case and
+// punctuation are ignored, or one is the other with words added or dropped
+// ("Hank's" and "Hank's Downtown Diner").
+func namesMatch(linked, found string) bool {
+	a, b := nameWords(linked), nameWords(found)
+	if len(a) == 0 || len(b) == 0 {
+		return false
+	}
+	if len(a) > len(b) {
+		a, b = b, a
+	}
+	for start := 0; start+len(a) <= len(b); start++ {
+		if slices.Equal(a, b[start:start+len(a)]) {
+			return true
+		}
+	}
+	return false
+}
+
+// nameWords lowercases name and splits it into runs of letters and digits,
+// dropping apostrophes so "Hank's" and "Hanks" agree.
+func nameWords(name string) []string {
+	name = strings.NewReplacer("'", "", "’", "").Replace(strings.ToLower(name))
+	return strings.FieldsFunc(name, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r)
+	})
 }

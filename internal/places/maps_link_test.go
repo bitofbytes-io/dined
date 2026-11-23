@@ -311,6 +311,63 @@ func TestResolveMapsLinkChoosesAmongNearbyBranchesByPin(t *testing.T) {
 	}
 }
 
+func TestResolveMapsLinkRequiresTheLinkedName(t *testing.T) {
+	const onPin = `"location":{"latitude":35.7797,"longitude":-78.6383}`
+	tests := []struct {
+		name    string
+		result  string
+		wantID  string
+		wantErr bool
+	}{
+		{"only nearby result is a different restaurant", `{"id":"other","displayName":{"text":"Joe's Pizza"},` + onPin + `}`, "", true},
+		{"only nearby result has no name", `{"id":"other",` + onPin + `}`, "", true},
+		{"name only shares a word", `{"id":"other","displayName":{"text":"Downtown Pizza"},` + onPin + `}`, "", true},
+		{"same name ignoring case and punctuation", `{"id":"same","displayName":{"text":"HANKS downtown diner"},` + onPin + `}`, "same", false},
+		{"linked name is part of the place's name", `{"id":"longer","displayName":{"text":"Hank's Downtown Diner & Bar"},` + onPin + `}`, "longer", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			transport := &linkTransport{handle: func(*http.Request) *http.Response {
+				return respond(http.StatusOK, `{"places":[`+tt.result+`]}`, nil)
+			}}
+
+			place, err := linkClient(transport).ResolveMapsLink(context.Background(), hanksPlaceURL)
+
+			if tt.wantErr {
+				if !errors.Is(err, ErrLinkUnresolved) {
+					t.Fatalf("place = %#v, err = %v, want ErrLinkUnresolved", place, err)
+				}
+				return
+			}
+			if err != nil || place.ID != tt.wantID {
+				t.Fatalf("place = %#v, err = %v, want %q", place, err, tt.wantID)
+			}
+		})
+	}
+}
+
+func TestResolveMapsLinkMapViewOnlyIsUnresolvedWithoutSearching(t *testing.T) {
+	for _, raw := range []string{
+		"https://www.google.com/maps/@35.7796,-78.6382,17z",
+		"https://www.google.com/maps/place/@35.7796,-78.6382,17z",
+	} {
+		t.Run(raw, func(t *testing.T) {
+			transport := &linkTransport{handle: func(*http.Request) *http.Response {
+				return respond(http.StatusOK, `{"places":[{"id":"`+hanksPlaceID+`","displayName":{"text":"Hank's Downtown Diner"},"location":{"latitude":35.7796,"longitude":-78.6382}}]}`, nil)
+			}}
+
+			_, err := linkClient(transport).ResolveMapsLink(context.Background(), raw)
+
+			if !errors.Is(err, ErrLinkUnresolved) {
+				t.Fatalf("err = %v, want ErrLinkUnresolved", err)
+			}
+			if len(transport.requests) != 0 {
+				t.Fatalf("requests = %v, want none", transport.requests)
+			}
+		})
+	}
+}
+
 func TestResolveMapsLinkNeedsConfiguredClient(t *testing.T) {
 	_, err := NewClient("").ResolveMapsLink(context.Background(), hanksPlaceURL)
 	if err == nil || errors.Is(err, ErrNotMapsLink) || errors.Is(err, ErrLinkUnresolved) {

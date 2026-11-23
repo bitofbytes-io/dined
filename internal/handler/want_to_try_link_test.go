@@ -61,14 +61,15 @@ func TestNewWantToTryPageShowsErrorForBadMapsLink(t *testing.T) {
 		place      *places.Place
 		status     int
 		message    string
+		calls      int
 	}{
-		{"not a maps link", "https://example.com/maps/place/Hanks", true, places.ErrNotMapsLink, nil, http.StatusBadRequest, notMapsLinkMessage},
-		{"unresolvable", "https://maps.app.goo.gl/abc", true, places.ErrLinkUnresolved, nil, http.StatusUnprocessableEntity, unresolvedMapsLinkMessage},
-		{"redirect loop", "https://maps.app.goo.gl/loop", true, errors.Join(places.ErrLinkUnresolved, errors.New("redirect loop")), nil, http.StatusUnprocessableEntity, unresolvedMapsLinkMessage},
-		{"place without a name", "https://maps.app.goo.gl/abc", true, nil, &places.Place{ID: "x"}, http.StatusUnprocessableEntity, unresolvedMapsLinkMessage},
-		{"lookup failure", "https://maps.app.goo.gl/abc", true, errors.New("boom"), nil, http.StatusInternalServerError, mapsLinkLookupFailMessage},
-		{"places not configured", "https://maps.app.goo.gl/abc", false, nil, nil, http.StatusServiceUnavailable, mapsLinkNotConfiguredError},
-		{"too long", "https://maps.app.goo.gl/" + strings.Repeat("a", maxMapsLinkBytes), true, nil, nil, http.StatusBadRequest, notMapsLinkMessage},
+		{"not a maps link", "https://example.com/maps/place/Hanks", true, places.ErrNotMapsLink, nil, http.StatusBadRequest, notMapsLinkMessage, 0},
+		{"unresolvable", "https://maps.app.goo.gl/abc", true, places.ErrLinkUnresolved, nil, http.StatusUnprocessableEntity, unresolvedMapsLinkMessage, 1},
+		{"redirect loop", "https://maps.app.goo.gl/loop", true, errors.Join(places.ErrLinkUnresolved, errors.New("redirect loop")), nil, http.StatusUnprocessableEntity, unresolvedMapsLinkMessage, 1},
+		{"place without a name", "https://maps.app.goo.gl/abc", true, nil, &places.Place{ID: "x"}, http.StatusUnprocessableEntity, unresolvedMapsLinkMessage, 1},
+		{"lookup failure", "https://maps.app.goo.gl/abc", true, errors.New("boom"), nil, http.StatusInternalServerError, mapsLinkLookupFailMessage, 1},
+		{"places not configured", "https://maps.app.goo.gl/abc", false, nil, nil, http.StatusServiceUnavailable, mapsLinkNotConfiguredError, 0},
+		{"too long", "https://maps.app.goo.gl/" + strings.Repeat("a", maxMapsLinkBytes), true, nil, nil, http.StatusBadRequest, notMapsLinkMessage, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -79,6 +80,9 @@ func TestNewWantToTryPageShowsErrorForBadMapsLink(t *testing.T) {
 
 			if rec.Code != tt.status {
 				t.Fatalf("status = %d, want %d", rec.Code, tt.status)
+			}
+			if len(fake.linkRequests) != tt.calls {
+				t.Fatalf("resolver calls = %v, want %d", fake.linkRequests, tt.calls)
 			}
 			body := rec.Body.String()
 			if !strings.Contains(body, strings.ReplaceAll(tt.message, "'", "&#39;")) {
