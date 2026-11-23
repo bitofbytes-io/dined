@@ -52,6 +52,23 @@ func TestNewWantToTryPagePrefillsFromMapsLink(t *testing.T) {
 	}
 }
 
+func TestNewWantToTryPageBlankMapsLinkStaysOnTheList(t *testing.T) {
+	for _, link := range []string{"", "   ", "\t "} {
+		fake := &fakeGooglePlacesClient{configured: true}
+		rec := httptest.NewRecorder()
+
+		New(nil, repository.NewMemoryStore(), fake, nil, nil).NewWantToTryPage(rec, newWantToTryLinkRequest(link))
+
+		body := rec.Body.String()
+		if rec.Code != http.StatusBadRequest || !strings.Contains(body, strings.ReplaceAll(notMapsLinkMessage, "'", "&#39;")) || !strings.Contains(body, "Want to Try</h1>") {
+			t.Fatalf("link %q: status = %d, want the list page with the link error:\n%s", link, rec.Code, body)
+		}
+		if len(fake.linkRequests) != 0 {
+			t.Fatalf("resolver calls = %v, want none", fake.linkRequests)
+		}
+	}
+}
+
 func TestNewWantToTryPageShowsErrorForBadMapsLink(t *testing.T) {
 	tests := []struct {
 		name       string

@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -226,6 +227,51 @@ func TestResolveMapsLinkUnresolvable(t *testing.T) {
 			_, err := linkClient(&linkTransport{handle: tt.handle}).ResolveMapsLink(context.Background(), tt.raw)
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatalf("err = %v, want %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestResolveMapsLinkShortLinkHostFailureIsNotUnresolved(t *testing.T) {
+	for _, status := range []int{http.StatusTooManyRequests, http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable} {
+		t.Run(strconv.Itoa(status), func(t *testing.T) {
+			transport := &linkTransport{handle: func(*http.Request) *http.Response { return respond(status, "", nil) }}
+
+			_, err := linkClient(transport).ResolveMapsLink(context.Background(), "https://maps.app.goo.gl/abc")
+
+			if err == nil || errors.Is(err, ErrLinkUnresolved) || errors.Is(err, ErrNotMapsLink) {
+				t.Fatalf("err = %v, want a lookup failure", err)
+			}
+		})
+	}
+}
+
+func TestResolveMapsLinkPinComesOnlyFromTheDataSegment(t *testing.T) {
+	const onPin = `{"places":[{"id":"onpin","displayName":{"text":"Hank's Downtown Diner"},"location":{"latitude":35.7797,"longitude":-78.6383}}]}`
+	tests := []struct {
+		name   string
+		raw    string
+		wantID string
+	}{
+		{"percent-encoded markers in the data segment", "https://www.google.com/maps/place/Hank's+Downtown+Diner/@35.7796,-78.6382,17z/data=!4m6!3m5%213d35.7797%214d-78.6383!16s%2Fg%2F1", "onpin"},
+		{"markers in the place name segment", "https://www.google.com/maps/place/Hank's+!3d35.7797!4d-78.6383/@35.7796,-78.6382,17z", ""},
+		{"encoded markers in the place name segment", "https://www.google.com/maps/place/Hank's+%213d35.7797%214d-78.6383/@35.7796,-78.6382,17z", ""},
+		{"markers in the view segment", "https://www.google.com/maps/place/Hank's+Downtown+Diner/@!3d35.7797!4d-78.6383,17z", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			transport := &linkTransport{handle: func(*http.Request) *http.Response { return respond(http.StatusOK, onPin, nil) }}
+
+			place, err := linkClient(transport).ResolveMapsLink(context.Background(), tt.raw)
+
+			if tt.wantID == "" {
+				if !errors.Is(err, ErrLinkUnresolved) || len(transport.requests) != 0 {
+					t.Fatalf("place = %#v, err = %v, requests = %v, want ErrLinkUnresolved with no search", place, err, transport.requests)
+				}
+				return
+			}
+			if err != nil || place.ID != tt.wantID {
+				t.Fatalf("place = %#v, err = %v, want %q", place, err, tt.wantID)
 			}
 		})
 	}

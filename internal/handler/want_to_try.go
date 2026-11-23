@@ -73,9 +73,11 @@ func (h *Handler) wantToTryNotice(r *http.Request) (string, error) {
 // NewWantToTryPage is the save form for browsers without the save sheet.
 func (h *Handler) NewWantToTryPage(w http.ResponseWriter, r *http.Request) {
 	values := r.URL.Query()
-	if link := strings.TrimSpace(values.Get(mapsLinkParam)); link != "" {
+	// A present but blank link is still a link submission: it fails link
+	// validation on the list page rather than as a bare "restaurant is required".
+	if values.Has(mapsLinkParam) {
 		var ok bool
-		if values, ok = h.wantToTryLinkValues(w, r, link); !ok {
+		if values, ok = h.wantToTryLinkValues(w, r, strings.TrimSpace(values.Get(mapsLinkParam))); !ok {
 			return
 		}
 	}

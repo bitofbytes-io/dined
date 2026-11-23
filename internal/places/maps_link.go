@@ -172,6 +172,11 @@ func redirectTarget(ctx context.Context, httpClient *http.Client, current *url.U
 		return nil, fmt.Errorf("google maps link request failed")
 	}
 	res.Body.Close()
+	if res.StatusCode == http.StatusTooManyRequests || res.StatusCode >= 500 {
+		// A rate limit or outage says nothing about the link, so it is a failed
+		// lookup to retry, not a link to check.
+		return nil, fmt.Errorf("google maps link request failed: status %d", res.StatusCode)
+	}
 	if res.StatusCode < 300 || res.StatusCode > 399 {
 		return nil, fmt.Errorf("%w: status %d", ErrLinkUnresolved, res.StatusCode)
 	}
@@ -213,13 +218,33 @@ func parseMapsReference(u *url.URL) mapsReference {
 	return ref
 }
 
-// mapsCoordinates returns the place's own pin (!3d..!4d.., or q=lat,lng). The
-// map view center (@lat,lng) is deliberately not used: it is wherever the map
-// was panned to, so near a chain's other branch it would pick that branch.
+// mapsDataSegment returns the decoded "data=" path segment, where Maps keeps
+// the place's pin. Only segments after the place name can be it, so a name or
+// view segment that happens to look like one is never read, and each segment
+// is decoded on its own so an encoded "/" or "!" cannot shift the others.
+func mapsDataSegment(u *url.URL) (string, bool) {
+	segments := strings.Split(strings.TrimPrefix(u.EscapedPath(), "/"), "/")
+	for _, segment := range segments[min(3, len(segments)):] {
+		if !strings.HasPrefix(segment, "data=") {
+			continue
+		}
+		if data, err := url.PathUnescape(segment); err == nil {
+			return data, true
+		}
+	}
+	return "", false
+}
+
+// mapsCoordinates returns the place's own pin (!3d..!4d.. in the data segment,
+// or q=lat,lng). The map view center (@lat,lng) is deliberately not used: it is
+// wherever the map was panned to, so near a chain's other branch it would pick
+// that branch.
 func mapsCoordinates(u *url.URL) (float64, float64, bool) {
-	if m := dataCoordsPattern.FindStringSubmatch(u.EscapedPath()); m != nil {
-		if lat, lng, ok := validCoordinates(m[1], m[2]); ok {
-			return lat, lng, true
+	if data, ok := mapsDataSegment(u); ok {
+		if m := dataCoordsPattern.FindStringSubmatch(data); m != nil {
+			if lat, lng, ok := validCoordinates(m[1], m[2]); ok {
+				return lat, lng, true
+			}
 		}
 	}
 	if m := plainCoordsPattern.FindStringSubmatch(u.Query().Get("q")); m != nil {
